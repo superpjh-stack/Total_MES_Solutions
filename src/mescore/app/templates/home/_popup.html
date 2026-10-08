@@ -1,0 +1,33 @@
+{# CMN-05 공용 찾기 팝업 (아키텍트) — routers/popup.py. 종류 item · partner · equipment · lot · worker.
+   행마다 data-pick(코드 · 번호) · data-pick-id 를 둔다 — 부모 화면에 돌려주는 동작은 static/app.js(디자이너2). 스크립트는 여기 없다.
+   사용자 문구는 전부 t(). 0건이면 ui.grid 가 `미수집` 을 보여 준다 (G-C11). #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+<div class="popup-kinds">
+  {% for k in kinds %}<a class="btn btn-ghost{% if k == kind %} on{% endif %}" href="/popup/{{ k }}">{{ t({'item': '품목', 'partner': '거래처', 'equipment': '설비', 'lot': 'LOT', 'worker': '작업자'}.get(k, k)) }}</a>{% endfor %}
+</div>
+<label>{{ t('검색어') }}
+  <input type="text" name="q" value="{{ q }}" maxlength="100" autofocus placeholder="{{ t('코드 · 이름 부분 일치') }}">
+</label>
+<input type="hidden" name="limit" value="{{ limit }}">
+{% endblock %}
+{% block grid %}
+<h2>{{ t(title) }} {{ t('찾기') }} <small>{{ count }}{{ t('건') }}{% if count >= limit %} · {{ t('상한') }} {{ limit }}{% endif %}</small></h2>
+<table class="grid popup-grid" data-popup-kind="{{ kind }}">
+  <thead><tr>{% for c in columns %}<th>{{ t(c.label) }}</th>{% endfor %}<th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr data-pick="{{ r[pick] }}" data-pick-id="{{ r.id }}">
+      {% for c in columns %}<td>{{ r[c.key] | txt }}</td>{% endfor %}
+      <td><button type="button" class="btn btn-ghost" data-pick-button>{{ t('선택') }}</button></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="{{ columns | length + 1 }}" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+{% block actions %}
+<button type="submit" form="screen-search" class="btn btn-primary">{{ t('조회') }}</button>
+{% endblock %}

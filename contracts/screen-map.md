@@ -72,7 +72,7 @@
 | CMN-02 | 메인 (IA) | `/` | 개발1 | 모듈 카드를 **일하는 순서**로. 팩 `menus.order` 반영 |
 | CMN-03 | 오류 | `/error` · `_error.html` | 아키텍트 | 상태코드별. 현황판 채널은 자동 새로고침 유지 |
 | CMN-04 | 대시보드 | `/dashboard` | 개발3 | 로그인 직후 역할별 요약(지시 · 실적 · 검사 · 출하 건수). `kpi` 집계를 읽기만. Phase 0 은 placeholder(D-21) — 개발3 이 `routers/home.py`(또는 kpi) 에 `/dashboard` 를 등록하면 빠진다 |
-| CMN-05 | 팝업 | `/popup/{kind}` | 아키텍트 | 품목 · 거래처 · 설비 · LOT 찾기 공용 팝업(`kind` = item · partner · equipment · lot · worker — 그 밖은 404). JSON 도 준다. 검사 도구는 `/popup/item` 으로 연다(`core.yaml: common[].probe`). Phase 0 은 placeholder |
+| CMN-05 | 팝업 | `/popup/{kind}` | 아키텍트 | 품목 · 거래처 · 설비 · LOT · 작업자 찾기 공용 팝업 — `routers/popup.py` + `home/_popup.html`(회전 3). `kind` = item · partner · equipment · lot · worker(`core.yaml: common[CMN-05].kinds` — 그 밖은 404). `?q=`(코드 · 이름 부분 일치 · LOT 은 `lineage.search`) · `?limit=`(≤ 200). JSON(`kind q columns rows count pick`)은 `Accept` 에 `text/html` 이 없을 때(D-18). 행의 `data-pick` · `data-pick-id` 를 부모 화면에 돌려주는 동작은 `static/app.js`(디자이너2). 검사 도구는 `/popup/item` 으로 연다(`probe`) |
 
 공통 화면 중 인증 없이 열리는 것은 로그인 · 오류뿐(`core.yaml: common[].auth`). 메인 · 대시보드 · 팝업은 로그인만 하면 연다(권한 표 밖).
 `main.py` 는 라우터가 등록하지 않은 공통 경로만 자기 것으로 둔다 — `routers/home.py` 가 `/` 를 등록하면 그것이 메인이다(D-21).
@@ -81,11 +81,16 @@
 
 | 경로 | 소유자 |
 |---|---|
-| `src/mescore/core.yaml` · `app/{main,settings,packs,nav,contracts,rbac,auth,templating}.py` · `app/util/{http,audit,screen}.py` · `app/routers/__init__.py` · `templates/{base,_error,_placeholder,login}.html` · `templates/home/{main,_macros}.html`(메인은 개발1 이 `routers/home.py` 로 가져간다) · `static/` · `db/{conn.py,schema.sql,views.sql,seed_core.py}` · `src/mescore/tools/{gate,check_routes,check_trace,check_schema,check_terms,check_pack,gen_contracts,core_hash,init_env,backup}.py` · `packs/_template/` · `Makefile` · `pyproject.toml` | 아키텍트 |
-| `app/numbering.py` · `app/routers/{home,bas,job,sys}.py` · `templates/{bas,job,sys}/` · `db/seed_dev1.py` · `src/mescore/tools/import_design.py` · `packs/foodservice/` | 개발1 |
-| `app/{lineage,printing,collect}.py` · `app/routers/{mat,pop,qua,eqp}.py` · `templates/{mat,pop,qua,eqp}/` · `templates/print/{work_order,label_lot,label_shipment}.html` · `templates/home/_measure.html` · `db/seed_dev2.py` · `packs/printfilm/` | 개발2 |
-| `app/{stats,erp}.py` · `app/routers/{ord,shp,trc,kpi,ifc}.py` · `templates/{ord,shp,trc,kpi,ifc,dashboard}/` · `templates/print/document.html` · `src/mescore/migrate/` · `db/seed_dev3.py` · `packs/kimchi/` | 개발3 |
+| `src/mescore/core.yaml` · `app/{main,settings,packs,nav,contracts,rbac,auth,templating}.py` · `app/util/{http,audit,screen}.py` · `app/routers/{__init__,popup}.py` · `templates/_placeholder.html` · `templates/home/_popup.html` · `db/{conn.py,schema.sql,views.sql,seed_core.py}` · `src/mescore/tools/{gate,check_routes,check_trace,check_schema,check_terms,check_pack,gen_contracts,core_hash,init_env,backup}.py` · `packs/_template/` · `Makefile` · `pyproject.toml` · `outputs/core.sha256` | 아키텍트 |
+| **웨이브 A′(프런트 이식 · 회전 3~)** `templates/{base,_error,login}.html` · `templates/home/_macros.html` · `static/style.css` · `templates/{bas,job,sys,ord}/` | 디자이너1 (아키텍트 → 디자이너1. `_macros.html` 의 `measure_fields` 위임 한 줄(D-205)도 디자이너1) |
+| `static/app.js`(S-01~S-14 · D-603) · `static/{pop,mobile}.css` · `templates/{pop,mat,qua,eqp,shp}/` | 디자이너2 (`app.js` 는 아키텍트 → 디자이너2) |
+| `templates/{kpi,trc,ifc,dashboard,print}/` · `templates/home/main.html` · `static/board.css` | 디자이너3 (`main.html` 은 개발1 → 디자이너3 · `print/` 는 개발2·3 → 디자이너3) |
+| `app/numbering.py` · `app/routers/{home,bas,job,sys}.py` · `db/seed_dev1.py` · `src/mescore/tools/import_design.py` · `packs/foodservice/` | 개발1 (템플릿은 웨이브 A′ 동안 디자이너1 소유) |
+| `app/{lineage,printing,collect,measure}.py` · `app/routers/{mat,pop,qua,eqp,_dev2}.py` · `templates/home/_measure.html` · `db/seed_dev2.py` · `tests/{_dev2_helpers,test_pop_scenario}.py` · `packs/printfilm/` | 개발2 (`print/document.html` 은 개발2 가 만들었고 개발3 이 그대로 쓴다 — 웨이브 A′ 동안 디자이너3 소유) |
+| `app/{stats,erp}.py` · `app/routers/{ord,shp,trc,kpi,ifc,dashboard}.py` · `src/mescore/migrate/` · `db/seed_dev3.py` · `tests/_dev3_helpers.py` · `packs/kimchi/` | 개발3 |
 | `tests/test_arch_*.py` | 아키텍트 · `tests/test_<모듈>_*.py` 는 그 모듈 소유자 · `src/mescore/tools/check_{screens,data,security}.py` 는 QA |
+
+웨이브 A′ 가 끝나면 디자이너 행의 템플릿 · 정적 파일은 원래 모듈 소유자에게 돌아간다. 그동안 개발은 `routers/*.py` 만 고치고 템플릿의 변수 계약(ctx 키)은 `progress-devN.md` §1 에 공표한다.
 
 ## 4. 팩 화면 (렌더본 — `make contracts` 가 `MES_PACK` 별로 붙인다)
 
