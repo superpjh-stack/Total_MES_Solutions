@@ -134,18 +134,78 @@
 
 ---
 
+## 아키텍트 (회전 3 · 웨이브 D-1 · 2026-10-09)
+
+## D-28 `tests/test_permission_matrix_is_data` 의 기대값 = DB 역할 수 × 메뉴 수 · 상태: 가설
+- 개발1 요청. SYS-02 로 역할을 더하면(정상 기능) `48` 고정 기대값이 깨진다. 전체 칸 = `len(rbac.roles()) × len(nav.ALL_MENUS)`, **코어 역할 4 의 칸만** goal.md §6 표(입력 19 · 조회 22 · 없음 7)와 대조한다. `check_trace` 의 48 은 매니페스트(core.yaml) 기준이라 그대로.
+
+## D-29 `packs.CORE_ROUTER_MODULES` 15 = 모듈 12 + `home` · `dashboard` · `popup` · 상태: 가설
+- 개발3 요청(`routers/kpi.py` 가 `dashboard.router` 를 include 하던 것). 공통 화면 라우터 3 은 모듈이 아니지만 코어가 등록한다. **개발3 은 `kpi.py` 의 include 한 줄을 뺀다**(지금은 `/dashboard` 가 두 번 등록되어 첫 것이 응답 — 동작은 같다).
+
+## D-30 QA 검사기가 없을 때 `gate.py` 는 있는 증거로 PASS/FAIL 을 매긴다 · 상태: 가설
+- 회전 2 까지 `gate.py` 는 QA 도구(`check_data` · `check_security` · `check_screens`)만 보고 개발 테스트를 판정에 안 썼다 → 미검증 36. 회전 3 부터 개발 테스트 파일 단독 실행(G-C06 · 07 · 24 · 15 · 10 참고) · 시드 LOT SQL(G-C08) · 양식 4 + `lineage.resolve`(G-C14) · 이관 dry-run 2회 diff(G-C15) · `erp.flush` 501(G-C16) · 접근 로그 4종(G-C18) · 라우터 쓰기 SQL 정적 스캔 + 조회 전후 행 수 diff(G-C05) · 행 0 표 표본(G-C11) · 제어성 경로 grep(G-C12) · `body.ch-*` + `data-scan`(G-C13) · 역할 × 쓰기 기능 전부 403(G-C17) · 저장소 비밀 grep(G-C19) · `backup.py` 실행(G-C20)으로 판정한다. 판정 줄에 **「QA 대조 대기」** 를 붙이고 상태는 PASS/FAIL. QA 도구가 생기면 그 출력이 우선한다(기존 분기 유지). 기대값은 내리지 않았다 — G-C10(QA 가 따로 짠 SQL)은 정의상 QA 없이는 `미검증`, G-C13 의 390px 가로 넘침 · G-C22 는 브라우저 실측이 남는다.
+
+## D-31 `core.yaml: extra_routes` — 기능 수 밖 허용 라우트의 단일 출처 · 상태: 가설
+- D-12(`POST /pop/result/{id}/split` · `/merge`) · D-601(`GET /shp/shipments/{id}/label`) 처럼 `function-list.md` 에 없지만 코어가 등록하는 엔드포인트는 `core.yaml: extra_routes` `[{method, path, decision, note}]` 에 적는다. `check_trace` 의 G-C02 고아 판정이 여기서 읽는다(코드에 박힌 D-12 정규식을 뺐다). 새 항목은 D-번호가 있어야 한다. `packs.extra_routes()`.
+
+## D-32 CMN-05 공용 팝업 — `routers/popup.py` · `home/_popup.html` · 상태: 가설
+- `GET /popup/{kind}` kind = `core.yaml: common[CMN-05].kinds`(item · partner · equipment · lot · worker · 그 밖 404). `?q=` 코드 · 이름 부분 일치(LOT 은 `lineage.search` — 번호 · 품목 · 지시 번호), `?limit=`(기본 50 · 상한 200). `Accept` 에 `text/html` 이 없으면 ctx JSON(`kind q columns rows count pick`) — D-18. 읽기만(쓰기 0). 행의 `data-pick`(코드 · 번호) · `data-pick-id` 를 부모 화면 입력칸으로 돌려주는 동작은 `static/app.js` 의 몫(디자이너2 · S-목록에 없으면 추가 요청) — 템플릿에 스크립트 0.
+
+## D-33 웨이브 A′ 동안 템플릿 · 정적 파일 소유권은 디자이너에게 · 코어 해시는 아키텍트 회전 끝에 다시 찍는다 · 상태: 가설
+- `screen-map.md` §3 갱신 — `base/_error/login.html` · `_macros.html` · `style.css` · `templates/{bas,job,sys,ord}/` 디자이너1 / `app.js` · `pop.css` `mobile.css` · `templates/{pop,mat,qua,eqp,shp}/` 디자이너2 / `templates/{kpi,trc,ifc,dashboard,print}/` · `home/main.html` · `board.css` 디자이너3. 개발은 그동안 `routers/*.py` 만 고친다. `outputs/core.sha256`(G-P01 기준값)은 웨이브 A′ 가 도는 동안 회전마다 어긋난다 — 아키텍트가 회전 끝에 `make core-hash` 로 다시 찍고, 팩 작업의 코어 변동은 `git diff --stat packs/ src/` 로 따로 본다(해시만으로는 디자이너 변경과 팩 작업자 변경을 못 가른다).
+
+## D-34 `core.yaml: numbering` 에 `ISSUE`(Q · YYMMDD- · 3) · 상태: 가설
+- D-202 를 코어로 올렸다. `seed_core` 가 `sys_number_rule` 에 넣는다(`seed_dev2` 의 `on conflict do nothing` 행과 같다). 채번 종류 8 → 9 — `interfaces.md` §3 의 8 은 코어 기본 8 + ISSUE 로 읽는다.
+
+## D-35 `Makefile` `kpi-snapshot` · `erp-flush` · `pack-db NAME=` · 상태: 가설
+- 개발3 요청. `pack-db` = `createdb` + 코어 스키마(+ `schema_ext.sql`) + `seed_core`(코어 → 팩 → 개발 시드). 팩이 `PackError` 면 팩 시드 단계에서 멈춘다(지어낸 폴백 없음). 회전 3 에 `mes_printfilm_db` 는 아키텍트가 코어 스키마 + 코어 시드만 넣었다(`MES_PACK=` + `MES_PG_DSN` 지정) — 팩 시드는 개발2 가 `MES_PACK=printfilm make db-reset`.
+
+---
+
+## 개발1 (웨이브 A R1·R2 · 2026-10-09 — `progress-dev1.md` §2 「계약과 달라진 점」 을 아키텍트가 옮겼다 · D-101 은 개발3 의견으로 바꿨다)
+
+## D-101 작업지시 등록(F-JOB-01)과 계획 · 수주 상세 상태 · 상태: 가설 (개발1 안을 **개발3 안으로 바꿈** — 개발1 다음 회전 수정)
+- 개발1 R2 는 지시가 붙은 생산계획을 `계획 → 확정` 으로 올리고 수주 상세를 `대기 → 지시`(취소 시 살아 있는 지시가 없으면 `대기`) 로 바꿨다.
+- 개발3 §1: `function-list.md` F-ORD-09 「`status=확정`. **확정된 계획만 지시로 이어진다**」 · F-ORD-08 「확정 후에는 수량만」 — 지시 쪽에서 계획을 `확정` 으로 올리면 F-ORD-08 의 규칙이 사용자 모르게 걸린다. **결정: `ord_plan.status` 는 F-ORD-09 만 바꾼다. F-JOB-01 은 `확정` 계획만 받고 `계획` · `취소` 계획은 422(`확정된 계획만 지시로 이어진다`).** `ord_order_dtl.status` 대기 ↔ 지시 전이는 개발1 안 그대로(개발3 이 읽기만 하며 맞다고 확인).
+- 바뀌면 고칠 곳: `routers/job.py: create`(계획 상태 검사 · `update ord_plan` 제거) · `tests/test_job_work_orders.py` · `db-schema.md` §2 job 행의 `ord_plan.status` 는 그때 뺀다(회전 4 아키텍트).
+
+## D-102 삭제 422 판정은 FK 카탈로그(`pg_constraint`)로 센다 · 상태: 가설
+- F-BAS-03 등 기준정보 삭제는 참조하는 행이 있으면 422 — 참조 목록을 코드에 적지 않고 `pg_constraint` 에서 그 테이블을 가리키는 FK 를 전부 세어 판정한다. 스키마에 참조가 늘어도 라우터를 고치지 않는다. 취소된 작업지시도 BOM 참조다(F-BAS-07).
+
+## D-103 F-SYS-03 은 `중지 ↔ 사용` 토글이고 `잠금 → 사용`(해제)도 같은 버튼 · 상태: 가설
+- 잠금 해제 때 `fail_count` 를 0 으로. 중지 · 해제 모두 그 사용자의 세션을 전부 무효(`auth.revoke_user_sessions`) → 다음 요청부터 401. 자기 자신 중지 · ADMIN 중지 422.
+
+## D-104 F-SYS-08 저장 응답의 `changed` 는 실제로 값이 바뀐 칸 수 · 상태: 가설
+- 같은 값으로 저장하면 0. 저장 즉시 `rbac.invalidate()` → 다음 요청부터 반영.
+
+## D-105 F-JOB-07 작업지시서의 양식 폴백 순서 · 상태: 가설
+- `printing` 모듈 + `templates/print/work_order.html` 이 있으면 `printing.render_print("work_order", {wo, bom_rows, params, printed_at, printed_by})`, 양식만 없으면 `job/print.html` + `printing.barcode_svg`, 모듈도 없으면 바코드 자리 `미확정`. 지금은 셋 다 있어 첫 갈래만 돈다 — 폴백은 조용한 대체가 아니라 화면에 `미확정` 으로 보인다.
+
+## D-106 마스터 화면 8 을 한 벌(`bas.Master` + `register`)로 등록 · 상태: 가설
+- 품목 · 공정 · 측정값 정의 · 설비 · 거래처 · 작업자 · 불량코드 · 공통코드. 계약의 메서드 · 경로 · 기능 ID 는 글자 그대로(`check_trace` 132/132). 훅 이름은 `validate_<table>` · `after_save_<table>` 로 테이블마다 따로 등록된다.
+
+---
+
 ## 기획 · 디자인 결정 후보 (회전 1 · 오케스트레이터가 옮김 · 2026-10-09)
 
 기획자 3명의 `packs/<팩>/README.md` 끝 "결정 후보 D-5nn" 절과 디자이너 3명의 `docs/design/README.md` 에서 코어에 닿는 것만 옮겼다. 팩 안에서만 유효한 결정은 각 팩 README 가 원본이다.
 
-## D-501 세 팩 공통 — 설비 단위 임계값 · 이탈 알람이 코어에 없다 · 상태: 코어 변경 요청
+## D-501 세 팩 공통 — 설비 단위 임계값 · 이탈 알람이 코어에 없다 · 상태: 가설 (회전 3 아키텍트 판단 — **반영한다**, 회전 4 아키텍트가 코어에 넣는다)
 - foodservice(냉장 5 ℃ · 냉동 −18 ℃ 온도조절기 이탈) 와 kimchi(냉장 온습도 · 염도 센서 이탈) 가 같은 것을 요구한다. E3 는 **공정** 측정값뿐이라 설비 수집값의 범위 판정 · 알람 발생/해제 이력이 코어 EQP 화면에 못 나온다.
-- 후보: `bas_equipment_param`(설비 · 태그 · 하한 · 상한) + `collect.receive` 가 범위 판정해 `eqp_collect.deviated` 표시 + `eqp_alarm`(발생 · 확인 · 해제). 테이블 52 → 54 가 된다.
-- 1차 웨이브 B 는 팩 테이블(`x_<팩>_env_alarm`)로 가고, 웨이브 D 에서 아키텍트가 코어 반영 여부를 정한다. 반영하면 두 팩의 알람 테이블을 지운다.
+- 1차 웨이브 B 는 팩 테이블(`x_<팩>_env_alarm`)로 간다. 회전 4 에서 코어에 들어가면 두 팩의 알람 테이블을 지운다.
+- **판단(회전 3 아키텍트)**: 반영한다. 근거 — ① 요구가 업종이 아니라 "수집 설비" 라는 코어 개념(EQP 모듈 · `eqp_collect` · `bas_equipment.collect_yn`)에 붙는다 ② 세 팩 중 둘이 같은 모양을 요구하고 printfilm 도 온습도 설비가 있다 ③ 팩마다 알람 테이블을 두면 EQP-01 가동 현황에 못 올라와 코어 화면이 팩 데이터를 모른다(D-05 attrs 로는 집계 · 이력이 안 된다).
+- **설계 (회전 4 아키텍트가 `schema.sql` · `db-schema.md` 에 넣는다 — 이번 회전에는 고치지 않는다. 팩 3개가 지금 그 테이블 없이 구현 중이라 회전 3 에 스키마를 바꾸면 깨진다)**
+  - `bas_equipment_param`(bas · 설비별 수집 태그 임계값): `equipment_id` FK · `tag` · `label` · `unit` · `min_value` · `max_value` · `seq` · `use_yn` + 공통 컬럼 6 + `attrs`. 유니크 `(equipment_id, tag)`. 공정 측정값 정의(`bas_process_param`)와 같은 모양이되 축이 설비 · 태그다. BAS-05 설비 화면의 하위 표로 편집(F-BAS-17~20 의 수정 범위 — 기능 ID 추가 없음).
+  - `eqp_alarm`(eqp · 발생/해제 이력): `equipment_id` FK · `tag` · `value` · `min_value` · `max_value`(발생 당시 임계값 복사) · `occurred_at` · `cleared_at` · `status`(`발생` · `해제`) · `collect_raw_id`(원문 추적) · `note` + 공통 컬럼 6 + `attrs`. 열린 알람은 설비 · 태그당 하나(부분 유니크 `where status = '발생'`).
+  - 동작: `collect.receive` 가 정제 뒤 `bas_equipment_param` 범위를 판정한다 — 범위 밖이면 열린 알람이 없을 때 `eqp_alarm` 1행 `발생`, 범위 안으로 돌아오면 열린 알람을 `해제`(`cleared_at`). `eqp_collect` 에 컬럼을 더하지 않는다(이탈 여부는 조회 때 `eqp_alarm` 과 잇는다). 쓰기 경계 — `collect` 가 `eqp_alarm` 에 쓴다(db-schema.md §2 `ifc` 행에 추가), `bas` 가 `bas_equipment_param` 에 쓴다. 화면 — EQP-01 가동 현황이 열린 알람 수 · 최신 알람을 보여 준다(F-EQP-01 조회 범위 · 기능 수 불변). 팩 훅 `on_alarm(cur, alarm, user=None)` 을 §9 에 더해 팩이 이상(`qua_issue`) 을 만들 수 있게 한다.
+  - 미정(사람): 알람 **확인(ack)** 기능은 기능 ID 가 늘어난다(132 → 133) — 1차는 두지 않는다. 테이블 52 → 54 는 `spec.md` §2.2 · `goal.md` G-C04 · `CLAUDE.md` 의 수치라 **사람이 정본을 고친 뒤** 회전 4 아키텍트가 `schema.sql` 을 바꾼다(그 전엔 G-C04 가 FAIL 이 된다).
+  - 바뀌면 고칠 곳: `db/schema.sql` · `contracts/db-schema.md` §1 · §2 · §4 · `app/collect.py`(범위 판정) · `routers/bas.py`(BAS-05 하위 표) · `routers/eqp.py`(EQP-01 표시) · `pack-contract.md` §5(`on_alarm`) · `packs/{foodservice,kimchi}` 의 `x_<팩>_env_alarm` 제거.
 
-## D-502 두 팩 공통 — 화면 단위 권한 예외 · 상태: 코어 변경 요청
+## D-502 두 팩 공통 — 화면 단위 권한 예외 · 상태: 코어 변경 요청 (회전 3 아키텍트 판단 — **미룬다**, 회전 5 이후 팩 실측을 보고 다시 본다)
 - foodservice(영양사: 메뉴 · 레시피 · 검식기준만 입력) · kimchi(레시피 BOM 열람 통제). 메뉴 × 역할 칸으로는 표현이 안 된다.
 - 후보: `sys_permission` 에 `screen_id` 선택 컬럼(NULL = 메뉴 전체, 값 = 그 화면만 덮어씀). `rbac.cell` 이 화면 칸을 먼저 본다. 1차는 메뉴 단위로 넓혀 둔다(각 팩 D-504).
+- **판단(회전 3 아키텍트)**: 이번 루프에서는 반영하지 않는다. 근거 — ① 권한 표 "48칸 전부 데이터"(G-C17 · goal.md §6)와 SYS-03 한 화면 · `rbac.cell(role, menu)` 서명 · `check_routes` 의 `없음 → 403 + 메뉴 숨김` 판정이 전부 메뉴 × 역할 모델 위에 있어, 화면 칸을 더하면 7명이 쓰는 접점(`rbac` · SYS-03 · 검사 도구 · 테스트)이 한꺼번에 바뀐다 ② 두 팩의 요구는 1차에서 다른 확장 지점으로 닿는다 — 영양사 역할은 `pack.yaml: permissions` 로 `bas` 입력을 주고 팩 훅 `validate_bas_item`(품목 구분 제한) · 팩 화면(`X-` · `require_fn` 은 팩 기능 ID)으로 범위를 좁힌다, 레시피 BOM 열람 통제는 BOM 을 팩 화면으로 옮기거나 `menus.hide` + 팩 화면으로 ③ 팩이 실제로 메뉴 단위로 풀지 못한 사례가 웨이브 B 실측에 남으면 그때 `screen_id` 컬럼(스키마 변경 0 — `sys_permission` 컬럼 추가는 테이블 수 불변)으로 다시 올린다.
+- 바뀌면 고칠 곳: `app/rbac.py: cell/can_open/can_do` · `routers/sys.py` SYS-03 · `tools/check_routes.py` · `db/schema.sql: sys_permission`.
 
 ## D-503 `lineage.split/merge` 에 `process_id · equipment_id · attrs` 인자 · 상태: 가설
 - printfilm CR-2. `make_product_lot` 은 받는데 둘은 안 받아 후가공 · 슬리팅 롤의 공정 · 설비를 같은 `tx` 에서 따로 `update lot` 해야 했다. **개발2 R1 에서 인자를 넣는다**(`interfaces.md` §4 갱신). 코어 변경이 아니라 R1 구현 범위.
