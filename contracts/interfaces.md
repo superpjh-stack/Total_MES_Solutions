@@ -35,7 +35,8 @@ packs.hook(name: str) -> Callable         # 등록된 훅. 없으면 packs.NOOP_
 packs.attrs_of(table: str) -> list[AttrSpec]   # pack.yaml: attrs[table] — AttrSpec(key, label, type, required, choices)
 packs.read_attrs(form: Mapping | Request, table) -> dict   # 폼의 attr_<key> 칸 → attrs. 필수 누락은 ValueError (라우터가 422 로)
 packs.template_dirs() -> list[Path]       # packs/<팩>/templates 가 코어보다 먼저. packs.overridden_templates() 가 덮어쓴 목록
-packs.router_modules() -> list[str]       # 코어 13 (mescore.app.routers.<m>) + 팩 packs/<팩>/routers/*.py (`_` 로 시작하는 파일 제외)
+packs.router_modules() -> list[str]       # 코어 15 (mescore.app.routers.<m> — 모듈 12 + home · dashboard · popup) + 팩 packs/<팩>/routers/*.py (`_` 로 시작하는 파일 제외)
+packs.extra_routes() -> list[dict]        # core.yaml: extra_routes — 기능 수 밖 허용 라우트 [{method, path, decision}] (D-12 split/merge · D-601 출하 라벨). check_trace 가 고아에서 뺀다
 packs.core_tables() -> list[str]          # schema.sql 의 `-- @table` 52
 
 # app.nav — 메뉴 · 경로의 원본 (core.yaml + 팩 menus/screens 병합). nav.rebuild() 로 다시 만든다(테스트)
@@ -234,20 +235,24 @@ class HookError(Exception): message · fields              # 팩 훅이 올린�
 
 | 훅 | 부르는 코어 코드 | 시점 |
 |---|---|---|
-| `validate_<table>(cur, row, user)` | 모든 코어 INSERT/UPDATE 라우터 (`bas_* ord_* job_* mat_* pop_* qua_* eqp_* shp_* lot`) | 저장 직전, 같은 `tx` |
-| `on_order_created(cur, order, user)` | `routers/ord.py` F-ORD-01 | 수주 저장 후 |
+| `validate_<table>(cur, row, user)` | 모든 코어 INSERT/UPDATE 라우터 (`bas_* ord_* job_* mat_* pop_* qua_* eqp_* shp_* sys_* kpi_indicator lot`) | 저장 직전, 같은 `tx`. `row` 는 저장될 값(새 행이면 `id` 없음) |
+| `after_save_<table>(cur, row, user)` | 같은 라우터들 — 저장 직후 (D-504) | 같은 `tx` · `row["id"]` 있음 · 팩 ext 행(`x_<팩>_*`)을 같은 트랜잭션에 쓰는 자리 |
+| `on_order_created(cur, order, user)` | `routers/ord.py` F-ORD-01 | 수주 저장 후 (`order["lines"]` 포함) |
+| `on_order_status_changed(cur, order, user)` | `routers/ord.py` F-ORD-02 · F-ORD-03 | 상태가 바뀐 뒤 (`order["before_status"]` · D-505) |
 | `on_work_order_created(cur, wo, user)` | `routers/job.py` F-JOB-01 | 지시 저장 후 |
 | `on_work_order_closed(cur, wo, user)` | `routers/job.py` F-JOB-03 | 마감 후 |
+| `on_work_order_canceled(cur, wo, user)` | `routers/job.py` F-JOB-04 | 취소 후 (D-505 — 훅이 만든 `mat_requirement(source=hook)` 를 되돌리는 자리) |
 | `on_result_started(cur, result, user)` | `routers/pop.py` F-POP-02 | 시작 저장 후 |
 | `on_result_closed(cur, result, user)` | `routers/pop.py` F-POP-03 | 측정값 · 생산 LOT 생성 **후** (코어가 collect 측정값을 채운 다음) |
 | `on_lot_created(cur, lot, user)` | `lineage.make_product_lot` · `split` · `merge` · `routers/mat.py` F-MAT-01 | LOT 행 생성 후 |
 | `on_inspection_judged(cur, insp, user)` | `routers/qua.py` F-QUA-05 · `routers/mat.py` F-MAT-04 | 판정 저장 후 |
 | `validate_shipment(cur, shipment, lots, user)` | `routers/shp.py` F-SHP-07 | 승인 직전 |
-| `on_collect(cur, raw, user=None)` | `collect.receive` | 정제 후 |
+| `on_collect(cur, raw, user=None) -> None` | `collect.receive` | 정제 후 · 같은 `tx`. 반환값은 쓰지 않는다 — `collect.receive` 의 반환은 `ReceiveResult(raw_id, duplicate, unknown_tags, saved)`(D-204) |
 | `after_commit_<event>(payload)` | `main.py` 미들웨어 — `tx` 커밋 뒤 큐에 쌓인 이벤트 | 트랜잭션 밖. 실패해도 응답은 성공, `ifc_outbox` 에 남는다 |
-| `kpi_extra(frm, to) -> list[Metric]` | `stats.indicators` | 조회 시 |
+| `kpi_extra(frm, to, by=None) -> list[{key, label, value, unit}]` | `stats.kpi_extra` ← `stats.indicators` · `stats.snapshot`(배치) | 조회 시 · 스냅샷 때 (D-508) |
 
 훅이 없으면 no-op. 코어는 훅 안에서 무엇이 일어나는지 모른다 — 훅이 코어 테이블에 쓰려면 `write_scope` 에 있어야 한다.
+`lineage.split/merge` 가 받는 `process_id · equipment_id · attrs · user` 인자는 §4 (D-503 · D-203) — 훅 `on_lot_created` 는 그 값이 들어간 LOT 행을 받는다.
 
 ## 10. 검사 도구 출력 형식 (전 도구 공통)
 

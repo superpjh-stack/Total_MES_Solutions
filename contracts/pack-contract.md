@@ -81,21 +81,25 @@ packs/<팩>/
 from mescore.app.util.http import HookError
 from mescore.app.packs import t
 
-def validate_bas_item(cur, row: dict, user) -> None: ...        # validate_<코어 테이블>. row 는 저장될 값(dict, attrs 포함). 거부는 raise HookError(t("…"), fields=[...])
-def on_order_created(cur, order: dict, user) -> None: ...
+def validate_bas_item(cur, row: dict, user) -> None: ...        # validate_<코어 테이블>. row 는 저장될 값(dict, attrs 포함 · 새 행이면 id 없음). 거부는 raise HookError(t("…"), fields=[...])
+def after_save_bas_item(cur, row: dict, user) -> None: ...      # after_save_<코어 테이블> — 저장 직후 · 같은 tx · row["id"] 있음. 팩 ext 행(x_<팩>_*)을 같은 트랜잭션에 쓰는 자리 (D-504)
+def on_order_created(cur, order: dict, user) -> None: ...       # order["lines"] 포함
+def on_order_status_changed(cur, order: dict, user) -> None: ...   # F-ORD-02/03 상태 변경 뒤 · order["before_status"] (D-505)
 def on_work_order_created(cur, wo: dict, user) -> None: ...     # 예: 식수 × 1인량 → mat_requirement (write_scope 에 mat_requirement)
 def on_work_order_closed(cur, wo: dict, user) -> None: ...
+def on_work_order_canceled(cur, wo: dict, user) -> None: ...    # F-JOB-04 취소 뒤 — 훅이 만든 mat_requirement(source=hook) 를 되돌린다 (D-505)
 def on_result_started(cur, result: dict, user) -> None: ...
 def on_result_closed(cur, result: dict, user) -> None: ...      # result["product_lot"] 이 이미 있다. 팩 kind 로 바꾸려면 lineage.retag(cur, lot_id, kind)
 def on_lot_created(cur, lot: dict, user) -> None: ...
 def on_inspection_judged(cur, insp: dict, user) -> None: ...   # 예: CCP 이탈 → qua_issue (write_scope 에 qua_issue)
 def validate_shipment(cur, shipment: dict, lots: list[dict], user) -> None: ...   # 예: 금속검출 미통과 LOT 이 있으면 HookError
-def on_collect(cur, raw: dict, user=None) -> None: ...          # 예: 가동 구간 → 실적 자동 생성 (write_scope 에 pop_work_result)
+def on_collect(cur, raw: dict, user=None) -> None: ...          # 예: 가동 구간 → 실적 자동 생성 (write_scope 에 pop_work_result). 반환값 없음 — 수신 결과는 collect.receive 의 ReceiveResult (D-204)
 def after_commit_shipment_approved(payload: dict) -> None: ... # 트랜잭션 밖. erp.enqueue 등
-def kpi_extra(frm, to) -> list[dict]: ...                       # [{"key","label","value","unit"}]
+def kpi_extra(frm, to, by=None) -> list[dict]: ...              # [{"key","label","value","unit"}] — by 는 stats.kpi_extra 가 넘기는 집계 단위(None 가능 · D-508)
 ```
 - 동기 · 같은 트랜잭션 · 예외는 `HookError` 만 422, 그 밖 예외는 500(조용히 삼키지 않는다).
 - 훅은 코어 함수(`lineage` · `numbering` · `stats` · `collect`)를 쓸 수 있고 코어 테이블은 `write_scope` 안에서만 쓴다.
+- `on_lot_created` 가 받는 LOT 행에는 `lineage.split/merge(..., process_id=, equipment_id=, attrs=, user=)` 로 넘긴 값이 들어 있다(D-503 · D-203 — `interfaces.md` §4). 팩 kind 로 바꾸려면 `lineage.retag`.
 
 ## 6. 팩 라우터 · 화면
 

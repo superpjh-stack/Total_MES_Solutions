@@ -147,10 +147,11 @@ def check_functions(r: Report) -> None:
         fn_apis = {(f.method, norm_path(f.path)) for f in contracts.all_functions() if not f.is_batch}
         screen_gets = {("GET", s.path) for s in nav.SCREENS}
         prefixes = tuple(f"/{m.module}/" for m in nav.ALL_MENUS)
+        extra = {(str(x["method"]).upper(), norm_path(str(x["path"]))) for x in packs.extra_routes()}   # core.yaml: extra_routes (D-12 · D-601)
         orphans = sorted(f"{m} {pth}" for m, pth in routes if pth.startswith(prefixes) and m not in ("HEAD", "OPTIONS")
-                         and (m, pth) not in fn_apis and (m, pth) not in screen_gets
-                         and not re.fullmatch(r"/pop/result/\{\}/(split|merge)", pth))   # D-12 분할 · 합병 API 는 기능 수 밖
-        r.add(g, "고아 라우트 0 (계약에 없는 엔드포인트 · D-12 split/merge 제외)", not orphans, f"고아 {len(orphans)} {orphans[:3] if orphans else ''}".strip())
+                         and (m, pth) not in fn_apis and (m, pth) not in screen_gets and (m, pth) not in extra)
+        r.add(g, "고아 라우트 0 (계약에 없는 엔드포인트 · core.yaml extra_routes 제외)", not orphans,
+              f"고아 {len(orphans)} {orphans[:3] if orphans else ''} · 허용 라우트 {len(extra)} {sorted(f'{m} {p}' for m, p in extra)}".replace("  ", " ").strip())
     except Exception as exc:  # noqa: BLE001
         r.add(g, "기능 132 ↔ 라우트", False, f"{type(exc).__name__}: {str(exc)[:160]}")
     seen: set[str] = set()

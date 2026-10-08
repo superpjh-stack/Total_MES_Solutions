@@ -50,11 +50,20 @@ def test_function_list_136_lines():
 
 
 def test_permission_matrix_is_data():
+    """권한 표는 DB 데이터 — 기대값은 `역할 수(DB · SYS-02 로 늘어난 것 포함) × 메뉴 수`. 코어 역할 4 의 칸은 goal.md §6 표 그대로 (D-13)."""
     rbac.invalidate()
     p = packs.current()
-    assert rbac.counts()["전체"] == len(p.modules) * len(p.roles)
+    db_roles = rbac.roles()
+    assert rbac.counts()["전체"] == len(db_roles) * len(nav.ALL_MENUS)
+    manifest = [r["code"] for r in p.roles]
+    assert set(manifest) <= {r.code for r in db_roles}, "매니페스트(core.yaml + pack.yaml) 역할이 DB 에 없다 — make db-seed"
+    core = {"입력": 0, "조회": 0, "없음": 0}
+    for code in manifest:
+        for m in nav.ALL_MENUS:
+            core[rbac.cell(code, m.code).level] += 1
+    assert sum(core.values()) == len(manifest) * len(nav.ALL_MENUS)
     if p.is_core_only:
-        assert rbac.counts() == {"입력": 19, "조회": 22, "없음": 7, "전체": 48}   # goal.md §6 표 그대로 (D-13)
+        assert core == {"입력": 19, "조회": 22, "없음": 7}   # goal.md §6 표 그대로 (D-13) — 코어 역할 4 × 메뉴 12 = 48
 
 
 def test_health():

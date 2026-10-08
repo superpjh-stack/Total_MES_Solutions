@@ -30,7 +30,7 @@ from .settings import ROOT, get_settings
 CORE_YAML = Path(__file__).resolve().parents[1] / "core.yaml"
 SCHEMA_SQL = Path(__file__).resolve().parents[1] / "db" / "schema.sql"
 PACKS_DIR = ROOT / "packs"
-CORE_ROUTER_MODULES = ["home", "bas", "ord", "job", "mat", "pop", "qua", "eqp", "shp", "trc", "kpi", "sys", "ifc"]   # 13
+CORE_ROUTER_MODULES = ["home", "bas", "ord", "job", "mat", "pop", "qua", "eqp", "shp", "trc", "kpi", "sys", "ifc", "dashboard", "popup"]   # 15 = 모듈 12 + home(CMN-02) · dashboard(CMN-04) · popup(CMN-05)
 LOT_BASES = ("MATERIAL", "PRODUCT", "SHIPMENT")
 PACK_NAME_RE = re.compile(r"^[a-z_][a-z0-9_]*$")
 MODULE_CODE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -545,8 +545,13 @@ def overridden_templates() -> list[str]:
     return sorted(str(p.relative_to(pack_dir)) for p in pack_dir.rglob("*.html") if (core_dir / p.relative_to(pack_dir)).exists())
 
 
+def extra_routes() -> list[dict]:
+    """`core.yaml: extra_routes` — 기능 수 밖 허용 라우트 [{method, path, decision, note}] (D-12 · D-601). `check_trace` 가 고아에서 뺀다."""
+    return [dict(x) for x in (core_manifest().get("extra_routes") or [])]
+
+
 def router_modules() -> list[str]:
-    """코어 13(`mescore.app.routers.<모듈>`) + 팩 `packs/<팩>/routers/*.py`(`_` 로 시작하는 파일 제외)."""
+    """코어 15(`mescore.app.routers.<모듈>` — 모듈 12 + home · dashboard · popup) + 팩 `packs/<팩>/routers/*.py`(`_` 로 시작하는 파일 제외)."""
     out = [f"mescore.app.routers.{m}" for m in CORE_ROUTER_MODULES]
     pack = current()
     if pack.dir is not None and (pack.dir / "routers").is_dir():

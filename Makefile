@@ -1,6 +1,6 @@
 # MES 표준플랫폼 — 명령 (CLAUDE.md 「명령」). 전부 `uv run …` — 시스템 python 을 쓰지 않는다.
 # 팩은 `MES_PACK=<팩> make …` 로 고른다. DB 는 코어 단독 mes_core_db · 팩 mes_<팩>_db (한 번에 하나만 시드 · 스키마 재생성).
-.PHONY: setup db-create db-schema db-seed db-reset pack-new pack-check contracts run test check-routes check-trace check-schema check-data check-security check-terms check-pack gate gate-full backup restore-check core-hash
+.PHONY: setup db-create db-schema db-seed db-reset pack-new pack-check pack-db contracts run test check-routes check-trace check-schema check-data check-security check-terms check-pack gate gate-full backup restore-check core-hash kpi-snapshot erp-flush
 
 TOOLS := src/mescore/tools
 PGHOST ?= /tmp
@@ -36,6 +36,13 @@ pack-new:        # make pack-new NAME=<팩> — packs/_template 복사 (pack.yam
 	cp -R packs/_template packs/$(NAME)
 	sed -i '' 's/^pack: _template/pack: $(NAME)/' packs/$(NAME)/pack.yaml
 	@echo "packs/$(NAME) 생성 — pack.yaml 의 name · company · terms 부터 채운다. 검증: MES_PACK=$(NAME) make pack-check"
+
+pack-db:         # make pack-db NAME=<팩> — 팩 DB 한 벌: createdb + 코어 스키마(+ schema_ext.sql) + 코어 시드 + 팩 시드(seed_core 가 pack.yaml 의 process_params · inspection_items · seeds 를 품는다). 팩이 PackError 면 팩 시드 단계에서 멈춘다
+	@test -n "$(NAME)" || { echo "NAME=<팩> 이 필요하다"; exit 1; }
+	@test -f packs/$(NAME)/pack.yaml || { echo "packs/$(NAME)/pack.yaml 이 없다"; exit 1; }
+	@MES_PACK=$(NAME) $(MAKE) --no-print-directory db-create db-schema
+	MES_PACK=$(NAME) uv run python -m mescore.db.seed_core
+	@echo "mes_$(NAME)_db 준비됨 — 다음: MES_PACK=$(NAME) make check-pack test"
 
 pack-check:      # 병합 규칙 R4~R6 (packs.load) — 위반이면 PackError
 	@test -n "$(PACK)" || { echo "MES_PACK=<팩> 이 필요하다"; exit 1; }
@@ -80,6 +87,12 @@ gate:            # G-C01~G-C24 (코어 단독 MES_PACK=) → packs/ 의 팩마�
 
 gate-full:       # 시드를 한 번 더 돌려 행 수 diff 를 잰다 — 다른 사람이 시드 · 스키마를 돌리는 중에는 쓰지 않는다. 종료 판정은 이것으로
 	@MES_PACK= uv run python $(TOOLS)/gate.py --run-seeds
+
+kpi-snapshot:    # KPI 스냅샷 배치 (kpi_snapshot — 개발3 stats.snapshot). 날짜를 주려면 DAY=YYYY-MM-DD
+	uv run python -m mescore.app.stats snapshot $(DAY)
+
+erp-flush:       # ifc_outbox 큐 비우기 — 어댑터가 501(D-02)이면 행은 `미확정` 으로 남는다 (G-C16)
+	uv run python -c "from mescore.app import erp; print(erp.flush())"
 
 core-hash:       # R1 기준값 outputs/core.sha256 — 아키텍트가 코어를 고친 뒤에만 다시 찍는다
 	uv run python $(TOOLS)/core_hash.py

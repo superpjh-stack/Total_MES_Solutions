@@ -1,4 +1,4 @@
-"""FastAPI 앱 — 팩 로드 · 세션 · 오류 핸들러 · 라우터 자동 include(코어 13 → 팩) · 공통 화면 · /health · after_commit 큐.
+"""FastAPI 앱 — 팩 로드 · 세션 · 오류 핸들러 · 라우터 자동 include(코어 15 → 팩) · 공통 화면 · /health · after_commit 큐.
 
 **개발자는 이 파일을 만지지 않는다.** 라우터는 `packs.router_modules()` 순서로 자동 include 한다 — `routers/<모듈>.py` 의 `router`.
 라우터가 아직 등록하지 않은 화면 GET 경로는 `_placeholder.html` 로 **HTTP 200** + "미구현 — 담당 개발N" + 계약 문장을 낸다.
@@ -88,7 +88,7 @@ def create_app() -> FastAPI:
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-    # ── 라우터 include (코어 13 → 팩) ──
+    # ── 라우터 include (코어 15 = 모듈 12 + home · dashboard · popup → 팩) ──
     registered: set[tuple[str, str]] = set()
     include_errors: list[str] = []          # 원문 — 서버 쪽만
     include_error_names: list[str] = []     # /health — 모듈과 예외 종류뿐

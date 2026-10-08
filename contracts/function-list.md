@@ -160,7 +160,7 @@
 | F-IFC-04 | ifc | IFC-02 | ERP 재전송 | 실행 | ifc_outbox, ifc_erp_link | 관리자 Web | 관리자 | 재전송 | `POST /ifc/erp/{id}/retry` | - | 개발3 | `erp.flush` 한 건. 어댑터 501 이면 501 그대로(조용한 폴백 0, G-C16) |
 | B-MIG-01 | migrate | - | 기준정보 이관 | 배치 | bas_item, bas_partner, bas_process, bas_process_param, bas_equipment, bas_bom, bas_bom_dtl, bas_worker, bas_defect_code, bas_code, sys_migration_log | - | - | - | `cli basics` | - | 개발3 | `migration-files.md` §2. 멱등 · 건수 · 오류 리포트 · 종료 코드 |
 | B-MIG-02 | migrate | - | 수주 · 작업지시 이관 | 배치 | ord_order, ord_order_dtl, job_work_order, sys_migration_log | - | - | - | `cli orders` | - | 개발3 | §3. 번호는 파일 값 그대로(채번 안 함) |
-| B-MIG-03 | migrate | - | LOT · 계보 이관 | 배치 | lot, lot_genealogy, sys_migration_log | - | - | - | `cli lots` | - | 개발3 | §4. 계보는 `lineage.link` 로만. 순환 · 모르는 관계는 그 줄 오류 |
+| B-MIG-03 | migrate | - | LOT · 계보 이관 | 배치 | lot, lot_genealogy, shp_shipment, sys_migration_log | - | - | - | `cli lots` | - | 개발3 | §4. 계보는 `lineage.link` 로만. 순환 · 모르는 관계는 그 줄 오류. SHIPMENT 종류 LOT 은 같은 폴더 `34_shipments.csv` 의 헤더(`shp_shipment`)를 먼저 upsert 한다(D-301 — `lot_shipment_chk`) |
 | B-MIG-04 | migrate | - | 실적 · 검사 이력 이관 | 배치 | pop_work_result, pop_measure, qua_inspection, qua_insp_item, lot, shp_shipment, sys_migration_log | - | - | - | `cli history` | - | 개발3 | §5. 검사 판정이 `lot.insp_status` 갱신(최신 기준) |
 
 ## 3. 모듈별 수 (G-C02 기대값)

@@ -95,6 +95,12 @@ common:
   - { id: CMN-05, name: 팝업, path: "/popup/{kind}", owner: 아키텍트, channels: [관리자 Web, 현장 POP], auth: true,
       kinds: [item, partner, equipment, lot, worker], probe: /popup/item }
 
+# ── 기능 수 밖 허용 라우트 (D-31) — function-list.md 에 없지만 코어가 등록하는 엔드포인트. tools/check_trace.py 가 G-C02 고아에서 뺀다. 메서드 · 경로는 라우터와 글자 그대로 ──
+extra_routes:
+  - { method: POST, path: "/pop/result/{id}/split", decision: D-12, note: 분할 — F-POP-03 계약 안의 LOT 생성 옵션 }
+  - { method: POST, path: "/pop/result/{id}/merge", decision: D-12, note: 합병 — 〃 }
+  - { method: GET, path: "/shp/shipments/{id}/label", decision: D-601, note: 출하 라벨 인쇄 (SHP-02 인쇄 버튼) }
+
 # ── 역할 4 (D-08) ──
 roles:
   - { code: ADMIN, name: 관리자 }
@@ -130,6 +136,7 @@ numbering:
   DOCUMENT: { prefix: C, date: YYMMDD-, digits: 3, label: 성적서 번호 }
   ORDER: { prefix: O, date: YYMMDD-, digits: 3, label: 수주 번호 }
   PLAN: { prefix: N, date: YYMMDD-, digits: 3, label: 생산계획 번호 }
+  ISSUE: { prefix: Q, date: YYMMDD-, digits: 3, label: 이상 번호 }       # D-202 (qua_issue.issue_no · 개발2 요청)
 
 # ── 계보 (spec.md §2.4 · §3.6) — LOT 종류 3 · 관계 5 · 상태 표시어. 팩은 base 로 귀속되는 종류 · 관계를 더한다 ──
 lineage:
