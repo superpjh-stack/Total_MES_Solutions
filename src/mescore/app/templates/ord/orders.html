@@ -1,91 +1,127 @@
-{# ORD-01 수주 — 조회(F-ORD-04) · 등록(F-ORD-01 헤더 + 상세 N줄 한 tx) · 수정(F-ORD-02) · 취소(F-ORD-03 인라인 확인). 최소 템플릿(디자인 이식은 다음 웨이브). #}
+{# ORD-01 수주 (개발3 · 디자이너1 docs/design/web/screens/ord_orders.html 이식) — 조회(F-ORD-04) · 등록(F-ORD-01 헤더 + 상세 N줄 한 tx) · 수정(F-ORD-02) · 취소(F-ORD-03 인라인 확인).
+   헤더 행 + 열린 수주의 상세 행(tr.dtl 들여쓰기). 완료 · 취소 건은 취소 버튼 비활성 + 이유. 상세별 지시 · 출하 수량은 계산값(저장 안 함).
+   라우터 ctx: rows · limit · opened · lines · partners · items · statuses · today · attr_specs · q{frm to partner status}. 폼 name 그대로(partner_code · order_date · due_date · note · item_code[] · qty[] · unit[] · dtl_id[]). #}
 {% extends "base.html" %}
-{% import "home/_macros.html" as ui %}
-{% import "trc/_cards.html" as cards %}
-{% block head %}{{ cards.styles() }}{% endblock %}
+{% import "home/_macros.html" as ui with context %}
+{% set path = nav.path_of('ORD-01') %}
+{% set status_kind = {'대기': 'neutral', '진행': 'info', '완료': 'ok', '취소': 'neutral', '등록': 'info', '지시': 'info', '출하': 'ok'} %}
 
 {% block search %}
 {% set st = [] %}{% for s in statuses %}{% set _ = st.append((s, t(s))) %}{% endfor %}
-{{ ui.field('수주일 시작', 'frm', q.frm, type='date') }}
-{{ ui.field('수주일 끝', 'to', q.to, type='date') }}
-{{ ui.field('거래처', 'partner', q.partner) }}
-{{ ui.select('상태', 'status', st, q.status) }}
+{{ ui.field('수주일 시작', 'frm', q.frm, type='date', cls='w-sm') }}
+{{ ui.field('수주일 끝', 'to', q.to, type='date', cls='w-sm') }}
+{{ ui.field('거래처', 'partner', q.partner, cls='w-md', placeholder=t('코드 · 이름 일부 일치')) }}
+{{ ui.select('상태', 'status', st, q.status, blank='전체', cls='w-sm') }}
 {% endblock %}
 
 {% block grid %}
-{% set columns = ['수주 번호', '거래처', '수주일', '납기', '상태', '상세', '수량', '작업지시', '출하', ''] %}
-<table class="grid">
-  <thead><tr>{% for c in columns %}<th>{{ t(c) }}</th>{% endfor %}</tr></thead>
+<h2 id="h-grid">{{ t('수주') }} {{ t('목록') }} <small>{{ rows|length }}{{ t('건') }}{% if rows|length >= limit %} · {{ t('최근') }} {{ limit }}{{ t('건만') }}{% endif %}</small>
+  <span class="right"><small>{{ t('번호를 누르면 상세 N줄이 열린다 · 지시 · 출하 수량은 계산값') }}</small></span></h2>
+<table class="grid cardify">
+  <thead><tr><th>{{ t('수주 번호') }}</th><th>{{ t('거래처') }}</th><th>{{ t('수주일') }}</th><th>{{ t('납기') }}</th><th>{{ t('상태') }}</th><th>{{ t('품목') }}</th><th class="num">{{ t('수주 수량') }}</th><th class="num">{{ t('작업지시') }}</th><th class="num">{{ t('출하') }}</th><th>{{ t('상세 상태') }}</th><th>{{ t('동작') }}</th></tr></thead>
   <tbody>
   {% for r in rows %}
-    <tr{% if opened and opened.id == r.id %} class="sel"{% endif %}>
-      <td><a href="?id={{ r.id }}"><code>{{ r.order_no }}</code></a></td><td>{{ r.partner_name }}</td><td>{{ r.order_date|dt }}</td><td>{{ r.due_date|dt }}</td>
-      <td>{{ cards.badge(r.status) }}</td><td class="num">{{ r.line_count }}</td><td class="num">{{ r.qty|num(3) }}</td>
-      <td class="num">{{ r.wo_count }}</td><td class="num">{{ r.shipped_count }}</td>
-      <td>{% if r.status not in ('취소', '완료') and user.can('F-ORD-03') %}
-        <details class="confirm"><summary class="btn btn-sm">{{ t('취소') }}</summary>
-          <form method="post" action="{{ nav.path_of('ORD-01') }}/{{ r.id }}/cancel" class="inline"><button class="btn btn-sm">{{ t('수주를 취소합니다') }}</button></form>
-        </details>{% endif %}</td>
+    {% set is_open = opened and opened.id == r.id %}
+    <tr{% if is_open %} class="sel"{% elif r.status == '취소' %} class="dim"{% endif %}>
+      <td data-l="{{ t('수주 번호') }}"><a href="{{ path }}?id={{ r.id }}#form"><code>{{ r.order_no }}</code></a></td>
+      <td data-l="{{ t('거래처') }}">{{ r.partner_name }}</td>
+      <td data-l="{{ t('수주일') }}">{{ r.order_date|dt }}</td>
+      <td data-l="{{ t('납기') }}">{{ r.due_date|dt }}</td>
+      <td data-l="{{ t('상태') }}">{{ ui.badge(r.status, status_kind.get(r.status, '')) }}</td>
+      <td data-l="{{ t('품목') }}" class="muted">{{ t('상세') }} {{ r.line_count }}{{ t('줄') }}</td>
+      <td class="num" data-l="{{ t('수주 수량') }}">{{ r.qty|num(3) }}</td>
+      <td class="num" data-l="{{ t('작업지시') }}">{{ r.wo_count }}</td>
+      <td class="num" data-l="{{ t('출하') }}">{{ r.shipped_count }}</td>
+      <td data-l="{{ t('상세 상태') }}">{% if not is_open %}<a href="{{ path }}?id={{ r.id }}#form">{{ t('열기') }}</a>{% else %}<span class="muted">{{ t('아래') }}</span>{% endif %}</td>
+      <td class="act">
+        {% if user.can('F-ORD-03') %}
+          {{ ui.confirm_button('취소', path ~ '/' ~ r.id ~ '/cancel', t('진행 중 지시가 있으면 422 · 되돌릴 수 없다'), '수주 취소', disabled=(r.status in ('취소', '완료')), why=(t('완료된 수주는 취소할 수 없다') if r.status == '완료' else t('이미 취소된 수주'))) }}
+        {% endif %}
+        <a class="btn btn-sm" href="{{ nav.path_of('ORD-02') }}?order_no={{ r.order_no }}">{{ t('이력') }}</a>
+      </td>
     </tr>
+    {% if is_open %}
+    {% for ln in lines %}
+    <tr class="dtl">
+      <td class="lead" data-l="#" colspan="5">#{{ ln.line_no }}</td>
+      <td data-l="{{ t('품목') }}">{{ ln.item_name }} <small>{{ ln.item_code }}</small></td>
+      <td class="num" data-l="{{ t('수주 수량') }}">{{ ln.qty|num(3) }} <small>{{ ln.unit|txt('') }}</small></td>
+      <td class="num" data-l="{{ t('작업지시') }}">{{ ln.wo_count }} / {{ ln.wo_qty|num(3) }}</td>
+      <td class="num" data-l="{{ t('출하') }}">{{ ln.shipped_qty|num(3) }}</td>
+      <td data-l="{{ t('상세 상태') }}">{{ ui.badge(ln.status, status_kind.get(ln.status, '')) }}</td>
+      <td></td>
+    </tr>
+    {% endfor %}
+    {% endif %}
   {% else %}
-    <tr><td colspan="{{ columns|length }}" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    {{ ui.empty_row(11, hint='조회 조건에 맞는 수주가 없다') }}
   {% endfor %}
   </tbody>
 </table>
-{% if rows|length >= limit %}<p class="muted">{{ t('최근') }} {{ limit }}{{ t('건만 보입니다') }}</p>{% endif %}
+{% endblock %}
 
+{% block form %}
 {% if opened %}
-<section class="panel">
-  <h2>{{ t('수주') }} <code>{{ opened.order_no }}</code> {{ cards.badge(opened.status) }}</h2>
-  <form method="post" action="{{ nav.path_of('ORD-01') }}/{{ opened.id }}" id="order-edit">
-    <div class="form-grid">
-      {{ ui.field('거래처', 'partner_code_ro', opened.partner_code ~ ' ' ~ opened.partner_name, readonly=true) }}
-      {{ ui.field('수주일', 'order_date_ro', opened.order_date|dt, readonly=true) }}
-      {{ ui.field('납기', 'due_date', opened.due_date|dt('%Y-%m-%d', ''), type='date') }}
-      {{ ui.field('비고', 'note', opened.note or '') }}
-    </div>
-    <table class="lines">
-      <thead><tr><th>#</th><th>{{ t('품목') }}</th><th>{{ t('수량') }}</th><th>{{ t('단위') }}</th><th>{{ t('상태') }}</th><th>{{ t('작업지시') }}</th><th>{{ t('출하') }} {{ t('수량') }}</th></tr></thead>
+<section class="panel" id="form" aria-labelledby="h-edit">
+  <h2 id="h-edit">{{ t('수주') }} {{ t('수정') }} <small><code>{{ opened.order_no }}</code> {{ ui.badge(opened.status, status_kind.get(opened.status, '')) }} — {{ t('납기 · 수량 변경은 이력에 전후값') }} (F-ORD-02)</small>
+    <span class="right"><a class="btn btn-sm" href="{{ path }}#new">{{ t('닫기') }}</a></span></h2>
+  <form method="post" action="{{ path }}/{{ opened.id }}" id="order-edit" class="form-grid cols" autocomplete="off">
+    {{ ui.field('거래처', 'partner_ro', opened.partner_code ~ ' ' ~ opened.partner_name, readonly=true) }}
+    {{ ui.field('수주일', 'order_date_ro', opened.order_date|dt, readonly=true, cls='w-sm') }}
+    {{ ui.field('납기', 'due_date', opened.due_date|dt('%Y-%m-%d', ''), type='date', cls='w-sm') }}
+    {{ ui.field('비고', 'note', opened.note or '', cls='wide') }}
+    <table class="grid compact" id="order-lines-edit">
+      <thead><tr><th>#</th><th>{{ t('품목') }}</th><th class="num">{{ t('수량') }}</th><th>{{ t('단위') }}</th><th>{{ t('상태') }}</th><th class="num">{{ t('작업지시') }}</th><th class="num">{{ t('출하 수량') }}</th></tr></thead>
       <tbody>
       {% for ln in lines %}
         <tr><td>{{ ln.line_no }}<input type="hidden" name="dtl_id" value="{{ ln.id }}"></td>
-          <td><input name="item_code" value="{{ ln.item_code }}"{% if ln.wo_count %} readonly title="{{ t('작업지시가 붙은 상세의 품목은 바꿀 수 없습니다') }}"{% endif %}> {{ ln.item_name }}</td>
-          <td><input name="qty" value="{{ ln.qty|num(3) }}" inputmode="decimal"></td><td><input name="unit" value="{{ ln.unit or '' }}"></td>
-          <td>{{ cards.badge(ln.status) }}</td><td class="num">{{ ln.wo_count }} / {{ ln.wo_qty|num(3) }}</td><td class="num">{{ ln.shipped_qty|num(3) }}</td></tr>
+          <td><input name="item_code" value="{{ ln.item_code }}" aria-label="{{ t('품목') }} {{ ln.line_no }}"{% if ln.wo_count %} readonly title="{{ t('작업지시가 붙은 상세의 품목은 바꿀 수 없다') }}"{% endif %}> <small>{{ ln.item_name }}</small></td>
+          <td><input name="qty" value="{{ ln.qty|num(3) }}" inputmode="decimal" class="num" aria-label="{{ t('수량') }} {{ ln.line_no }}"></td>
+          <td><input name="unit" value="{{ ln.unit or '' }}" size="6" aria-label="{{ t('단위') }} {{ ln.line_no }}"></td>
+          <td>{{ ui.badge(ln.status, status_kind.get(ln.status, '')) }}</td>
+          <td class="num">{{ ln.wo_count }} / {{ ln.wo_qty|num(3) }}</td><td class="num">{{ ln.shipped_qty|num(3) }}</td></tr>
+      {% else %}
+        {{ ui.empty_row(7, hint='상세 줄이 없다') }}
       {% endfor %}
       </tbody>
     </table>
   </form>
+  <div class="form-actions">
+    {{ ui.write_button('수주 수정', user.can('F-ORD-02'), form='order-edit', why=(t('완료 · 취소된 수주는 바꿀 수 없다') if opened.status in ('완료', '취소') else '')) }}
+    <span class="why">{{ t('지시가 붙은 상세의 품목은 못 바꾼다 · 수량을 지시 수량 아래로 줄이면 422') }}</span>
+  </div>
 </section>
 {% endif %}
 
-<section class="panel">
-  <h2>{{ t('수주 등록') }}</h2>
+<section class="panel" id="new" aria-labelledby="h-new">
+  <h2 id="h-new">{{ t('수주') }} {{ t('등록') }} <small>{{ t('번호는 저장 때 발번(numbering) — 미리 적지 않는다') }}</small></h2>
   {% set po = [] %}{% for p in partners %}{% set _ = po.append((p.partner_code, p.partner_code ~ ' ' ~ p.partner_name)) %}{% endfor %}
-  <form method="post" action="{{ nav.path_of('ORD-01') }}" id="order-new">
-    <div class="form-grid">
-      {{ ui.select('거래처', 'partner_code', po, required=true) }}
-      {{ ui.field('수주일', 'order_date', today|dt, type='date', required=true) }}
-      {{ ui.field('납기', 'due_date', '', type='date') }}
-      {{ ui.field('비고', 'note') }}
-      {{ ui.attrs_fields(attr_specs) }}
-    </div>
-    <table class="lines">
-      <thead><tr><th>#</th><th>{{ t('품목') }}</th><th>{{ t('수량') }}</th><th>{{ t('단위') }}</th></tr></thead>
+  <form method="post" action="{{ path }}" id="order-new" class="form-grid cols" autocomplete="off">
+    {{ ui.select('거래처', 'partner_code', po, '', required=true) }}
+    {{ ui.field('수주일', 'order_date', today|dt, type='date', required=true, cls='w-sm') }}
+    {{ ui.field('납기', 'due_date', '', type='date', cls='w-sm') }}
+    {{ ui.field('비고', 'note', '', cls='wide') }}
+    {{ ui.attrs_fields(attr_specs) }}
+    <table class="grid compact" id="order-lines">
+      <thead><tr><th>#</th><th>{{ t('품목') }} <em class="req" aria-label="{{ t('필수') }}">*</em></th><th class="num">{{ t('수량') }} <em class="req" aria-label="{{ t('필수') }}">*</em></th><th>{{ t('단위') }}</th></tr></thead>
       <tbody>
       {% for i in range(1, 4) %}
         <tr><td>{{ i }}</td>
-          <td><select name="item_code"><option value="">{{ t('선택') }}</option>{% for it in items %}<option value="{{ it.item_code }}">{{ it.item_code }} {{ it.item_name }}</option>{% endfor %}</select></td>
-          <td><input name="qty" inputmode="decimal"{% if i == 1 %} required{% endif %}></td><td><input name="unit"></td></tr>
+          <td><select name="item_code" aria-label="{{ t('품목') }} {{ i }}"{% if i == 1 %} required{% endif %}><option value="">{{ t('품목 선택') }}</option>{% for it in items %}<option value="{{ it.item_code }}">{{ it.item_code }} {{ it.item_name }}</option>{% endfor %}</select></td>
+          <td><input name="qty" inputmode="decimal" class="num" aria-label="{{ t('수량') }} {{ i }}"{% if i == 1 %} required{% endif %}></td>
+          <td><input name="unit" size="6" aria-label="{{ t('단위') }} {{ i }}"></td></tr>
       {% endfor %}
       </tbody>
+      <tfoot><tr><td colspan="4"><small>{{ t('상세 N줄 = 한 트랜잭션 · 빈 줄은 저장하지 않는다 · 줄이 더 필요하면 저장 뒤 수정으로') }}</small></td></tr></tfoot>
     </table>
   </form>
+  <div class="form-actions">
+    {{ ui.write_button('수주 등록', user.can('F-ORD-01'), form='order-new') }}
+    <span class="why">{{ t('거래처 · 품목이 없거나 수량이 0 이면 422 항목별 사유') }}</span>
+  </div>
 </section>
 {% endblock %}
 
 {% block actions %}
-<button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
-{% if opened %}{{ ui.write_button('수주 수정', user.can('F-ORD-02'), form='order-edit') }}{% endif %}
-{{ ui.write_button('수주 등록', user.can('F-ORD-01'), form='order-new') }}
+<button type="submit" form="screen-search" class="btn btn-primary">{{ t('조회') }}</button>
 {% endblock %}

@@ -1,17 +1,36 @@
-{# ORD-02 수주 이력 — F-ORD-05. ord_order_hist 전후값 · 누가 · 언제. 읽기만. #}
+{# ORD-02 수주 이력 (F-ORD-05 · 개발3 · 디자이너1 이식) — ord_order_hist 전후값 · 누가 · 언제. 읽기만. 라우터 ctx: rows · limit · q{order_no frm to}. #}
 {% extends "base.html" %}
-{% import "home/_macros.html" as ui %}
+{% import "home/_macros.html" as ui with context %}
 
 {% block search %}
-{{ ui.field('수주 번호', 'order_no', q.order_no) }}
-{{ ui.field('변경일 시작', 'frm', q.frm, type='date') }}
-{{ ui.field('변경일 끝', 'to', q.to, type='date') }}
+{{ ui.field('수주 번호', 'order_no', q.order_no, cls='w-md', placeholder=t('일부 일치')) }}
+{{ ui.field('변경일 시작', 'frm', q.frm, type='date', cls='w-sm') }}
+{{ ui.field('변경일 끝', 'to', q.to, type='date', cls='w-sm') }}
 {% endblock %}
 
 {% block grid %}
-{% set columns = ['변경 시각', '수주 번호', '거래처', '항목', '전 값', '후 값', '변경자'] %}
-{% set data = [] %}
-{% for h in rows %}{% set _ = data.append([h.changed_at|dt('%Y-%m-%d %H:%M:%S'), h.order_no, h.partner_name, h.field, h.before_value|txt, h.after_value|txt, h.changed_by|txt]) %}{% endfor %}
-{{ ui.grid(columns, data) }}
-{% if rows|length >= limit %}<p class="muted">{{ t('최근') }} {{ limit }}{{ t('건만 보입니다') }}</p>{% endif %}
+<h2 id="h-grid">{{ t('수주 이력') }} <small>{{ rows|length }}{{ t('건') }}{% if rows|length >= limit %} · {{ t('최근') }} {{ limit }}{{ t('건만') }}{% endif %}</small>
+  <span class="right"><small>{{ t('납기 · 수량 · 상태 변경의 전후값 — 쓰기 0') }}</small></span></h2>
+<table class="grid cardify">
+  <thead><tr><th>{{ t('변경 시각') }}</th><th>{{ t('수주 번호') }}</th><th>{{ t('거래처') }}</th><th>{{ t('항목') }}</th><th>{{ t('전 값') }}</th><th>{{ t('후 값') }}</th><th>{{ t('변경자') }}</th></tr></thead>
+  <tbody>
+  {% for h in rows %}
+    <tr>
+      <td data-l="{{ t('변경 시각') }}">{{ h.changed_at|dt('%Y-%m-%d %H:%M:%S') }}</td>
+      <td data-l="{{ t('수주 번호') }}"><a href="{{ nav.path_of('ORD-01') }}?id={{ h.order_id }}#form"><code>{{ h.order_no }}</code></a></td>
+      <td data-l="{{ t('거래처') }}">{{ h.partner_name }}</td>
+      <td data-l="{{ t('항목') }}"><code>{{ h.field }}</code></td>
+      <td data-l="{{ t('전 값') }}">{{ h.before_value|txt }}</td>
+      <td data-l="{{ t('후 값') }}"><b>{{ h.after_value|txt }}</b></td>
+      <td data-l="{{ t('변경자') }}">{{ h.changed_by|txt }}</td>
+    </tr>
+  {% else %}
+    {{ ui.empty_row(7, hint='조회 조건에 맞는 이력이 없다') }}
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+
+{% block actions %}
+<button type="submit" form="screen-search" class="btn btn-primary">{{ t('조회') }}</button>
 {% endblock %}

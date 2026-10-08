@@ -1,36 +1,48 @@
-{# SYS-02 역할 (F-SYS-05~07) — 역할별 사용자 수. 등록하면 모든 메뉴 칸이 `없음`. ADMIN 은 중지 불가. #}
+{# SYS-02 역할 (F-SYS-05~07 · 개발1 · 디자이너1 이식) — 역할별 사용자 수 · 권한 칸 수. 등록하면 모든 메뉴 칸이 `없음`. ADMIN 은 중지 불가(고정).
+   라우터 ctx: rows · f · editing · path · n_menus · guarded · can{create update}. #}
 {% extends "base.html" %}
-{% import "home/_macros.html" as ui %}
+{% import "home/_macros.html" as ui with context %}
 
 {% block search %}{% endblock %}
 
 {% block grid %}
-<h2>{{ t('역할') }} <small>{{ rows|length }}{{ t('건') }}</small></h2>
-<table class="grid">
-  <thead><tr><th>{{ t('역할 코드') }}</th><th>{{ t('역할 이름') }}</th><th>{{ t('사용 여부') }}</th><th class="num">{{ t('사용자') }}</th><th class="num">{{ t('권한 칸') }}</th><th class="act">{{ t('작업') }}</th></tr></thead>
+<h2 id="h-grid">{{ t('역할') }} <small>{{ rows|length }}{{ t('건') }}</small>
+  <span class="right"><small>{{ t('권한은 역할 × 메뉴 칸') }} — <a href="{{ nav.path_of('SYS-03') }}">{{ t('권한 표') }}</a></small></span></h2>
+<table class="grid cardify">
+  <thead><tr><th>{{ t('역할 코드') }}</th><th>{{ t('역할 이름') }}</th><th>{{ t('사용 여부') }}</th><th class="num">{{ t('사용자') }}</th><th class="num">{{ t('권한 칸') }}</th><th>{{ t('동작') }}</th></tr></thead>
   <tbody>
   {% for r in rows %}
-    <tr{% if editing and editing.id == r.id %} class="sel"{% endif %}>
-      <td><code>{{ r.role_code }}</code>{% if r.role_code == guarded %} <span class="tag">{{ t('고정') }}</span>{% endif %}</td><td>{{ r.role_name }}</td><td>{{ r.use_yn }}</td>
-      <td class="num">{{ r.user_count }} ({{ t('사용') }} {{ r.active_user_count }})</td><td class="num">{{ r.cell_count }} / {{ n_menus }}</td>
-      <td class="act">{% if can.update %}<a class="btn btn-sm" href="{{ path }}?edit={{ r.id }}">{{ t('수정') }}</a>{% endif %}</td>
+    <tr{% if editing and editing.id == r.id %} class="sel"{% elif r.use_yn == 'N' %} class="dim"{% endif %}>
+      <td data-l="{{ t('역할 코드') }}"><code>{{ r.role_code }}</code>{% if r.role_code == guarded %} <span class="tag" title="{{ t('ADMIN 은 중지 · 시스템 칸 잠금 불가') }}">{{ t('고정') }}</span>{% endif %}</td>
+      <td data-l="{{ t('역할 이름') }}">{{ r.role_name }}</td>
+      <td data-l="{{ t('사용 여부') }}">{{ ui.badge('사용' if r.use_yn == 'Y' else '미사용') }}</td>
+      <td class="num" data-l="{{ t('사용자') }}">{{ r.user_count }} <small>({{ t('사용') }} {{ r.active_user_count }})</small></td>
+      <td class="num" data-l="{{ t('권한 칸') }}">{{ r.cell_count }} / {{ n_menus }}{% if r.cell_count < n_menus %} <span class="undecided">{{ t('빈 칸') }} {{ n_menus - r.cell_count }}</span>{% endif %}</td>
+      <td class="act">{% if can.update %}<a class="btn btn-sm" href="{{ path }}?edit={{ r.id }}#form">{{ t('수정') }}</a>{% endif %}</td>
     </tr>
   {% else %}
-    <tr><td colspan="6" class="empty"><b>{{ NOT_COLLECTED }}</b></td></tr>
+    {{ ui.empty_row(6, hint='역할이 없다 — 시드를 확인한다') }}
   {% endfor %}
   </tbody>
 </table>
-<section class="panel form-panel">
-  <h2>{% if editing %}{{ t('수정') }} — <code>{{ editing.role_code }}</code>{% else %}{{ t('등록') }} <small>{{ t('메뉴') }} {{ n_menus }}{{ t('칸이') }} {{ t('없음') }}{{ t('으로 만들어진다') }}</small>{% endif %}</h2>
+{% endblock %}
+
+{% block form %}
+<section class="panel" id="form" aria-labelledby="h-form">
+  <h2 id="h-form">{% if editing %}{{ t('역할') }} {{ t('수정') }} <small><code>{{ editing.role_code }}</code> — {{ t('역할 코드는 바꿀 수 없다') }}</small>
+    <span class="right"><a class="btn btn-sm" href="{{ path }}#form">{{ t('새로 등록') }}</a></span>
+    {% else %}{{ t('역할') }} {{ t('등록') }} <small>{{ t('메뉴') }} {{ n_menus }}{{ t('칸이') }} <b>{{ t('없음') }}</b>{{ t('으로 만들어진다') }}</small>{% endif %}</h2>
   <form method="post" action="{{ path }}{% if editing %}/{{ editing.id }}{% endif %}" id="role-form" class="form-grid cols" autocomplete="off">
-    {{ ui.field('역할 코드', 'role_code', editing.role_code if editing else '', required=(not editing), readonly=(editing is not none)) }}
+    {{ ui.field('역할 코드', 'role_code', editing.role_code if editing else '', required=(not editing), readonly=(editing is not none), hint=t('영문 대문자 · 숫자 · _ 2~20자'), cls='w-md') }}
     {{ ui.field('역할 이름', 'role_name', editing.role_name if editing else '', required=true) }}
-    {% if editing %}{{ ui.select('사용 여부', 'use_yn', [('Y', t('사용')), ('N', t('미사용'))], editing.use_yn) }}{% endif %}
+    {% if editing %}{{ ui.select('사용 여부', 'use_yn', [('Y', t('사용')), ('N', t('미사용'))], editing.use_yn, blank=none, cls='w-sm', disabled=(editing.role_code == guarded)) }}{% endif %}
   </form>
+  <div class="form-actions">
+    {{ ui.write_button('수정 저장' if editing else '등록', (can.update if editing else can.create), form='role-form') }}
+    {% if editing %}<a class="btn" href="{{ path }}">{{ t('취소') }}</a>{% endif %}
+    <span class="why">{{ t('저장 즉시 권한 캐시를 비운다 — 다음 요청부터 반영') }}</span>
+  </div>
 </section>
 {% endblock %}
 
-{% block actions %}
-  {{ ui.write_button('저장', (can.update if editing else can.create), form='role-form') }}
-  {% if editing %}<a class="btn" href="{{ path }}">{{ t('새로 등록') }}</a>{% endif %}
-{% endblock %}
+{% block actions %}{% endblock %}

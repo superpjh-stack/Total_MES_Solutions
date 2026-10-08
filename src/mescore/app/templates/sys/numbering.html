@@ -1,43 +1,55 @@
-{# SYS-05 채번 규칙 (F-SYS-11 · 12) — 종류별 접두어 · 날짜 형식 · 자릿수 · 오늘 카운터 · 다음 번호(peek). 규칙 없는 종류는 `미확정 (D-10)`. 이미 발번된 번호는 바뀌지 않는다. #}
+{# SYS-05 채번 규칙 (F-SYS-11 · 12 · 개발1 · 디자이너1 이식) — 종류별 접두어 · 날짜 형식 · 자릿수 · 오늘 카운터 · 다음 번호(peek). 규칙 없는 종류는 `미확정 (D-10)`. 이미 발번된 번호는 바뀌지 않는다.
+   라우터 ctx: rows[{kind label declared rule{prefix date_format seq_digits use_yn} counter next_no error}] · f · editing · path · can_write. 폼 name 그대로. #}
 {% extends "base.html" %}
-{% import "home/_macros.html" as ui %}
+{% import "home/_macros.html" as ui with context %}
 
 {% block search %}{% endblock %}
 
 {% block grid %}
-<h2>{{ t('채번 규칙') }} <small>{{ t('번호 = 접두어 + 날짜 형식(to_char) + 일련번호') }}</small></h2>
-<table class="grid">
-  <thead><tr><th>{{ t('종류') }}</th><th>{{ t('이름') }}</th><th>{{ t('접두어') }}</th><th>{{ t('날짜 형식') }}</th><th class="num">{{ t('자릿수') }}</th><th>{{ t('사용 여부') }}</th><th class="num">{{ t('오늘 카운터') }}</th><th>{{ t('다음 번호') }}</th><th class="act">{{ t('작업') }}</th></tr></thead>
+<h2 id="h-grid">{{ t('채번 규칙') }} <small>{{ rows|length }}{{ t('종류') }} · {{ t('번호 = 접두어 + 날짜 형식(to_char) + 일련번호') }}</small></h2>
+<table class="grid cardify">
+  <thead><tr><th>{{ t('종류') }}</th><th>{{ t('이름') }}</th><th>{{ t('접두어') }}</th><th>{{ t('날짜 형식') }}</th><th class="num">{{ t('자릿수') }}</th><th>{{ t('사용 여부') }}</th><th class="num">{{ t('오늘 카운터') }}</th><th>{{ t('다음 번호') }}</th><th>{{ t('동작') }}</th></tr></thead>
   <tbody>
   {% for r in rows %}
     <tr{% if editing and editing.kind == r.kind %} class="sel"{% endif %}>
-      <td><code>{{ r.kind }}</code>{% if not r.declared %} <span class="tag">{{ t('추가') }}</span>{% endif %}</td><td>{{ t(r.label) }}</td>
+      <td data-l="{{ t('종류') }}"><code>{{ r.kind }}</code>{% if not r.declared %} <span class="tag" title="{{ t('core.yaml · pack.yaml numbering 에 없는 종류') }}">{{ t('추가') }}</span>{% endif %}</td>
+      <td data-l="{{ t('이름') }}">{{ t(r.label) }}</td>
       {% if r.rule %}
-      <td>{{ r.rule.prefix }}</td><td>{{ r.rule.date_format|txt }}</td><td class="num">{{ r.rule.seq_digits }}</td><td>{{ r.rule.use_yn }}</td>
-      <td class="num">{{ r.counter|txt }}</td><td>{% if r.next_no %}<code>{{ r.next_no }}</code>{% elif r.error %}<span class="undecided">{{ r.error }}</span>{% else %}-{% endif %}</td>
+      <td data-l="{{ t('접두어') }}"><code>{{ r.rule.prefix }}</code></td>
+      <td data-l="{{ t('날짜 형식') }}"><code>{{ r.rule.date_format|txt }}</code></td>
+      <td class="num" data-l="{{ t('자릿수') }}">{{ r.rule.seq_digits }}</td>
+      <td data-l="{{ t('사용 여부') }}">{{ ui.badge('사용' if r.rule.use_yn == 'Y' else '미사용') }}</td>
+      <td class="num" data-l="{{ t('오늘 카운터') }}">{{ r.counter|txt }}</td>
+      <td data-l="{{ t('다음 번호') }}">{% if r.next_no %}<code>{{ r.next_no }}</code>{% elif r.error %}<span class="undecided">{{ r.error }}</span>{% else %}-{% endif %}</td>
       {% else %}
-      <td colspan="6">{{ ui.undecided('D-10', '채번 규칙') }}</td>
+      <td colspan="6" data-l="{{ t('규칙') }}">{{ ui.undecided('D-10', '채번 규칙') }} <small>{{ t('sys_number_rule 행이 없다 — 번호를 만들 수 없다') }}</small></td>
       {% endif %}
-      <td class="act">{% if can_write %}<a class="btn btn-sm" href="{{ path }}?edit={{ r.kind }}">{{ t('수정') }}</a>{% endif %}</td>
+      <td class="act">{% if can_write %}<a class="btn btn-sm" href="{{ path }}?edit={{ r.kind }}#form">{{ t('수정') }}</a>{% endif %}</td>
     </tr>
   {% else %}
-    <tr><td colspan="9" class="empty"><b>{{ NOT_COLLECTED }}</b></td></tr>
+    {{ ui.empty_row(9, hint='채번 종류가 없다') }}
   {% endfor %}
   </tbody>
 </table>
-<section class="panel form-panel">
-  <h2>{{ t('규칙 수정') }}{% if editing %} — <code>{{ editing.kind }}</code>{% endif %}</h2>
+{% endblock %}
+
+{% block form %}
+<section class="panel" id="form" aria-labelledby="h-form">
+  <h2 id="h-form">{{ t('규칙 수정') }}{% if editing %} <small><code>{{ editing.kind }}</code> — {{ t(editing.label) }}</small><span class="right"><a class="btn btn-sm" href="{{ path }}#form">{{ t('새 종류') }}</a></span>{% endif %}</h2>
   <form method="post" action="{{ path }}" id="num-form" class="form-grid cols" autocomplete="off">
-    {{ ui.field('종류', 'kind', editing.kind if editing else '', required=true, readonly=(editing is not none)) }}
-    {{ ui.field('접두어', 'prefix', editing.rule.prefix if editing and editing.rule else '') }}
-    {{ ui.field('날짜 형식 (to_char · 예 YYMMDD-)', 'date_format', editing.rule.date_format if editing and editing.rule else 'YYMMDD-') }}
-    {{ ui.field('자릿수', 'seq_digits', editing.rule.seq_digits if editing and editing.rule else 3, type='number', required=true) }}
-    {{ ui.select('사용 여부', 'use_yn', [('Y', t('사용')), ('N', t('미사용'))], editing.rule.use_yn if editing and editing.rule else 'Y') }}
+    {{ ui.field('종류', 'kind', editing.kind if editing else '', required=true, readonly=(editing is not none), hint=t('영문 대문자 · 숫자 · _ 30자'), cls='w-md') }}
+    {{ ui.field('접두어', 'prefix', editing.rule.prefix if editing and editing.rule else '', cls='w-sm', placeholder='WO-') }}
+    {{ ui.field('날짜 형식 (to_char)', 'date_format', editing.rule.date_format if editing and editing.rule else 'YYMMDD-', cls='w-md', hint='YYYYMMDD-') }}
+    {{ ui.field('자릿수', 'seq_digits', editing.rule.seq_digits if editing and editing.rule else 3, type='number', required=true, cls='w-sm', min=1, max=9, step='1') }}
+    {{ ui.select('사용 여부', 'use_yn', [('Y', t('사용')), ('N', t('미사용'))], editing.rule.use_yn if editing and editing.rule else 'Y', blank=none, cls='w-sm') }}
   </form>
-  <ul class="notes"><li>{{ t('저장하면 다음 번호를 미리 보여 준다. 이미 발번된 번호는 바뀌지 않는다') }}.</li><li>{{ t('글자는 영문 대문자 · 숫자 · - 만 (바코드)') }}.</li></ul>
+  <div class="form-actions">
+    {{ ui.write_button('저장', can_write, form='num-form') }}
+    {% if editing %}<a class="btn" href="{{ path }}">{{ t('취소') }}</a>{% endif %}
+    <span class="why">{{ t('저장하면 다음 번호를 미리 보여 준다 · 이미 발번된 번호는 바뀌지 않는다') }}</span>
+  </div>
+  <ul class="notes"><li>{{ t('글자는 영문 대문자 · 숫자 · - 만 (바코드 Code128)') }}. {{ t('날짜 형식은 PostgreSQL to_char 패턴') }}.</li></ul>
 </section>
 {% endblock %}
 
-{% block actions %}
-  {{ ui.write_button('저장', can_write, form='num-form') }}
-{% endblock %}
+{% block actions %}{% endblock %}

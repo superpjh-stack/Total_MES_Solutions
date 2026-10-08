@@ -1,38 +1,62 @@
-{# JOB-02 지시 현황 (F-JOB-06) — 오늘 · 이번 주 지시별 계획 대비 실적 · 상태. 390px 에서는 표가 가로로 넘긴다(grid-panel). `?wo=` 는 실적 드릴다운 (D-604). #}
+{# JOB-02 지시 현황 (F-JOB-06 · 개발1 · 디자이너1 이식 · 모바일 대상 — 디자이너2 mobile/job_status_m.html 접힘 규칙) — 오늘 · 이번 주 지시별 계획 대비 실적 · 상태.
+   타일(요약) + 표. 폭 480 아래에서는 표가 카드로(cardify · 가로 넘침 0). `?wo=` 는 실적 드릴다운 (D-604).
+   라우터 ctx: rows[{… good_qty defect_qty plan_qty achieve_pct progress}] · summary{상태: n, 전체: n} · range · frm · to · detail · results · path · print_path. #}
 {% extends "base.html" %}
-{% import "home/_macros.html" as ui %}
+{% import "home/_macros.html" as ui with context %}
 
 {% block search %}
-  {{ ui.select('기간', 'range', [('today', t('오늘')), ('week', t('이번 주'))], range, blank='오늘') }}
+  {{ ui.select('기간', 'range', [('today', t('오늘')), ('week', t('이번 주'))], range, blank=none, cls='w-sm') }}
 {% endblock %}
 
 {% block grid %}
-<h2>{{ t('지시 현황') }} <small>{{ frm }} ~ {{ to }}</small></h2>
+<h2 id="h-grid">{{ t('지시 현황') }} <small>{{ frm }} ~ {{ to }} · {{ rows|length }}{{ t('건') }}</small></h2>
 <div class="tiles">
-  {% for k, v in summary.items() %}<div class="tile"><span class="l">{{ t(k) }}</span><span class="v">{{ v }}</span></div>{% endfor %}
+  {% for k, v in summary.items() %}
+  <div class="tile{% if k == '진행' and v %} warn{% endif %}"><span class="l">{{ t(k) }}</span><span class="v">{{ v }}<small>{{ t('건') }}</small></span></div>
+  {% endfor %}
 </div>
-<table class="grid">
-  <thead><tr><th>{{ t('작업지시') }}</th><th>{{ t('품목') }}</th><th>{{ t('공정') }}</th><th class="num">{{ t('계획') }}</th><th class="num">{{ t('양품') }}</th><th class="num">{{ t('불량') }}</th><th class="num">{{ t('달성') }} %</th><th>{{ t('상태') }}</th></tr></thead>
+<table class="grid cardify">
+  <thead><tr><th>{{ t('지시 번호') }}</th><th>{{ t('품목') }}</th><th>{{ t('공정') }}</th><th class="num">{{ t('계획') }}</th><th class="num">{{ t('양품') }}</th><th class="num">{{ t('불량') }}</th><th>{{ t('달성') }}</th><th>{{ t('상태') }}</th></tr></thead>
   <tbody>
   {% for r in rows %}
-    <tr{% if detail and detail.id == r.id %} class="sel"{% endif %}>
-      <td><a href="{{ path }}?range={{ range }}&wo={{ r.id }}"><code>{{ r.work_order_no }}</code></a></td>
-      <td>{{ r.item_code }} {{ r.item_name }}</td><td>{{ r.process_name }}</td>
-      <td class="num">{{ r.plan_qty|num(3) }}</td><td class="num">{{ r.good_qty|num(3) }}</td><td class="num">{{ r.defect_qty|num(3) }}</td>
-      <td class="num">{{ r.achieve_pct|txt }}</td>
-      <td><span class="badge badge-{{ {'대기': 'neutral', '진행': 'run', '마감': 'ok', '취소': 'none'}[r.progress] }}">{{ t(r.progress) }}</span></td>
+    <tr{% if detail and detail.id == r.id %} class="sel"{% elif r.progress == '취소' %} class="dim"{% endif %}>
+      <td data-l="{{ t('지시 번호') }}"><a href="{{ path }}?range={{ range }}&amp;wo={{ r.id }}"><code>{{ r.work_order_no }}</code></a></td>
+      <td data-l="{{ t('품목') }}">{{ r.item_name }} <small>{{ r.item_code }}</small></td>
+      <td data-l="{{ t('공정') }}">{{ r.process_name }}</td>
+      <td class="num" data-l="{{ t('계획') }}">{{ r.plan_qty|num(3) }}</td>
+      <td class="num" data-l="{{ t('양품') }}">{{ r.good_qty|num(3) }}</td>
+      <td class="num" data-l="{{ t('불량') }}">{{ r.defect_qty|num(3) }}</td>
+      <td data-l="{{ t('달성') }}">{{ ui.bar(r.achieve_pct if r.result_count else none) }}</td>
+      <td data-l="{{ t('상태') }}">{{ ui.badge(r.progress, {'대기': 'neutral', '진행': 'info', '마감': 'ok', '취소': 'neutral'}.get(r.progress, '')) }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="8" class="empty"><b>{{ NOT_COLLECTED }}</b></td></tr>
+    {{ ui.empty_row(8, hint='이 기간에 지시가 없다') }}
   {% endfor %}
   </tbody>
 </table>
+{% endblock %}
+
+{% block form %}
 {% if detail %}
-<section class="panel">
-  <h2>{{ t('실적') }} — <code>{{ detail.work_order_no }}</code> <a class="btn btn-sm" href="{{ print_path }}?id={{ detail.id }}">{{ t('작업지시서') }}</a></h2>
-  {% set res_rows = [] %}
-  {% for x in results %}{% set _ = res_rows.append([x.started_at|dt, x.ended_at|dt, x.good_qty|num(3), x.defect_qty|num(3), x.equip_name|txt, x.worker_name|txt, x.lot_no|txt]) %}{% endfor %}
-  {{ ui.grid(['시작', '종료', '양품', '불량', '설비', '작업자', '생산 LOT'], res_rows) }}
+<section class="panel" id="detail" aria-labelledby="h-detail">
+  <h2 id="h-detail">{{ t('실적') }} <small><code>{{ detail.work_order_no }}</code> · {{ detail.item_name }} · {{ detail.process_name }}</small>
+    <span class="right"><a class="btn btn-sm" href="{{ print_path }}?id={{ detail.id }}">{{ t('작업지시서') }}</a> <a class="btn btn-sm" href="{{ path }}?range={{ range }}">{{ t('닫기') }}</a></span></h2>
+  <table class="grid compact cardify">
+    <thead><tr><th>{{ t('시작') }}</th><th>{{ t('종료') }}</th><th class="num">{{ t('양품') }}</th><th class="num">{{ t('불량') }}</th><th>{{ t('설비') }}</th><th>{{ t('작업자') }}</th><th>{{ t('생산 LOT') }}</th></tr></thead>
+    <tbody>
+    {% for x in results %}
+      <tr><td data-l="{{ t('시작') }}">{{ x.started_at|dt }}</td><td data-l="{{ t('종료') }}">{% if x.ended_at %}{{ x.ended_at|dt }}{% else %}<span class="badge badge-warn">{{ t('진행 중') }}</span>{% endif %}</td>
+        <td class="num" data-l="{{ t('양품') }}">{{ x.good_qty|num(3) }}</td><td class="num" data-l="{{ t('불량') }}">{{ x.defect_qty|num(3) }}</td>
+        <td data-l="{{ t('설비') }}">{{ x.equip_name|txt }}</td><td data-l="{{ t('작업자') }}">{{ x.worker_name|txt }}</td><td data-l="{{ t('생산 LOT') }}">{% if x.lot_no %}<code>{{ x.lot_no }}</code>{% else %}-{% endif %}</td></tr>
+    {% else %}
+      {{ ui.empty_row(7, hint='실적이 없다') }}
+    {% endfor %}
+    </tbody>
+  </table>
 </section>
 {% endif %}
+{% endblock %}
+
+{% block actions %}
+  <button type="submit" form="screen-search" class="btn btn-primary">{{ t('조회') }}</button>
 {% endblock %}

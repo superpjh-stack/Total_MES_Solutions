@@ -1,4 +1,4 @@
 {# BAS-03 공정 (F-BAS-09~12) — 공정별 측정값 수 · 설비 수를 함께 보인다 #}
 {% extends "bas/_master.html" %}
 {% block extra_head %}<th class="num">{{ t('측정값') }}</th><th class="num">{{ t('설비') }}</th>{% endblock %}
-{% block extra_cells scoped %}<td class="num">{{ r.param_count }}</td><td class="num">{{ r.equipment_count }}</td>{% endblock %}
+{% block extra_cells scoped %}<td class="num" data-l="{{ t('측정값') }}">{{ r.param_count }}</td><td class="num" data-l="{{ t('설비') }}">{{ r.equipment_count }}</td>{% endblock %}

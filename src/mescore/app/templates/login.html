@@ -1,5 +1,7 @@
-{# 공통 로그인 화면 (CMN-01 · 아키텍트 → 개발1). 채널을 골라 로그인하면 그 채널로 세션이 고정된다.
-   `?device=pop|mobile|board` 로 열면 그 채널이 미리 골라져 있다. 비밀번호 값은 이 화면 어디에도 없다 (G-C19). 실패는 401 로 다시 그린다. #}
+{# 공통 로그인 화면 (CMN-01 · 디자이너1 docs/design/web/screens/login.html 이식). 메뉴 · 계약 패널 없음.
+   POST /login (login_id · password · next · device). 성공 303 → next 또는 메인. 실패는 이 화면을 401 로 다시 그린다(message).
+   채널(device) 4 는 로그인 뒤 세션에 남는다 — 화면 크기 · 배치만 바뀌고 권한은 역할로 정해진다. `?device=` 로 열면 미리 골라져 있다.
+   비밀번호 값은 이 화면 어디에도 없다 (G-C19). D-605: MES_ENV=dev 에서만 역할 버튼으로 바로 로그인(POST /login/as · routers/home.py). #}
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -8,40 +10,66 @@
 <title>{{ t('로그인') }} · {{ system_name }}</title>
 <link rel="stylesheet" href="/static/style.css?v={{ asset_v }}">
 </head>
-<body class="login-body ch-{{ login_device or 'web' }}">
-<form method="post" action="/login" id="login-form" class="login-wrap">
-  <input type="hidden" name="next" value="{{ next or '' }}">
-  <div class="login-card">
-    <h1>{{ system_name }}</h1>
-    <p class="sub">{{ t('LOT 계보 · 측정값') }} · {{ nav.DEVICE_CHANNEL[login_device or 'web'] }}{% if pack_name %} · {{ t('팩') }} {{ pack_name }}{% endif %}</p>
-    {% if message %}<p class="err" role="alert">{{ message }}</p>{% endif %}
-    <div class="login-fields">
-      <label>{{ t('아이디') }}<input type="text" name="login_id" autocomplete="username" required autofocus value="{{ login_id or '' }}"></label>
-      <label>{{ t('비밀번호') }}<input type="password" name="password" autocomplete="current-password" required></label>
-      <fieldset class="login-channel">
-        <legend>{{ t('채널') }} ({{ t('화면 크기 · 배치만 바뀐다 — 권한은 역할로 정해진다') }})</legend>
-        {% for code, label in nav.DEVICE_CHANNEL.items() %}
-        <label class="radio"><input type="radio" name="device" value="{{ code }}"{% if code == (login_device or 'web') %} checked{% endif %}> {{ label }}</label>
-        {% endfor %}
+<body class="login ch-{{ login_device or 'web' }}">
+{% set dev = login_device or 'web' %}
+<div class="login-wrap">
+  <main class="login-card" aria-labelledby="h-login">
+    <h1 id="h-login">{{ system_name }}</h1>
+    <p class="sub">{{ t('LOT 계보 · 측정값') }} · {{ t('코어') }} {{ core_version }}{% if pack_name %} · {{ t('팩') }} <code>{{ pack_name }}</code>{% endif %}</p>
+
+    {% if message %}
+    <div class="alert" role="alert"><strong>{{ t('로그인하지 못했다') if login_id else t('로그인이 필요합니다') }}</strong> — {{ message }}</div>
+    {% endif %}
+
+    <form method="post" action="/login" id="login-form" autocomplete="off">
+      <input type="hidden" name="next" value="{{ next or '' }}">
+      <label class="f"><span>{{ t('아이디') }} <em class="req" aria-label="{{ t('필수') }}">*</em></span><input type="text" name="login_id" value="{{ login_id or '' }}" required autofocus autocapitalize="off" spellcheck="false" autocomplete="username"></label>
+      <label class="f"><span>{{ t('비밀번호') }} <em class="req" aria-label="{{ t('필수') }}">*</em></span><input type="password" name="password" value="" required autocomplete="current-password"></label>
+      <fieldset>
+        <legend>{{ t('채널') }} (device) — {{ t('화면 크기 · 배치만 바뀐다 · 권한은 역할로') }}</legend>
+        <div class="chan">
+          {% set chan_note = {'web': t('좌측 메뉴 · 표 · 폼'), 'pop': t('확대 · 스캔칸 1개'), 'mobile': t('폭 390 · 조회 중심'), 'board': t('조작 없음 · 자동 새로고침')} %}
+          {% for code, label in nav.DEVICE_CHANNEL.items() %}
+          <label><input type="radio" name="device" value="{{ code }}"{% if code == dev %} checked{% endif %}><span>{{ label }}<small>{{ chan_note.get(code, '') }}</small></span></label>
+          {% endfor %}
+        </div>
       </fieldset>
-      <div class="login-actions">
-        <button class="btn btn-primary" type="submit">{{ t('로그인') }}</button>
-      </div>
-    </div>
+      <button type="submit" class="btn btn-primary">{{ t('로그인') }}</button>
+    </form>
+
     {% if settings and settings.env == 'dev' %}
-    {# D-605 — 개발용 역할 바로 로그인 (MES_ENV=dev 에서만 · 운영 빌드에는 없다). 시드 계정으로 POST /login/as (routers/home.py). 비밀번호 값은 없다. #}
+    {# D-605 — 개발용 역할 바로 로그인 (MES_ENV=dev 에서만 · 운영 빌드에는 없다). 시드 계정으로 POST /login/as. 비밀번호 값은 없다. #}
     <fieldset class="login-dev">
-      <legend>{{ t('개발용 — 역할로 바로 로그인') }} <small>MES_ENV=dev</small></legend>
-      {% for code, label in [('ADMIN', t('관리자')), ('PROD', t('생산')), ('QA', t('품질')), ('FIELD', t('현장'))] %}
-      <button class="btn btn-sm" type="submit" formaction="/login/as" name="role" value="{{ code }}">{{ label }}</button>
-      {% endfor %}
+      <legend>{{ t('개발용 — 역할로 바로 로그인') }} <span class="tag">MES_ENV=dev</span></legend>
+      <div class="btn-row">
+        {% for code, label in [('ADMIN', t('관리자')), ('PROD', t('생산')), ('QA', t('품질')), ('FIELD', t('현장'))] %}
+        <button class="btn btn-sm" type="submit" form="login-form" formaction="/login/as" name="role" value="{{ code }}">{{ label }}</button>
+        {% endfor %}
+      </div>
     </fieldset>
     {% endif %}
+
     <ul class="notes">
-      <li>{{ t('로그인 성공 · 실패는 접근 로그에 남는다') }} ({{ t('시스템') }} &gt; {{ t('접근 로그') }}).</li>
-      <li>{{ t('비밀번호 초기화는 관리자가 시스템 > 사용자에서 한다') }}.</li>
+      <li>{{ t('세션 상태는 요청마다 DB 에서 읽는다 — 중지 · 잠금 · 비밀번호 변경 전 세션은 다음 요청부터 401') }}.</li>
+      <li>{{ t('로그인 성공 · 실패는 접근 로그에 남는다') }} ({{ t('시스템') }} &rsaquo; {{ t('접근 로그') }}). {{ t('비밀번호 초기화는 관리자가 시스템 > 사용자에서 한다') }}.</li>
     </ul>
-  </div>
-</form>
+  </main>
+
+  <aside class="login-side" aria-label="{{ t('안내') }}">
+    <h2>{{ t('역할') }} 4 · {{ t('채널') }} 4</h2>
+    <table>
+      <thead><tr><th>{{ t('채널') }}</th><th>{{ t('무엇을 하는가') }}</th></tr></thead>
+      <tbody>
+        <tr><td>{{ nav.DEVICE_CHANNEL['web'] }}</td><td>{{ t('기준정보 · 수주 · 작업지시 · 품질 · 출하 · 추적 · 집계 · 시스템 — 표와 폼') }}</td></tr>
+        <tr><td>{{ nav.DEVICE_CHANNEL['pop'] }}</td><td>{{ t('입고 · 실적 · 투입 · 검사 · 설비 · 출하 스캔 — 바코드 1회 = 1건') }}</td></tr>
+        <tr><td>{{ nav.DEVICE_CHANNEL['mobile'] }}</td><td>{{ t('추적 · 현황 · 재고 · 납기 조회 — 쓰기 없음') }}</td></tr>
+        <tr><td>{{ nav.DEVICE_CHANNEL['board'] }}</td><td>{{ t('현황판 — 자동 새로고침 · 조작 없음') }}</td></tr>
+      </tbody>
+    </table>
+    <p>{{ t('권한 표는 DB 데이터') }} ({{ t('시스템') }} &rsaquo; {{ t('권한 표') }}). {{ t('채널에 허용되지 않은 화면을 열면 403') }}.</p>
+    <p>{{ t('비밀번호는') }} <code>.env</code> (<code>MES_SEED_PASSWORD</code>) {{ t('에만 있다') }}.</p>
+  </aside>
+</div>
+<footer class="ftr login-ftr">{{ system_name }} · {{ t('갱신') }} {{ now }}</footer>
 </body>
 </html>

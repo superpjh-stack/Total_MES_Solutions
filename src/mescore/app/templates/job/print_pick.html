@@ -1,18 +1,20 @@
-{# JOB-03 작업지시서 출력 — `?id=` 가 없을 때 고르는 화면 (F-JOB-07). #}
+{# JOB-03 작업지시서 출력 — `?id=` 가 없을 때 고르는 화면 (F-JOB-07 · 개발1 · 디자이너1 이식). 라우터 ctx: rows · path. #}
 {% extends "base.html" %}
-{% import "home/_macros.html" as ui %}
-{% block search %}{{ ui.field('작업지시 ID', 'id', '') }}{% endblock %}
+{% import "home/_macros.html" as ui with context %}
+{% block search %}{{ ui.field('작업지시 ID', 'id', '', cls='w-sm', hint=t('번호를 알면 바로')) }}{% endblock %}
 {% block grid %}
-<h2>{{ t('작업지시서 출력') }} <small>{{ t('출력할 작업지시를 고른다') }}</small></h2>
-<table class="grid">
-  <thead><tr><th>{{ t('작업지시') }}</th><th>{{ t('계획일') }}</th><th>{{ t('품목') }}</th><th>{{ t('공정') }}</th><th class="num">{{ t('계획 수량') }}</th><th>{{ t('상태') }}</th><th class="act">{{ t('출력') }}</th></tr></thead>
+<h2 id="h-grid">{{ t('작업지시서 출력') }} <small>{{ t('출력할 작업지시를 고른다') }} · {{ rows|length }}{{ t('건') }}</small></h2>
+<table class="grid cardify">
+  <thead><tr><th>{{ t('지시 번호') }}</th><th>{{ t('계획일') }}</th><th>{{ t('품목') }}</th><th>{{ t('공정') }}</th><th class="num">{{ t('계획 수량') }}</th><th>{{ t('상태') }}</th><th>{{ t('출력') }}</th></tr></thead>
   <tbody>
   {% for r in rows %}
-    <tr><td><code>{{ r.work_order_no }}</code></td><td>{{ r.plan_date|dt }}</td><td>{{ r.item_code }} {{ r.item_name }}</td><td>{{ r.process_name }}</td>
-      <td class="num">{{ r.plan_qty|num(3) }}</td><td>{{ t(r.status) }}</td><td class="act"><a class="btn btn-sm btn-primary" href="{{ path }}?id={{ r.id }}">{{ t('작업지시서') }}</a></td></tr>
+    <tr><td data-l="{{ t('지시 번호') }}"><code>{{ r.work_order_no }}</code></td><td data-l="{{ t('계획일') }}">{{ r.plan_date|dt }}</td><td data-l="{{ t('품목') }}">{{ r.item_name }} <small>{{ r.item_code }}</small></td><td data-l="{{ t('공정') }}">{{ r.process_name }}</td>
+      <td class="num" data-l="{{ t('계획 수량') }}">{{ r.plan_qty|num(3) }} <small>{{ r.unit|txt('') }}</small></td><td data-l="{{ t('상태') }}">{{ ui.badge(r.status, {'대기': 'neutral', '마감': 'ok', '취소': 'neutral'}.get(r.status, '')) }}</td>
+      <td class="act"><a class="btn btn-sm btn-primary" href="{{ path }}?id={{ r.id }}">{{ t('작업지시서') }}</a></td></tr>
   {% else %}
-    <tr><td colspan="7" class="empty"><b>{{ NOT_COLLECTED }}</b></td></tr>
+    {{ ui.empty_row(7, hint='출력할 작업지시가 없다') }}
   {% endfor %}
   </tbody>
 </table>
 {% endblock %}
+{% block actions %}<button type="submit" form="screen-search" class="btn btn-primary">{{ t('열기') }}</button>{% endblock %}

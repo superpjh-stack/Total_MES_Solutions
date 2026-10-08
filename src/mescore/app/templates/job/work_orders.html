@@ -1,72 +1,100 @@
-{# JOB-01 작업지시 (F-JOB-01~05) — 기간 · 품목 · 공정 · 상태 검색. 진행 여부는 실적 유무로 계산(저장 안 함). 마감 · 취소는 버튼. #}
+{# JOB-01 작업지시 (F-JOB-01~05 · 개발1 · 디자이너1 docs/design/web/screens/job_work_orders.html 이식) — 기간 · 품목 · 공정 · 상태 검색. 진행 여부는 실적 유무로 계산(저장 안 함 · v_work_order_progress).
+   계획 대비 실적 막대 + 숫자 · 상태 배지 · 조건이 안 맞는 마감/취소는 비활성(title) · 소요 원재료 표(job_lot).
+   라우터 ctx: rows · editing · options{item_id process_id equipment_id status plan_id order_dtl_id} · path · print_path · statuses · f · next_no · attrs_specs · can{create update close cancel}. 폼 name 그대로. #}
 {% extends "base.html" %}
-{% import "home/_macros.html" as ui %}
+{% import "home/_macros.html" as ui with context %}
 
 {% block search %}
-  {{ ui.field('계획일 (부터)', 'date_from', f.date_from, type='date') }}
-  {{ ui.field('계획일 (까지)', 'date_to', f.date_to, type='date') }}
-  {{ ui.select('품목', 'item_id', options.item_id, f.item_id, blank='전체') }}
-  {{ ui.select('공정', 'process_id', options.process_id, f.process_id, blank='전체') }}
-  {{ ui.select('상태', 'status', options.status, f.status, blank='전체') }}
-  {{ ui.field('작업지시 번호', 'no', f.no) }}
+  {{ ui.field('계획일 시작', 'date_from', f.date_from, type='date', cls='w-sm') }}
+  {{ ui.field('계획일 끝', 'date_to', f.date_to, type='date', cls='w-sm') }}
+  {{ ui.select('품목', 'item_id', options.item_id, f.item_id, blank='전체', cls='w-md') }}
+  {{ ui.select('공정', 'process_id', options.process_id, f.process_id, blank='전체', cls='w-md') }}
+  {{ ui.select('상태', 'status', options.status, f.status, blank='전체', cls='w-sm') }}
+  {{ ui.field('지시 번호', 'no', f.no, cls='w-md', placeholder=t('일부 일치')) }}
 {% endblock %}
 
 {% block grid %}
-<h2>{{ t('작업지시') }} <small>{{ rows|length }}{{ t('건') }}</small></h2>
-<table class="grid">
-  <thead><tr><th>{{ t('작업지시') }} {{ t('번호') }}</th><th>{{ t('계획일') }}</th><th>{{ t('품목') }}</th><th>{{ t('공정') }}</th><th>{{ t('설비') }}</th>
-    <th class="num">{{ t('계획 수량') }}</th><th class="num">{{ t('양품') }}</th><th class="num">{{ t('불량') }}</th><th>{{ t('실적') }}</th><th>{{ t('상태') }}</th><th class="act">{{ t('작업') }}</th></tr></thead>
+<h2 id="h-grid">{{ t('작업지시') }} {{ t('목록') }} <small>{{ rows|length }}{{ t('건') }}</small>
+  <span class="right"><small>{{ t('진행 여부는 실적 유무로 계산 — 저장하지 않는다') }}</small></span></h2>
+<table class="grid cardify">
+  <thead><tr><th>{{ t('지시 번호') }}</th><th>{{ t('품목') }}</th><th>{{ t('공정') }}</th><th>{{ t('설비') }}</th><th>{{ t('계획일') }}</th>
+    <th class="num">{{ t('계획 수량') }}</th><th class="num">{{ t('양품') }}</th><th class="num">{{ t('불량') }}</th><th>{{ t('진행') }}</th><th>{{ t('상태') }}</th><th>{{ t('동작') }}</th></tr></thead>
   <tbody>
   {% for r in rows %}
-    <tr{% if editing and editing.id == r.id %} class="sel"{% endif %}>
-      <td><a href="{{ print_path }}?id={{ r.id }}"><code>{{ r.work_order_no }}</code></a></td>
-      <td>{{ r.plan_date|dt }}</td><td>{{ r.item_code }} {{ r.item_name }}</td><td>{{ r.process_name }}</td><td>{{ r.equip_name|txt }}</td>
-      <td class="num">{{ r.plan_qty|num(3) }} {{ r.unit|txt('') }}</td><td class="num">{{ r.good_qty|num(3) }}</td><td class="num">{{ r.defect_qty|num(3) }}</td>
-      <td>{{ r.result_count }}{% if r.open_count %} ({{ t('진행 중') }} {{ r.open_count }}){% endif %}</td>
-      <td><span class="badge badge-{{ {'대기': 'neutral', '진행': 'run', '마감': 'ok', '취소': 'none'}[r.progress] }}">{{ t(r.progress) }}</span></td>
+    {% set pct = (r.good_qty|float / r.plan_qty|float * 100) if r.plan_qty and r.result_count else none %}
+    <tr{% if editing and editing.id == r.id %} class="sel"{% elif r.progress == '취소' %} class="dim"{% endif %}>
+      <td data-l="{{ t('지시 번호') }}"><code>{{ r.work_order_no }}</code></td>
+      <td data-l="{{ t('품목') }}">{{ r.item_name }} <small>{{ r.item_code }}</small></td>
+      <td data-l="{{ t('공정') }}">{{ r.process_code }} {{ r.process_name }}</td>
+      <td data-l="{{ t('설비') }}">{{ r.equip_code|txt('—') }}</td>
+      <td data-l="{{ t('계획일') }}">{{ r.plan_date|dt }}</td>
+      <td class="num" data-l="{{ t('계획 수량') }}">{{ r.plan_qty|num(3) }} <small>{{ r.unit|txt('') }}</small></td>
+      <td class="num" data-l="{{ t('양품') }}">{{ r.good_qty|num(3) }}</td>
+      <td class="num" data-l="{{ t('불량') }}">{{ r.defect_qty|num(3) }}</td>
+      <td data-l="{{ t('진행') }}">{{ ui.bar(pct) }}{% if r.open_count %} <small>{{ t('진행 중') }} {{ r.open_count }}</small>{% endif %}</td>
+      <td data-l="{{ t('상태') }}">{{ ui.badge(r.progress, {'대기': 'neutral', '진행': 'info', '마감': 'ok', '취소': 'neutral'}.get(r.progress, '')) }}{% if r.open_count %} <span class="badge badge-warn">{{ t('진행 중 실적') }}</span>{% endif %}</td>
       <td class="act">
-        {% if can.update and r.status == '대기' %}<a class="btn btn-sm" href="{{ path }}?edit={{ r.id }}">{{ t('수정') }}</a>{% endif %}
-        {% if can.close and r.status == '대기' %}<form method="post" action="{{ path }}/{{ r.id }}/close" class="inline"><button class="btn btn-sm">{{ t('마감') }}</button></form>{% endif %}
-        {% if can.cancel and r.status == '대기' and not r.started %}<form method="post" action="{{ path }}/{{ r.id }}/cancel" class="inline"><button class="btn btn-sm btn-err">{{ t('취소') }}</button></form>{% endif %}
+        {% if can.update and r.status == '대기' %}<a class="btn btn-sm" href="{{ path }}?edit={{ r.id }}#form">{{ t('수정') }}</a>{% endif %}
+        {% if can.close and r.status == '대기' %}{{ ui.confirm_button('마감', path ~ '/' ~ r.id ~ '/close', t('마감하면 실적을 더 넣을 수 없다'), '마감 확인', disabled=(r.open_count > 0), why=t('종료 안 된 실적이 있다 — 마감 422')) }}{% endif %}
+        {% if can.cancel and r.status == '대기' %}{{ ui.confirm_button('취소', path ~ '/' ~ r.id ~ '/cancel', t('취소한 지시는 되돌릴 수 없다'), '취소 확정', disabled=r.started, why=t('실적이 있으면 취소 422')) }}{% endif %}
+        <a class="btn btn-sm" href="{{ print_path }}?id={{ r.id }}" title="{{ t('작업지시서 출력') }}">{{ t('출력') }}</a>
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="11" class="empty"><b>{{ NOT_COLLECTED }}</b></td></tr>
+    {{ ui.empty_row(11, hint='조회 조건에 맞는 작업지시가 없다') }}
   {% endfor %}
   </tbody>
 </table>
+{% endblock %}
 
-<section class="panel form-panel">
-  <h2>{% if editing %}{{ t('수정') }} — <code>{{ editing.work_order_no }}</code>{% if editing.started %} <small>{{ t('진행 중 — 수량 · 설비만') }}</small>{% endif %}{% else %}{{ t('등록') }} <small>{{ t('다음 번호') }} {% if next_no %}<code>{{ next_no }}</code>{% else %}{{ ui.undecided('D-10', '채번 규칙') }}{% endif %}</small>{% endif %}</h2>
+{% block form %}
+<section class="panel" id="form" aria-labelledby="h-form">
+  <h2 id="h-form">{% if editing %}{{ t('작업지시') }} {{ t('수정') }} <small><code>{{ editing.work_order_no }}</code>{% if editing.started %} — {{ t('진행 중이면 수량 · 설비만 바꿀 수 있다') }}{% endif %}</small>
+    <span class="right"><a class="btn btn-sm" href="{{ path }}#form">{{ t('새로 등록') }}</a></span>
+    {% else %}{{ t('작업지시') }} {{ t('등록') }} <small>{{ t('다음 번호') }} {% if next_no %}<code>{{ next_no }}</code>{% else %}{{ ui.undecided('D-10', '채번 규칙') }}{% endif %}</small>{% endif %}</h2>
   <form method="post" action="{{ path }}{% if editing %}/{{ editing.id }}{% endif %}" id="wo-form" class="form-grid cols" autocomplete="off">
+    {% if editing %}{{ ui.field('지시 번호', 'work_order_no_ro', editing.work_order_no, readonly=true) }}{% endif %}
     {% if not (editing and editing.started) %}
     {{ ui.select('품목', 'item_id', options.item_id, editing.item_id if editing else '', required=true) }}
     {{ ui.select('공정', 'process_id', options.process_id, editing.process_id if editing else '', required=true) }}
+    {% else %}
+    {{ ui.field('품목', 'item_ro', editing.item_code ~ ' ' ~ editing.item_name, readonly=true) }}
+    {{ ui.field('공정', 'process_ro', editing.process_code ~ ' ' ~ editing.process_name, readonly=true) }}
     {% endif %}
-    {{ ui.select('설비', 'equipment_id', options.equipment_id, editing.equipment_id if editing and editing.equipment_id else '') }}
-    {{ ui.field('계획 수량', 'plan_qty', editing.plan_qty if editing else '', type='number', required=true, step='any') }}
+    {{ ui.select('설비 (선택)', 'equipment_id', options.equipment_id, editing.equipment_id if editing and editing.equipment_id else '') }}
+    {{ ui.field('계획 수량', 'plan_qty', editing.plan_qty if editing else '', type='number', required=true, step='any', unit=(editing.unit if editing else '')) }}
     {% if not (editing and editing.started) %}
-    {{ ui.field('단위', 'unit', editing.unit if editing else '') }}
-    {{ ui.field('계획일', 'plan_date', editing.plan_date if editing else '', type='date') }}
+    {{ ui.field('단위', 'unit', editing.unit if editing else '', cls='w-sm') }}
+    {{ ui.field('계획일', 'plan_date', editing.plan_date|dt('%Y-%m-%d', '') if editing else '', type='date') }}
     {% if not editing %}
-    {{ ui.select('생산계획', 'plan_id', options.plan_id, '') }}
-    {{ ui.select('수주 상세', 'order_dtl_id', options.order_dtl_id, '') }}
+    {{ ui.select('생산계획 (선택)', 'plan_id', options.plan_id, '') }}
+    {{ ui.select('수주 상세 (선택)', 'order_dtl_id', options.order_dtl_id, '') }}
     {% endif %}
     {% endif %}
-    {{ ui.field('비고', 'note', editing.note if editing else '') }}
-    {% if attrs_specs %}<fieldset class="attrs"><legend>{{ t('업종 속성') }}</legend>{{ ui.attrs_fields(attrs_specs, (editing.attrs if editing else {}) or {}) }}</fieldset>{% endif %}
+    {{ ui.field('비고', 'note', editing.note if editing else '', type='textarea', cls='wide') }}
+    {{ ui.attrs_fields(attrs_specs, (editing.attrs if editing else {}) or {}) }}
   </form>
-  {% if editing and editing.lots %}
-  <h3>{{ t('소요 원재료') }} <small>{{ t('BOM') }} {{ editing.bom_version }}</small></h3>
-  {% set lot_rows = [] %}
-  {% for l in editing.lots %}{% set _ = lot_rows.append([l.item_code ~ ' ' ~ l.item_name, l.required_qty|num(3), l.unit|txt, l.lot_no|txt]) %}{% endfor %}
-  {{ ui.grid(['품목', '소요량', '단위', '지정 LOT'], lot_rows) }}
+  {% if editing %}
+  <h3>{{ t('소요 원재료') }} <small><code>job_lot</code> — {{ t('BOM') }} {{ editing.bom_version|txt(t('없음')) }} · {{ t('등록 때 자동 생성 · LOT 은 투입 때 스캔') }}</small></h3>
+  <table class="grid compact cardify">
+    <thead><tr><th>{{ t('품목') }}</th><th class="num">{{ t('소요량') }}</th><th>{{ t('단위') }}</th><th>{{ t('지정 LOT') }}</th></tr></thead>
+    <tbody>
+    {% for l in editing.lots %}
+      <tr><td data-l="{{ t('품목') }}">{{ l.item_name }} <small>{{ l.item_code }}</small></td><td class="num" data-l="{{ t('소요량') }}">{{ l.required_qty|num(3) }}</td><td data-l="{{ t('단위') }}">{{ l.unit|txt }}</td><td data-l="{{ t('지정 LOT') }}">{% if l.lot_no %}<code>{{ l.lot_no }}</code>{% else %}<span class="muted">— {{ t('투입 때 스캔') }}</span>{% endif %}</td></tr>
+    {% else %}
+      {{ ui.empty_row(4, hint='BOM 이 없어 소요 원재료 줄이 없다') }}
+    {% endfor %}
+    </tbody>
+  </table>
   {% endif %}
+  <div class="form-actions">
+    {{ ui.write_button('수정 저장' if editing else '등록', (can.update if editing else can.create), form='wo-form') }}
+    {% if editing %}<a class="btn" href="{{ path }}">{{ t('취소') }}</a>{% endif %}
+    <span class="why">{{ t('행 잠금(for update) · 마감 · 취소된 지시는 422 · BOM 이 있으면 소요 원재료가 자동 생성된다') }}</span>
+  </div>
 </section>
 {% endblock %}
 
 {% block actions %}
-  <button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
-  {{ ui.write_button('저장', (can.update if editing else can.create), form='wo-form') }}
-  {% if editing %}<a class="btn" href="{{ path }}">{{ t('새로 등록') }}</a>{% endif %}
+  <button type="submit" form="screen-search" class="btn btn-primary">{{ t('조회') }}</button>
 {% endblock %}

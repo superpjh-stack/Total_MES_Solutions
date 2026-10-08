@@ -1,46 +1,60 @@
-{# SYS-03 권한 표 (F-SYS-08 · 09) — 메뉴 × 역할 전 칸. 저장 즉시 rbac.invalidate() → 다음 요청부터 반영 (G-C17).
-   ADMIN 의 sys 칸은 `입력` 고정. 빈 칸(시드 누락)은 `미확정` 로 표시한다. 칸 이름은 level__<역할>__<메뉴> · scopes__<역할>__<메뉴>. #}
+{# SYS-03 권한 표 (F-SYS-08 · 09 · 개발1 · 디자이너1 docs/design/web/screens/sys_permissions.html 이식) — 메뉴 × 역할 = 48칸 편집 그리드. 저장 즉시 rbac.invalidate() → 다음 요청부터 반영 (G-C17).
+   칸 = select(없음 · 조회 · 입력) + scopes 체크(조건 쓰기 메뉴만). ADMIN 의 sys 칸은 `입력` 고정. 빈 칸(시드 누락)은 `미확정`. 칸 색은 보조 — 값은 select 글자.
+   라우터 ctx: rows[{menu_code menu_name hidden is_pack cells[{role_code level label scopes updated_at updated_by}]}] · roles · missing · counts · levels · scopes · menu_scopes · guarded{role menu} · path · scope_general · can_write.
+   폼 name 그대로: level__<역할>__<메뉴> · scopes__<역할>__<메뉴>. #}
 {% extends "base.html" %}
-{% import "home/_macros.html" as ui %}
+{% import "home/_macros.html" as ui with context %}
 
 {% block search %}{% endblock %}
 
 {% block grid %}
-<h2>{{ t('권한 표') }} <small>{{ t('입력') }} {{ counts['입력'] }} · {{ t('조회') }} {{ counts['조회'] }} · {{ t('없음') }} {{ counts['없음'] }} / {{ counts['전체'] }}{% if missing %} · <span class="undecided">{{ t('빈 칸') }} {{ missing }}</span>{% endif %}</small></h2>
+{% set lv_cls = {'입력': 'pc-write', '조회': 'pc-read', '없음': 'pc-none'} %}
+<h2 id="h-grid">{{ t('권한 표') }} <small>{{ t('메뉴') }} {{ rows|length }} × {{ t('역할') }} {{ roles|length }} = {{ counts['전체'] }}{{ t('칸') }} · {{ t('입력') }} {{ counts['입력'] }} · {{ t('조회') }} {{ counts['조회'] }} · {{ t('없음') }} {{ counts['없음'] }}{% if missing %} · <span class="undecided">{{ t('빈 칸') }} {{ missing }}</span>{% endif %}</small>
+  <span class="right"><small>{{ t('저장 즉시 반영 — 그 역할의 사용자는 다음 요청부터 바뀐 권한으로') }}</small></span></h2>
 <form method="post" action="{{ path }}" id="perm-form">
-<table class="grid compact perm">
-  <thead><tr><th>{{ t('메뉴') }}</th>{% for r in roles %}<th>{{ r.role_code }}<br><small>{{ r.role_name }}</small></th>{% endfor %}</tr></thead>
+<table class="grid perm plain">
+  <thead><tr><th>{{ t('메뉴') }} \ {{ t('역할') }}</th>{% for r in roles %}<th><code>{{ r.role_code }}</code> {{ r.role_name }}</th>{% endfor %}</tr></thead>
   <tbody>
   {% for row in rows %}
-    <tr{% if row.hidden %} class="dim"{% endif %}>
-      <td><b>{{ t(row.menu_name) }}</b> <code>{{ row.menu_code }}</code>{% if row.is_pack %} <span class="tag">{{ t('팩') }}</span>{% endif %}</td>
+    <tr{% if row.is_pack %} class="pack"{% endif %}>
+      <th scope="row"><code>{{ row.menu_code }}</code> {{ t(row.menu_name) }}{% if row.is_pack %} <span class="tag">{{ t('팩') }}</span>{% endif %}{% if row.hidden %} <span class="tag" title="{{ t('팩이 숨긴 메뉴 — 열면 403') }}">{{ t('숨김') }}</span>{% endif %}</th>
       {% for c in row.cells %}
-      <td{% if c.role_code == guarded.role and row.menu_code == guarded.menu %} class="locked" title="{{ t('입력 고정') }}"{% endif %}>
-        {% if can_write and not (c.role_code == guarded.role and row.menu_code == guarded.menu) %}
-        <select name="level__{{ c.role_code }}__{{ row.menu_code }}">
+      {% set locked = (c.role_code == guarded.role and row.menu_code == guarded.menu) %}
+      {% set ms = menu_scopes.get(row.menu_code, []) %}
+      {% set has_scopes = ms|length > 1 or (ms and ms[0] != scope_general) %}
+      <td class="pc {{ lv_cls.get(c.level, 'undecided-cell') }}{% if locked %} locked{% endif %}">
+        {% if c.level not in lv_cls %}<span class="undecided">{{ t('미확정') }} ({{ t('시드 누락') }})</span>{% endif %}
+        {% if can_write and not locked %}
+        <select name="level__{{ c.role_code }}__{{ row.menu_code }}" class="lv" aria-label="{{ t(row.menu_name) }} × {{ c.role_code }}">
+          {% if c.level not in lv_cls %}<option value="" selected>—</option>{% endif %}
           {% for lv in levels %}<option value="{{ lv }}"{% if c.level == lv %} selected{% endif %}>{{ t(lv) }}</option>{% endfor %}
         </select>
-        {% set ms = menu_scopes.get(row.menu_code, []) %}
-        {% if ms|length > 1 or (ms and ms[0] != scope_general) %}
-        <span class="scopes">{% for sc in ms %}<label class="radio"><input type="checkbox" name="scopes__{{ c.role_code }}__{{ row.menu_code }}" value="{{ sc }}"{% if sc in c.scopes %} checked{% endif %}> {{ t(sc) }}</label>{% endfor %}</span>
+        {% if has_scopes %}
+        <div class="scopes">{% for sc in ms %}<label class="f check"><input type="checkbox" name="scopes__{{ c.role_code }}__{{ row.menu_code }}" value="{{ sc }}"{% if sc in c.scopes %} checked{% endif %}> {{ t(sc) }}</label>{% endfor %}</div>
         {% endif %}
         {% else %}
-        <span class="badge badge-{{ 'ok' if c.level == '입력' else ('info' if c.level == '조회' else 'none') }}">{{ c.label }}</span>
+        <select class="lv" disabled aria-label="{{ t(row.menu_name) }} × {{ c.role_code }}">{% for lv in levels %}<option value="{{ lv }}"{% if c.level == lv %} selected{% endif %}>{{ t(lv) }}</option>{% endfor %}</select>
+        {% if locked %}<span class="tag" title="{{ t('ADMIN 의 시스템 칸은 입력 고정 — 잠그지 못한다') }}">{{ t('고정') }}</span>{% endif %}
+        {% if has_scopes and c.scopes %}<div class="scopes">{% for sc in c.scopes %}<span class="badge badge-info">{{ t(sc) }}</span>{% endfor %}</div>{% endif %}
         {% endif %}
         {% if c.updated_at %}<small class="muted">{{ c.updated_at|dt }} {{ c.updated_by|txt('') }}</small>{% endif %}
       </td>
       {% endfor %}
     </tr>
+  {% else %}
+    {{ ui.empty_row(roles|length + 1, hint='메뉴가 없다 — core.yaml 을 확인한다') }}
   {% endfor %}
   </tbody>
 </table>
 </form>
 <ul class="notes">
-  <li>{{ t('괄호 조건은 그 범위 기능만 입력할 수 있다 — 일반 기능은 못 한다') }} (D-13).</li>
-  <li>{{ t('저장하면 다음 요청부터 반영된다') }}. {{ t('ADMIN 의 시스템 칸은 잠그지 못한다') }}.</li>
+  <li><b>{{ t('없음') }}</b> = {{ t('메뉴 숨김 + 403') }} · <b>{{ t('조회') }}</b> = {{ t('화면은 열리고 쓰기 403') }} · <b>{{ t('입력') }}</b> = {{ t('쓰기 가능') }}. {{ t('괄호 조건은 그 범위 기능만 입력할 수 있다 — 일반 기능은 못 한다') }} (D-13).</li>
+  <li>{{ t('팩이 역할을 늘리면 열이 늘고, 팩 메뉴를 더하면 행이 는다 — 코드 변경 0') }}. {{ t('칸 색은 보조 표시다 — 값은 select 의 글자로 읽는다') }}.</li>
 </ul>
 {% endblock %}
 
 {% block actions %}
-  {{ ui.write_button('저장', can_write, form='perm-form') }}
+  <span class="why">{{ t('저장하면 그 역할의 사용자는 다음 요청부터 바뀐 권한으로 움직인다 (요청마다 DB)') }}</span>
+  <a class="btn" href="{{ path }}">{{ t('되돌리기') }}</a>
+  {{ ui.write_button('권한 표 저장', can_write, form='perm-form') }}
 {% endblock %}

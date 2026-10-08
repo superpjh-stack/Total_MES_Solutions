@@ -1,4 +1,5 @@
-{# BAS-05 설비 (F-BAS-17~20) — 수집 설비는 마지막 수신 시각. 수집 코드는 collect 의 equip_code 와 1:1 #}
+{# BAS-05 설비 (F-BAS-17~20) — 수집 설비는 마지막 수신 시각(eqp_collect max ts · 없으면 미수집). 수집 코드는 collect 의 equip_code 와 1:1. 공정별로 묶어 보인다. #}
 {% extends "bas/_master.html" %}
 {% block extra_head %}<th>{{ t('마지막 수신') }}</th>{% endblock %}
-{% block extra_cells scoped %}<td>{% if r.collect_yn == 'Y' %}{{ r.last_collect_at|dt(blank=NOT_COLLECTED) }}{% else %}-{% endif %}</td>{% endblock %}
+{% block extra_cells scoped %}<td data-l="{{ t('마지막 수신') }}">{% if r.collect_yn == 'Y' %}{% if r.last_collect_at %}{{ r.last_collect_at|dt }}{% else %}<span class="muted">{{ NOT_COLLECTED }}</span>{% endif %}{% else %}-{% endif %}</td>{% endblock %}
+{% block notes_extra %}<li>{{ t('수집 여부 Y 인 설비의 설비 코드가 수집 수신(POST /ifc/collect)의 equip_code 다') }}.</li>{% endblock %}

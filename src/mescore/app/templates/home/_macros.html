@@ -1,19 +1,34 @@
-{# 공용 매크로 (아키텍트 소유) — 개발 1·2·3 의 모든 템플릿이 import 해서 쓴다. 같은 것을 각자 다시 만들지 않는다.
+{# 공용 매크로 (아키텍트 소유 · 마크업은 디자이너1 docs/design/web/components.html 이식) — 개발 1·2·3 의 모든 템플릿이 import 해서 쓴다.
    {% import "home/_macros.html" as ui %}
-   목록: grid field select scan_box write_button print_button undecided notes attrs_fields (measure_fields 는 개발2 가 templates/home/_measure.html 에) #}
+   서명은 웨이브 A 그대로(라우터 · 템플릿이 호출 중). 여분의 꾸밈은 kwargs 로 받는다(placeholder · hint · unit · reason · cls · why …).
+   목록: grid field select scan_box write_button print_button undecided notes attrs_fields confirm_button badge bar measure_fields(→ home/_measure.html · 개발2)
+   스크립트는 넣지 않는다 — 동작은 static/app.js 하나. 브라우저 confirm() · 모달 금지 → confirm_button(details.confirm). #}
 
-{# 목록 표. rows 가 비면 빈 표를 덩그러니 두지 않고 `미수집` 을 보여 준다 (G-C11). columns = [...] · rows = [[칸, …], …] #}
+{# 422 flash 의 fields[] 에서 이 칸의 사유 — `{% import … as ui with context %}` 로 가져온 템플릿에서만 flash 가 보인다(아니면 빈 값). 틀린 칸 강조(.f.err + aria-invalid). #}
+{% macro flash_reason(name) -%}
+{%- if flash is defined and flash and flash.kind != 'ok' and flash.fields -%}
+{%- for f in flash.fields if f.name == name -%}{{ f.reason }}{%- endfor -%}
+{%- endif -%}
+{%- endmacro %}
+
+{# 목록 표. rows 가 비면 빈 표를 덩그러니 두지 않고 `미수집` 을 보여 준다 (G-C11). columns = [...] · rows = [[칸, …], …]
+   폭 480 아래에서는 행 하나 = 카드 하나(cardify · td[data-l]). 숫자 칸은 cells 의 값이 숫자 모양이면 오른쪽 정렬. #}
 {% macro grid(columns, rows, empty=NOT_COLLECTED) %}
-<table class="grid">
+<table class="grid cardify">
   <thead><tr>{% for c in columns %}<th>{{ t(c) }}</th>{% endfor %}</tr></thead>
   <tbody>
   {% for row in rows %}
-    <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+    <tr>{% for cell in row %}<td data-l="{{ t(columns[loop.index0]) if loop.index0 < columns|length else '' }}"{% set digits = (cell|string)|replace(',', '')|replace('.', '')|replace('-', '')|replace(' ', '') if cell is string else '' %}{% if cell is number or (digits != '' and digits.isdigit()) %} class="num"{% endif %}>{{ cell }}</td>{% endfor %}</tr>
   {% else %}
-    <tr><td colspan="{{ columns|length }}" class="empty">{{ empty }}</td></tr>
+    <tr><td colspan="{{ columns|length }}" class="empty"><b>{{ empty }}</b>{% if kwargs.get('hint') %}{{ kwargs.get('hint') }}{% endif %}</td></tr>
   {% endfor %}
   </tbody>
 </table>
+{% endmacro %}
+
+{# 0건 행 — 직접 그린 표에서 `미수집` 한 칸 #}
+{% macro empty_row(colspan, text=NOT_COLLECTED, hint='') %}
+<tr><td colspan="{{ colspan }}" class="empty"><b>{{ text }}</b>{% if hint %}{{ t(hint) }}{% endif %}</td></tr>
 {% endmacro %}
 
 {# 스캔칸 — 바코드 한 번 = 한 건 (G-C13). 스캐너는 키보드 입력 + Enter (D-10). 화면에 `data-scan` 은 하나만.
@@ -22,39 +37,76 @@
 {% macro scan_box(action, name='barcode', label='바코드 스캔', hidden={}, method='post', placeholder='', button='처리') %}
 <form class="scan-box" method="{{ method }}" action="{{ action }}" autocomplete="off">
   {% for k, v in hidden.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
-  <label>{{ t(label) }}
-    <input type="text" name="{{ name }}" data-scan autofocus required inputmode="text" placeholder="{{ placeholder }}">
+  <label class="f scan"><span>{{ t(label) }}</span>
+    <input type="text" name="{{ name }}" data-scan autofocus required inputmode="text" autocapitalize="off" spellcheck="false" placeholder="{{ t(placeholder) if placeholder else '' }}">
   </label>
   {% if caller %}{{ caller() }}{% endif %}
-  <button type="submit" class="btn btn-primary">{{ t(button) }}</button>
+  <label class="f w-btn"><span>&nbsp;</span><button type="submit" class="btn btn-primary">{{ t(button) }}</button></label>
 </form>
 {% endmacro %}
 
-{# 입력칸 한 개 #}
+{# 입력칸 한 개 — label.f > span(라벨 + 필수 * + hint) + input + i.unit + small.reason. 오류 상태는 reason= 을 주면 .err + aria-invalid.
+   kwargs: placeholder · hint · unit · reason · cls(w-sm · w-md · w-lg · wide · full) · min · max · maxlength · id · disabled · autofocus #}
 {% macro field(label, name, value='', type='text', required=false, readonly=false, step='') %}
-<label>{{ t(label) }}{% if required %} <em class="req">*</em>{% endif %}
-  <input type="{{ type }}" name="{{ name }}" value="{{ value if value is not none else '' }}"{% if required %} required{% endif %}{% if readonly %} readonly{% endif %}{% if step %} step="{{ step }}"{% endif %}>
+{% set reason = kwargs.get('reason') or flash_reason(name) %}
+<label class="f{% if kwargs.get('cls') %} {{ kwargs.get('cls') }}{% endif %}{% if kwargs.get('unit') %} inline-unit{% endif %}{% if reason %} err{% endif %}">
+  <span>{{ t(label) }}{% if required %} <em class="req" aria-label="{{ t('필수') }}">*</em>{% endif %}{% if kwargs.get('hint') %}<small class="hint">{{ kwargs.get('hint') }}</small>{% endif %}</span>
+  {% if type == 'textarea' %}
+  <textarea name="{{ name }}"{% if kwargs.get('id') %} id="{{ kwargs.get('id') }}"{% endif %}{% if required %} required{% endif %}{% if readonly %} readonly{% endif %}{% if kwargs.get('placeholder') %} placeholder="{{ kwargs.get('placeholder') }}"{% endif %}{% if kwargs.get('maxlength') %} maxlength="{{ kwargs.get('maxlength') }}"{% endif %}{% if reason %} aria-invalid="true"{% endif %}>{{ value if value is not none else '' }}</textarea>
+  {% else %}
+  <input type="{{ type }}" name="{{ name }}" value="{{ value if value is not none else '' }}"{% if kwargs.get('id') %} id="{{ kwargs.get('id') }}"{% endif %}{% if required %} required{% endif %}{% if readonly %} readonly{% endif %}{% if kwargs.get('disabled') %} disabled{% endif %}{% if step %} step="{{ step }}"{% endif %}{% if type == 'number' %} inputmode="decimal"{% endif %}{% if kwargs.get('min') is not none %} min="{{ kwargs.get('min') }}"{% endif %}{% if kwargs.get('max') is not none %} max="{{ kwargs.get('max') }}"{% endif %}{% if kwargs.get('maxlength') %} maxlength="{{ kwargs.get('maxlength') }}"{% endif %}{% if kwargs.get('placeholder') %} placeholder="{{ kwargs.get('placeholder') }}"{% endif %}{% if kwargs.get('autofocus') %} autofocus{% endif %}{% if kwargs.get('autocomplete') %} autocomplete="{{ kwargs.get('autocomplete') }}"{% endif %}{% if reason %} aria-invalid="true"{% endif %}>
+  {% endif %}
+  {% if kwargs.get('unit') %}<i class="unit">{{ kwargs.get('unit') }}</i>{% endif %}
+  {% if reason %}<small class="reason">{{ reason }}</small>{% endif %}
 </label>
 {% endmacro %}
 
-{# 선택칸. options = [(값, 표시), …] #}
+{# 선택칸. options = [(값, 표시), …] · 첫 항목은 빈 값(검색은 blank='전체', 입력은 '선택'). blank=None 이면 빈 항목 없음.
+   kwargs: hint · reason · cls · id · disabled #}
 {% macro select(label, name, options, value='', required=false, blank='선택') %}
-<label>{{ t(label) }}{% if required %} <em class="req">*</em>{% endif %}
-  <select name="{{ name }}"{% if required %} required{% endif %}>
-    <option value="">{{ t(blank) }}</option>
+{% set reason = kwargs.get('reason') or flash_reason(name) %}
+<label class="f{% if kwargs.get('cls') %} {{ kwargs.get('cls') }}{% endif %}{% if reason %} err{% endif %}">
+  <span>{{ t(label) }}{% if required %} <em class="req" aria-label="{{ t('필수') }}">*</em>{% endif %}{% if kwargs.get('hint') %}<small class="hint">{{ kwargs.get('hint') }}</small>{% endif %}</span>
+  <select name="{{ name }}"{% if kwargs.get('id') %} id="{{ kwargs.get('id') }}"{% endif %}{% if required %} required{% endif %}{% if kwargs.get('disabled') %} disabled{% endif %}{% if reason %} aria-invalid="true"{% endif %}>
+    {% if blank is not none %}<option value="">{{ t(blank) }}</option>{% endif %}
     {% for v, text in options %}<option value="{{ v }}"{% if v|string == value|string %} selected{% endif %}>{{ text }}</option>{% endfor %}
   </select>
+  {% if reason %}<small class="reason">{{ reason }}</small>{% endif %}
 </label>
 {% endmacro %}
 
-{# 사람이 아직 정하지 않은 값 — `미확정 (D-nn)` #}
+{# 사람이 아직 정하지 않은 값 — `미확정 (D-nn)`. 결정 번호를 반드시 붙인다 #}
 {% macro undecided(decision, what='') %}
-<span class="undecided">{% if what %}{{ t(what) }} {% endif %}미확정 ({{ decision }})</span>
+<span class="undecided">{% if what %}{{ t(what) }} {% endif %}{{ t('미확정') }} ({{ decision }})</span>
 {% endmacro %}
 
-{# 쓰기 버튼 — 그 기능을 할 수 없는 역할에게는 비활성으로 보인다 (서버도 403 으로 막는다). allowed = user.can('F-BAS-01') #}
+{# 쓰기 버튼 — 그 기능을 할 수 없는 역할에게는 비활성 + 이유 (서버도 403 으로 막는다). allowed = user.can('F-BAS-01')
+   kwargs: why(조건이 안 맞을 때의 사유 — 주면 비활성 + title) · type(submit|button) · name · value · formaction · cls #}
 {% macro write_button(label, allowed, form='', kind='primary') %}
-<button type="submit" class="btn btn-{{ kind }}"{% if form %} form="{{ form }}"{% endif %}{% if not allowed %} disabled title="{{ t('이 역할은 입력 권한이 없다') }}"{% endif %}>{{ t(label) }}</button>
+{% set why = kwargs.get('why') %}
+{% set off = (not allowed) or why %}
+<button type="{{ kwargs.get('type') or 'submit' }}" class="btn btn-{{ kind }}{% if kwargs.get('cls') %} {{ kwargs.get('cls') }}{% endif %}"{% if form %} form="{{ form }}"{% endif %}{% if kwargs.get('name') %} name="{{ kwargs.get('name') }}"{% endif %}{% if kwargs.get('value') is not none %} value="{{ kwargs.get('value') }}"{% endif %}{% if kwargs.get('formaction') %} formaction="{{ kwargs.get('formaction') }}"{% endif %}{% if off %} disabled title="{{ why if why else t('이 역할은 입력 권한이 없다') }}"{% endif %}>{{ t(label) }}</button>{% if off and kwargs.get('show_why', true) %}<span class="why">{{ why if why else t('이 역할은 입력 권한이 없다') }}</span>{% endif %}
+{% endmacro %}
+
+{# 인라인 확인 (브라우저 confirm 금지) — details.confirm > summary.btn + .confirm-box > 사유 + POST 폼 + 취소.
+   confirm_button('삭제', path ~ '/' ~ r.id ~ '/delete', '참조가 있으면 422', '삭제 확인') · hidden = {name: value} · static=true 면 아래로 펼침 · disabled + why = 조건 안 맞음 #}
+{% macro confirm_button(label, action, message='', confirm_label='', kind='err', hidden={}, static=false, disabled=false, why='') %}
+{% if disabled %}
+<button type="button" class="btn btn-sm" disabled title="{{ why }}">{{ t(label) }}</button>
+{% else %}
+<details class="confirm">
+  <summary class="btn btn-sm" role="button">{{ t(label) }}</summary>
+  <div class="confirm-box{% if static %} static{% endif %}{% if kwargs.get('left') %} left{% endif %}">
+    {% if message %}<span>{{ message }}</span>{% endif %}
+    {% if caller %}{{ caller() }}{% endif %}
+    <form method="post" action="{{ action }}">
+      {% for k, v in hidden.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+      <button type="submit" class="btn btn-sm btn-{{ kind }}">{{ t(confirm_label) if confirm_label else t(label) ~ ' ' ~ t('확인') }}</button>
+    </form>
+    <button type="button" class="btn btn-sm" data-close-details>{{ t('취소') }}</button>
+  </div>
+</details>
+{% endif %}
 {% endmacro %}
 
 {# 인쇄용 화면의 인쇄 버튼 (라벨 · 작업지시서 · 성적서 — 브라우저 인쇄, D-10) #}
@@ -66,21 +118,54 @@
 {% if items %}<ul class="notes">{% for n in items %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}
 {% endmacro %}
 
-{# 팩 속성 폼 (E2 · D-05) — pack.yaml: attrs[테이블] 선언대로 `attr_<key>` 입력칸을 만든다. 라우터는 packs.read_attrs 로 읽는다.
-   specs = packs.attrs_of('bas_item') · values = 기존 행의 attrs dict #}
-{% macro attrs_fields(specs, values={}) %}
-{% for a in specs %}
-<label>{{ t(a.label) }}{% if a.required %} <em class="req">*</em>{% endif %}
-  {% if a.type == 'select' %}
-  <select name="attr_{{ a.key }}"{% if a.required %} required{% endif %}>
-    <option value="">{{ t('선택') }}</option>
-    {% for c in a.choices %}<option value="{{ c }}"{% if values.get(a.key)|string == c %} selected{% endif %}>{{ c }}</option>{% endfor %}
-  </select>
-  {% elif a.type == 'bool' %}
-  <input type="checkbox" name="attr_{{ a.key }}" value="1"{% if values.get(a.key) %} checked{% endif %}>
-  {% else %}
-  <input type="{{ 'number' if a.type == 'number' else ('date' if a.type == 'date' else 'text') }}" name="attr_{{ a.key }}" value="{{ values.get(a.key, '') }}"{% if a.type == 'number' %} step="any"{% endif %}{% if a.required %} required{% endif %}>
-  {% endif %}
-</label>
-{% endfor %}
+{# 상태 배지 — 색 + 글자. kind 를 비우면 코어 상태어로 고른다 (README §3 상태색 고정표) #}
+{% macro badge(text, kind='') %}
+{% set k = kind or ({'사용': 'ok', '합격': 'pass', '승인': 'ok', '확정': 'ok', '완료': 'ok', '마감': 'ok', '종결': 'ok', '가동': 'run', '성공': 'ok', '일치': 'ok', '전송': 'ok',
+                     '불합격': 'fail', '고장': 'fault', '발생': 'err', '지연': 'err', '실패': 'err', '잠금': 'err', '불일치': 'err',
+                     '조건부': 'cond', '조치': 'warn', '이탈': 'warn',
+                     '진행': 'info', '등록': 'info', '계획': 'info', '지시': 'info', '점검': 'check',
+                     '대기': 'neutral', '취소': 'neutral', '정지': 'stop', '중지': 'neutral', '미사용': 'neutral', '미검사': 'none',
+                     '재고': 'stock', '소진': 'consumed', '출하': 'shipped'}.get(text|string, 'neutral')) %}
+<span class="badge badge-{{ k }}">{{ t(text|string) if text is not none and text != '' else NOT_COLLECTED }}</span>
 {% endmacro %}
+
+{# 계획 대비 막대 + 숫자 (색만으로 말하지 않는다). pct = 0~100 (None 이면 —) #}
+{% macro bar(pct, kind='') %}
+{% if pct is none %}<span class="muted">—</span>{% else %}
+{% set p = (pct|float) %}
+<span class="bar{% if kind %} {{ kind }}{% elif p >= 100 %} ok{% endif %}" aria-hidden="true"><i style="width:{{ [p, 100]|min }}%"></i></span><span class="pct">{{ p|round(1)|string|replace('.0', '') }}%</span>
+{% endif %}
+{% endmacro %}
+
+{# 팩 속성 폼 (E2 · D-05) — pack.yaml: attrs[테이블] 선언대로 `attr_<key>` 입력칸을 만든다. 라우터는 packs.read_attrs 로 읽는다.
+   specs = packs.attrs_of('bas_item') · values = 기존 행의 attrs dict. 선언이 없으면 묶음이 통째로 안 그려진다. 라벨은 팩이 준 글자 그대로. #}
+{% macro attrs_fields(specs, values={}) %}
+{% if specs %}
+<fieldset class="attrs">
+  <legend>{{ t('업종 속성') }} <small>{{ t('팩 선언 · 표시용') }}</small></legend>
+  <div class="form-grid cols">
+  {% for a in specs %}
+    {% set cur = (values or {}).get(a.key) %}
+    {% if a.type == 'bool' %}
+    <label class="f check"><input type="checkbox" name="attr_{{ a.key }}" value="1"{% if cur %} checked{% endif %}> {{ a.label }}{% if a.required %} <em class="req" aria-label="{{ t('필수') }}">*</em>{% endif %}</label>
+    {% else %}
+    <label class="f">
+      <span>{{ a.label }}{% if a.required %} <em class="req" aria-label="{{ t('필수') }}">*</em>{% endif %}</span>
+      {% if a.type == 'select' %}
+      <select name="attr_{{ a.key }}"{% if a.required %} required{% endif %}>
+        <option value="">{{ t('선택') }}</option>
+        {% for c in a.choices %}<option value="{{ c }}"{% if cur|string == c|string %} selected{% endif %}>{{ c }}</option>{% endfor %}
+      </select>
+      {% else %}
+      <input type="{{ 'number' if a.type == 'number' else ('date' if a.type == 'date' else 'text') }}" name="attr_{{ a.key }}" value="{{ cur if cur is not none else '' }}"{% if a.type == 'number' %} step="any" inputmode="decimal"{% endif %}{% if a.required %} required{% endif %}>
+      {% endif %}
+    </label>
+    {% endif %}
+  {% endfor %}
+  </div>
+</fieldset>
+{% endif %}
+{% endmacro %}
+
+{# 측정값 자동 폼 — 개발2 home/_measure.html 에 위임 (D-205). params = measure.params_for(process_id) 를 라우터가 넘긴다. #}
+{% macro measure_fields(params, values=None, latest=None) %}{% import "home/_measure.html" as mf %}{{ mf.measure_fields(params, values, latest) }}{% endmacro %}

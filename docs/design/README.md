@@ -335,3 +335,24 @@ Code128 · 값 = 번호 글자 그대로(`A-Z 0-9 -` · 권장 ≤ 20자) · 인
 | 5 | 디자이너2 `static/mobile.css` | `trc/_trace.html` · `trc/search.html` · `kpi/summary.html` · `ifc/collect.html` 의 모바일 카드는 `m-sec · m-card · kv · links · fold · trace · t-node` 마크업 그대로다. `body.ch-mobile .m-only` 만 보이고 `.web-only`(트리 · 표)는 숨긴다(`trc/_cards.html: styles()`). 원형의 하단 탭 4 · `.m-top` 검색 틀은 `base.html` 몫이라 넣지 않았다 | `trc/backward_mobile.png` |
 | 6 | 개발2 `printing.label_for` | 라벨 한 장의 `attrs[]` 두 줄 — 50×30 은 한 줄만 찍는다. 라벨 표시용 속성 선언이 없으면 빈 줄. 그대로 두면 된다(요청 아님 · 확인 사항) | — |
 | 7 | 검증 | `make check-terms` 는 다른 담당 파일(`style.css` 강조색 · `job/status.html` 스크롤)의 금지어로 한때 FAIL 했다가 지금은 PASS. `pytest` 는 같은 DB 를 여러 담당이 동시에 써서 `test_trc_api`(쓰기 0 검사 — `shp_shipment` 건수가 중간에 늘었다) · `test_job_work_orders` · `test_measure`(`_measure.html` 개발2/디자이너2 동시 수정)가 흔들렸다. 내 파일만으로 돌리면 통과 — 커밋 전 단독 실행 결과는 보고서 | — |
+
+## 이식 요청 (디자이너1 · 웨이브 A′ · 2026-10-09)
+
+웨이브 A′ 에서 `docs/design/web/` 원형을 실제 템플릿으로 옮겼다 — `static/style.css`(토큰 `@import` + Web 레이아웃 + 컴포넌트 + 채널 최소 규칙) · `static/tokens.css`(디자이너3 요청 — 토큰 `:root` 라이트 + 다크 + 인쇄를 분리. `base.html` 을 쓰지 않는 현황판 `kpi/board.html` · 출력물 `print/*.html` 은 `<link rel="stylesheet" href="/static/tokens.css">` 만 읽으면 된다. `style.css` 가 첫 줄에서 `@import url("tokens.css")` 하므로 Web 화면은 바꿀 것이 없다. `board.css` · `print.css` 의 `TEMP-TOKENS` 블록은 지워도 된다) · `base.html` · `home/_macros.html`(서명 그대로 · 꾸밈은 kwargs · `confirm_button` · `badge` · `bar` · `empty_row` · `flash_reason` 추가 · `measure_fields` 는 `home/_measure.html` 위임) · `login.html` · `_error.html` · `_placeholder.html` · `bas/ job/ sys/ ord/` 18 화면. 캡처 `outputs/design/web/*.png` 36장(1280 · 모바일 2장은 390).
+`base.html` 블록: `search`(비우면 조회 조건 패널 없음) · `grid` · **`form`**(표 아래 쓰기 폼 패널 — 새로 둔 블록 · 비우면 안 그린다) · `actions` · `body`. `ui.field/select` 는 `{% import "home/_macros.html" as ui with context %}` 로 가져오면 422 flash 의 `fields[].name` 과 같은 칸에 `.err` + 사유를 붙인다(`with context` 가 없으면 그냥 그린다).
+
+라우터 ctx 키가 모자라 원형대로 못 한 것 — 담당이 넘겨 주면 템플릿만 바꾼다(`progress.md` 가 아니라 여기):
+
+| 화면 | 원형 | 지금 | 필요한 ctx 키 · 담당 |
+|---|---|---|---|
+| 전 화면 422 재렌더 | 틀린 칸 강조 + **입력값 유지** | 틀린 칸 강조만(flash `fields[]`). 303 뒤라 입력값은 비어 있다 | flash 에 `values{name: 값}` 을 실어 주거나(util/http.py `_back_with_flash` · 아키텍트) 422 를 그 화면 재렌더로 — 그러면 `ui.field(value=…)` 가 채운다 |
+| 전 화면 표 | `th[aria-sort]` 서버 정렬 `?sort=` · 페이지 `?page=` · "상한 N건 — 전체 M건" | app.js 가 브라우저에서 정렬 · 쪽 넘김(`grid_page_size`). 상한은 `LIST_LIMIT` 글자로 | 서버 정렬 · 전체 건수(`total`)를 주면 `aria-sort` · `.pager .sum` 으로 바꾼다 (개발1 · 3) |
+| ORD-01 수주 | 모든 헤더 행 아래 상세 행(tr.dtl) | 열린 수주(`opened`)의 `lines` 만 | 행마다 `lines` 가 오면 전부 펼친다 (개발3) · 조회 조건 거래처 select 는 `partners` 로 바꿀 수 있다(지금은 글자 일부 일치 `partner`) |
+| ORD-01 등록 폼 | 상세 N줄 + `app.js` 가 줄 복제 | 빈 줄 3 고정 (줄 추가 스크립트는 `app.js` — 디자이너2) | `app.js` 에 "마지막 줄 복제" 가 생기면 `tfoot` 의 + 버튼을 되살린다 |
+| JOB-01 작업지시 | 진행 중 지시의 품목 · 공정 `disabled select` | 읽기 전용 글자 칸(`item_ro` · `process_ro` — 서버가 받지 않는다) | 그대로 둬도 된다 |
+| SYS-03 권한 표 | 칸 아래 "변경 n칸" 요약 | 없음 | 저장 전 변경 수는 스크립트 영역(`app.js`) |
+| 로그인 | 역할 × 채널 × 입력 메뉴 표 | 채널 4 설명만 | `rbac.matrix()` 를 로그인 ctx 에 주면 표로 그린다(아키텍트 `main._login_page`) — 지금은 DB 값을 지어내지 않으려고 뺐다 |
+| 계약 패널 | `settings.show_contract_panel` | `settings.env == 'dev'` 일 때만 그린다(`data-env`) | 설정 키가 생기면 바꾼다(아키텍트) |
+| 모바일 채널 JOB-02 · ORD-03 | `.m-frame` + 하단 탭 4 | `base.html` 헤더 · 좌측 메뉴 + 표를 카드로(`cardify` · `body.ch-mobile` 과 폭 480 아래 둘 다) · ORD-03 은 주 단위 `details` | 디자이너2 `pop/_layout.html` 의 모바일 틀을 `base.html` 이 품으면 두 화면도 하단 탭이 붙는다 — 다음 회전에 합친다 |
+
+`app.js`(디자이너2) 에 필요한 동작 — 없어도 깨지지 않게 CSS 로 받쳐 두었다: `[data-toast-close]` · `.toast[data-auto]` 8초 뒤 제거(지금은 CSS 애니메이션으로 숨긴다) · `[data-alert-close]` · `[data-close-details]`(인라인 확인의 취소) · `#side-toggle`(`body.side-collapsed`) · `#desc-toggle`(`body.desc-closed` / 1180 아래 `desc-open`). 좌측 메뉴는 `app.js` 의 `.menu-head` 클릭(`.menu-group.open`)을 그대로 쓰도록 `mg menu-group` · `mg-h menu-head` 두 이름을 같이 달았다. `templating.asset_version()` 은 `style.css` · `app.js` 의 mtime 만 보므로 `tokens.css` 만 바꾸면 캐시가 안 풀린다 — `style.css` 를 같이 건드리거나 `asset_version` 에 `tokens.css` 를 더한다(아키텍트).

@@ -1,5 +1,6 @@
-{# 공통 오류 화면 (CMN-03) — contracts/api-contract.md. DB 가 끊겨도 그려져야 하므로 base.html 을 쓰지 않는다.
-   현황판 채널(ch-board)에서는 오류 화면에서도 자동 새로고침이 이어진다. #}
+{# 공통 오류 화면 (CMN-03 · 디자이너1 docs/design/web/screens/error.html 이식) — contracts/api-contract.md.
+   DB 가 끊겨도 그려져야 하므로 base.html 을 쓰지 않는다 — main._error_page 가 주는 키만 쓴다: status · code · message · fields · detail_note · guide · device · board_refresh_seconds · system_name · asset_v.
+   `/error` (guide=true) 는 상태코드 7 의 문구 · 다음 행동 표(개발용). 현황판 채널(ch-board)은 오류 화면에서도 자동 새로고침이 이어진다(app.js). #}
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -8,45 +9,82 @@
 <title>{{ status }} {{ message }} · {{ system_name }}</title>
 {% if device == 'board' and board_refresh_seconds %}<noscript><meta http-equiv="refresh" content="{{ board_refresh_seconds }}"></noscript>{% endif %}
 <link rel="stylesheet" href="/static/style.css?v={{ asset_v }}">
+{% if device == 'pop' %}<link rel="stylesheet" href="/static/pop.css?v={{ asset_v }}">{% endif %}
+{% if device == 'mobile' %}<link rel="stylesheet" href="/static/mobile.css?v={{ asset_v }}">{% endif %}
 </head>
-<body class="login-body ch-{{ device or 'web' }}"{% if device == 'board' and board_refresh_seconds %} data-refresh-seconds="{{ board_refresh_seconds }}"{% endif %}>
-<div class="login-wrap{% if guide %} wide{% endif %}">
-  <div class="login-card err-card">
+<body class="ch-{{ device or 'web' }}" data-device="{{ device or 'web' }}" data-screen="CMN-03"{% if device == 'board' and board_refresh_seconds %} data-refresh-seconds="{{ board_refresh_seconds }}"{% endif %}>
+{% set back = request.headers.get('referer') if request else '' %}
+<header class="hdr">
+  <div class="hdr-l">
+    <a class="brand" href="/">{{ system_name }}</a>
+    <span class="crumb"><strong>{{ t('오류') }}</strong> <code>{{ status }}</code></span>
+  </div>
+  <div class="hdr-r">
+    {% if now %}<span class="meta">{{ t('갱신') }} <b id="refreshed-at">{{ now }}</b></span>{% endif %}
+    {% if user %}<span class="meta user">{{ user.user_name }} <em>{{ user.role_name }}</em></span>
+    <form method="post" action="/logout" class="inline"><button type="submit" class="btn btn-ghost btn-sm">{{ t('로그아웃') }}</button></form>{% endif %}
+  </div>
+</header>
+
+<div class="shell one">
+  <main class="main">
+    <section class="panel">
+      {% if guide %}
+      <div class="err-wrap">
+        <div class="err-code warn">{{ t('오류 안내') }}</div>
+        <p class="err-msg">{{ t('이 시스템이 오류를 알리는 방식') }}</p>
+        <p class="err-sub">{{ t('실제 오류가 나면 아래 표의 코드 하나만 이 자리에 보인다') }}. {{ t('접속 문자열 · 스택은 화면에 싣지 않는다') }}.</p>
+        <div class="btn-row"><a class="btn btn-primary" href="/">{{ t('메인으로') }}</a></div>
+      </div>
+      {% else %}
+      <div class="err-wrap" role="alert">
+        <div class="err-code{% if status == 501 %} warn{% endif %}">{{ status }}</div>
+        <p class="err-msg">{{ message }}</p>
+        {% if detail_note %}<p class="err-sub">{{ detail_note }}</p>{% endif %}
+        {% if fields %}
+        <ul class="fields">{% for f in fields %}<li><b>{{ f.label or f.name }}</b>{% if f.name %} <code>{{ f.name }}</code>{% endif %} — {{ f.reason }}</li>{% endfor %}</ul>
+        {% endif %}
+        <div class="btn-row">
+          {% if status == 401 %}
+          <a class="btn btn-primary" href="/login">{{ t('로그인으로') }}</a>
+          {% elif status == 503 %}
+          <a class="btn btn-primary" href="{{ request.url if request else '/' }}">{{ t('다시 시도') }}</a>
+          {% else %}
+          <a class="btn btn-primary" href="/">{{ t('메인으로') }}</a>
+          {% endif %}
+          {% if back %}<a class="btn" href="{{ back }}">{{ t('이전 화면으로') }}</a>{% endif %}
+        </div>
+        <p class="err-meta">{% if code %}code <code>{{ code }}</code>{% endif %}{% if request %} · {{ request.method }} <code>{{ request.url.path }}</code>{% endif %}{% if status != 503 %} · {{ t('이 화면은 접근 로그에 남는다') }}{% endif %}</p>
+      </div>
+      {% endif %}
+    </section>
+
     {% if guide %}
-    <h1 class="guide">오류 안내</h1>
-    <p class="sub">이 시스템이 오류를 알리는 방식이다. 실제 오류가 나면 아래 중 하나가 이 화면에 나온다.</p>
-    {% else %}
-    <h1>{{ status }}</h1>
-    <p class="err big">{{ message }}</p>
-    {% if code %}<p class="sub">code: <code>{{ code }}</code></p>{% endif %}
-    {% if fields %}
-    <ul class="notes">{% for f in fields %}<li>{{ f.label or f.name }} — {{ f.reason }}</li>{% endfor %}</ul>
-    {% endif %}
-    {% if detail_note %}<p class="sub">{{ detail_note }}</p>{% endif %}
-    {% endif %}
-    <div class="login-actions">
-      <a class="btn" href="/">메인으로</a>
-      <a class="btn" href="/login">로그인</a>
-    </div>
-  </div>
-  {% if guide %}
-  <div class="login-desc">
-    <div class="desc-block">
-      <h3>오류 계약 (contracts/api-contract.md)</h3>
-      <ul>
-        <li>422 validation_error — {{ t('필수값 누락 · 코드 중복 · 없는 LOT 스캔 · 이미 출하된 LOT · 자기 자신 계보 · 측정값 필수 누락') }}</li>
-        <li>422 hook_rejected — 팩 훅이 거부</li>
-        <li>401 — 로그인이 필요합니다 (브라우저 GET 은 로그인 화면으로)</li>
-        <li>403 — 접근 권한이 없습니다 (권한 없음 · 팩이 숨긴 메뉴 · 채널 밖)</li>
-        <li>404 — 대상을 찾을 수 없습니다</li>
-        <li>503 — 서비스 일시 중단 (DB 연결 실패)</li>
-        <li>501 — 미확정 (D-nn) — 아직 정해지지 않은 연계</li>
-        <li>500 — 예상하지 못한 오류 (로그 기록)</li>
+    <section class="panel sub">
+      <h2>{{ t('상태코드별 문구 · 다음 행동') }} <span class="tag">{{ t('개발용') }}</span> <small>api-contract.md §1 · §2</small></h2>
+      <div class="grid-panel">
+      <table class="grid compact plain">
+        <thead><tr><th class="num">HTTP</th><th>code</th><th>{{ t('메시지') }}</th><th>{{ t('언제 이 화면인가') }}</th><th>{{ t('버튼') }}</th></tr></thead>
+        <tbody>
+          <tr><td class="num"><b>401</b></td><td><code>unauthorized</code></td><td>{{ t('로그인이 필요합니다') }}</td><td class="wrap">{{ t('GET 은 303 → /login?next=… · POST 만 이 화면') }}</td><td>{{ t('로그인으로') }}</td></tr>
+          <tr><td class="num"><b>403</b></td><td><code>forbidden</code></td><td>{{ t('접근 권한이 없습니다') }}</td><td class="wrap">{{ t('권한 없음 · 팩이 숨긴 메뉴 · 채널 허용 밖 화면') }}</td><td>{{ t('메인으로') }}</td></tr>
+          <tr><td class="num"><b>404</b></td><td><code>not_found</code></td><td>{{ t('대상을 찾을 수 없습니다') }}</td><td class="wrap">{{ t('경로의 키 · 없는 주소 (입력 · 스캔한 번호가 없으면 404 가 아니라 422)') }}</td><td>{{ t('이전 화면으로') }}</td></tr>
+          <tr><td class="num"><b>422</b></td><td><code>validation_error</code> · <code>hook_rejected</code></td><td>{{ t('상황 문장 + 항목별 사유') }}</td><td class="wrap">{{ t('폼 POST 는 303 + 알림, 스캔 GET 은 그 화면 재렌더 — 이 화면은 그 밖 브라우저 GET 만') }}</td><td>{{ t('이전 화면으로') }}</td></tr>
+          <tr><td class="num"><b>500</b></td><td><code>internal_error</code></td><td>{{ t('예상하지 못한 오류') }}</td><td class="wrap">{{ t('핸들러가 로그에 남긴다. 접속 문자열 · 스택은 화면에 싣지 않는다') }}</td><td>{{ t('메인으로') }}</td></tr>
+          <tr><td class="num"><b>501</b></td><td><code>undecided</code></td><td>… {{ t('미확정') }} (D-nn)</td><td class="wrap">{{ t('사람이 아직 정하지 않은 것(ERP · 미구현 어댑터). decision 을 같이 보여 준다') }}</td><td>{{ t('이전 화면으로') }}</td></tr>
+          <tr><td class="num"><b>503</b></td><td><code>db_unavailable</code></td><td>{{ t('서비스 일시 중단') }}</td><td class="wrap">{{ t('DB 연결 실패. 잡지 않는다. 호스트 · DB 이름은 싣지 않는다') }}</td><td>{{ t('다시 시도') }}</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <ul class="notes">
+        <li>{{ t('POP 채널은 422 를 큰 글씨로 그 화면 안에 — 오류 화면으로 보내지 않는다') }}.</li>
+        <li>{{ t('현황판 채널은 오류 화면에서도 자동 새로고침을 이어 간다') }}.</li>
       </ul>
-    </div>
-  </div>
-  {% endif %}
+    </section>
+    {% endif %}
+  </main>
 </div>
+<footer class="ftr">{{ system_name }}{% if now %} · {{ t('갱신 시각') }} <b>{{ now }}</b>{% endif %}</footer>
 {% if device == 'board' and board_refresh_seconds %}<script src="/static/app.js?v={{ asset_v }}"></script>{% endif %}
 </body>
 </html>

@@ -1,53 +1,68 @@
-{# SYS-01 사용자 (F-SYS-01~04) — 역할 · 상태 · 마지막 로그인. 비밀번호 값은 화면 어디에도 없다 (G-C19). 중지 · 해제는 버튼(/toggle). #}
+{# SYS-01 사용자 (F-SYS-01~04 · 개발1 · 디자이너1 이식) — 역할 · 상태 · 마지막 로그인. 비밀번호 값은 화면 어디에도 없다 (G-C19). 중지 · 해제는 인라인 확인(/toggle).
+   라우터 ctx: rows · f · editing · options{role_id status worker_id} · path · me · can{create update toggle}. 폼 name 그대로. #}
 {% extends "base.html" %}
-{% import "home/_macros.html" as ui %}
+{% import "home/_macros.html" as ui with context %}
 
 {% block search %}
-  {{ ui.field('검색 (ID · 이름)', 'q', f.q) }}
-  {{ ui.select('역할', 'role_id', options.role_id, f.role_id, blank='전체') }}
-  {{ ui.select('상태', 'status', options.status, f.status, blank='전체') }}
+  {{ ui.field('검색 (ID · 이름)', 'q', f.q, cls='w-md', placeholder=t('일부 일치')) }}
+  {{ ui.select('역할', 'role_id', options.role_id, f.role_id, blank='전체', cls='w-md') }}
+  {{ ui.select('상태', 'status', options.status, f.status, blank='전체', cls='w-sm') }}
 {% endblock %}
 
 {% block grid %}
-<h2>{{ t('사용자') }} <small>{{ rows|length }}{{ t('건') }}</small></h2>
-<table class="grid">
-  <thead><tr><th>{{ t('로그인 ID') }}</th><th>{{ t('이름') }}</th><th>{{ t('역할') }}</th><th>{{ t('작업자') }}</th><th>{{ t('상태') }}</th><th class="num">{{ t('실패') }}</th><th>{{ t('마지막 로그인') }}</th><th class="act">{{ t('작업') }}</th></tr></thead>
+<h2 id="h-grid">{{ t('사용자') }} {{ t('목록') }} <small>{{ rows|length }}{{ t('건') }}</small>
+  <span class="right"><small>{{ t('세션 상태는 요청마다 DB — 중지 · 잠금은 다음 요청부터 401') }}</small></span></h2>
+<table class="grid cardify">
+  <thead><tr><th>{{ t('로그인 ID') }}</th><th>{{ t('이름') }}</th><th>{{ t('역할') }}</th><th>{{ t('작업자') }}</th><th>{{ t('상태') }}</th><th class="num">{{ t('실패') }}</th><th>{{ t('마지막 로그인') }}</th><th>{{ t('동작') }}</th></tr></thead>
   <tbody>
   {% for r in rows %}
-    <tr{% if editing and editing.id == r.id %} class="sel"{% endif %}>
-      <td><code>{{ r.login_id }}</code>{% if r.id == me %} <span class="tag">{{ t('나') }}</span>{% endif %}</td><td>{{ r.user_name }}</td><td>{{ r.role_code }} {{ r.role_name }}</td>
-      <td>{{ r.worker_code|txt }} {{ r.worker_name|txt('') }}</td>
-      <td><span class="badge badge-{{ {'사용': 'ok', '중지': 'none', '잠금': 'err'}[r.status] }}">{{ t(r.status) }}</span></td>
-      <td class="num">{{ r.fail_count }}</td><td>{{ r.last_login_at|dt }}</td>
+    <tr{% if editing and editing.id == r.id %} class="sel"{% elif r.status == '중지' %} class="dim"{% endif %}>
+      <td data-l="{{ t('로그인 ID') }}"><code>{{ r.login_id }}</code>{% if r.id == me %} <span class="tag">{{ t('나') }}</span>{% endif %}</td>
+      <td data-l="{{ t('이름') }}">{{ r.user_name }}</td>
+      <td data-l="{{ t('역할') }}"><code>{{ r.role_code }}</code> {{ r.role_name }}</td>
+      <td data-l="{{ t('작업자') }}">{% if r.worker_code %}{{ r.worker_code }} {{ r.worker_name|txt('') }}{% else %}-{% endif %}</td>
+      <td data-l="{{ t('상태') }}">{{ ui.badge(r.status, {'사용': 'ok', '중지': 'neutral', '잠금': 'err'}.get(r.status, '')) }}</td>
+      <td class="num" data-l="{{ t('실패') }}">{{ r.fail_count }}</td>
+      <td data-l="{{ t('마지막 로그인') }}">{% if r.last_login_at %}{{ r.last_login_at|dt }}{% else %}<span class="muted">{{ NOT_COLLECTED }}</span>{% endif %}</td>
       <td class="act">
-        {% if can.update %}<a class="btn btn-sm" href="{{ path }}?edit={{ r.id }}">{{ t('수정') }}</a>{% endif %}
-        {% if can.toggle and r.id != me %}<form method="post" action="{{ path }}/{{ r.id }}/toggle" class="inline"><button class="btn btn-sm{% if r.status == '사용' %} btn-err{% endif %}">{{ t('중지') if r.status == '사용' else t('해제') }}</button></form>{% endif %}
+        {% if can.update %}<a class="btn btn-sm" href="{{ path }}?edit={{ r.id }}#form">{{ t('수정') }}</a>{% endif %}
+        {% if can.toggle and r.id != me %}
+          {% if r.status == '사용' %}{{ ui.confirm_button('중지', path ~ '/' ~ r.id ~ '/toggle', t('중지하면 그 사용자의 세션이 전부 끊긴다'), '중지 확인') }}
+          {% else %}{{ ui.confirm_button('해제', path ~ '/' ~ r.id ~ '/toggle', t('다시 로그인할 수 있게 된다 · 실패 횟수 0'), '해제 확인', kind='ok') }}{% endif %}
+        {% endif %}
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="8" class="empty"><b>{{ NOT_COLLECTED }}</b></td></tr>
+    {{ ui.empty_row(8, hint='조회 조건에 맞는 사용자가 없다') }}
   {% endfor %}
   </tbody>
 </table>
+{% endblock %}
 
-<section class="panel form-panel">
-  <h2>{% if editing %}{{ t('수정') }} — <code>{{ editing.login_id }}</code>{% else %}{{ t('등록') }}{% endif %}</h2>
+{% block form %}
+<section class="panel" id="form" aria-labelledby="h-form">
+  <h2 id="h-form">{% if editing %}{{ t('사용자') }} {{ t('수정') }} <small><code>{{ editing.login_id }}</code> — {{ t('로그인 ID 는 바꿀 수 없다') }}</small>
+    <span class="right"><a class="btn btn-sm" href="{{ path }}#form">{{ t('새로 등록') }}</a></span>
+    {% else %}{{ t('사용자') }} {{ t('등록') }}{% endif %}</h2>
   <form method="post" action="{{ path }}{% if editing %}/{{ editing.id }}{% endif %}" id="user-form" class="form-grid cols" autocomplete="off">
-    {{ ui.field('로그인 ID', 'login_id', editing.login_id if editing else '', required=(not editing), readonly=(editing is not none)) }}
+    {{ ui.field('로그인 ID', 'login_id', editing.login_id if editing else '', required=(not editing), readonly=(editing is not none), autocomplete='off') }}
     {{ ui.field('이름', 'user_name', editing.user_name if editing else '', required=true) }}
     {{ ui.select('역할', 'role_id', options.role_id, editing.role_id if editing else '', required=true) }}
-    {{ ui.select('작업자 연결', 'worker_id', options.worker_id, editing.worker_id if editing and editing.worker_id else '') }}
-    <label>{{ t('초기 비밀번호') if not editing else t('새 비밀번호 (비우면 그대로)') }}{% if not editing %} <em class="req">*</em>{% endif %}<input type="password" name="password" autocomplete="new-password"{% if not editing %} required{% endif %}></label>
+    {{ ui.select('작업자 연결 (선택)', 'worker_id', options.worker_id, editing.worker_id if editing and editing.worker_id else '') }}
+    {{ ui.field('초기 비밀번호' if not editing else '새 비밀번호 (비우면 그대로)', 'password', '', type='password', required=(not editing), autocomplete='new-password') }}
   </form>
+  <div class="form-actions">
+    {{ ui.write_button('수정 저장' if editing else '등록', (can.update if editing else can.create), form='user-form') }}
+    {% if editing %}<a class="btn" href="{{ path }}">{{ t('취소') }}</a>{% endif %}
+    <span class="why">{{ t('역할 변경은 다음 요청부터 반영 · 비밀번호를 재설정하면 그 사용자의 세션이 전부 끊긴다') }}</span>
+  </div>
   <ul class="notes">
-    <li>{{ t('역할 변경은 다음 요청부터 반영된다 (요청마다 DB)') }}.</li>
-    <li>{{ t('비밀번호를 재설정하거나 중지하면 그 사용자의 세션이 전부 끊긴다') }}.</li>
+    <li>{{ t('비밀번호는 해시로만 저장한다 — 화면 · 로그 · JSON 어디에도 값이 없다') }}.</li>
+    <li>{{ t('잠금은 로그인 실패 횟수(MES_LOGIN_LOCK_COUNT)로 — 해제 버튼이 실패 횟수를 0 으로 되돌린다') }}.</li>
   </ul>
 </section>
 {% endblock %}
 
 {% block actions %}
-  <button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
-  {{ ui.write_button('저장', (can.update if editing else can.create), form='user-form') }}
-  {% if editing %}<a class="btn" href="{{ path }}">{{ t('새로 등록') }}</a>{% endif %}
+  <button type="submit" form="screen-search" class="btn btn-primary">{{ t('조회') }}</button>
 {% endblock %}

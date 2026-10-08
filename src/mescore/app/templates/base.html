@@ -1,7 +1,8 @@
-{# 공통 레이아웃 — 헤더 / 좌측 메뉴(일하는 순서 `core.yaml: order` · 팩 `menus.order` · 권한 `없음` 과 팩 숨김은 빠진다) / 본문 / 우측 계약 패널.
-   채널: body 에 ch-web · ch-pop · ch-mobile · ch-board 가 붙는다. POP 은 터치용 확대, 현황판은 자동 새로고침(app.js `data-refresh-seconds`).
-   사용자 문구는 전부 t() 를 거친다 — 팩 용어 사전(E1)이 바꾼다. 메뉴 · 화면 이름도 t().
-   개발자는 {% block search %} {% block grid %} {% block actions %} 를 채우거나 {% block body %} 를 통째로 바꾼다. #}
+{# 공통 레이아웃 (디자이너1 · docs/design/web/base.html 이식) — 헤더 / 좌측 메뉴(nav.MENUS 의 권한 가시 목록 `menus` · 팩 hide · rename · order 반영) / 본문 3블록 / 우측 계약 패널 / 토스트 · 422 알림 / 푸터.
+   채널: body.ch-web · ch-pop · ch-mobile · ch-board 는 templating.render 가 device 로 붙인다. POP 은 좌측 메뉴 대신 상단 탭(이 화면의 채널 허용 화면만) — 안의 모양은 pop.css(디자이너2).
+   개발자는 {% block search %} {% block grid %} {% block actions %} 를 채우거나 {% block body %} 를 통째로 바꾼다. search 블록을 비우면 조회 조건 패널이 안 그려진다.
+   flash(http.saved · 422 핸들러): kind=ok → 토스트 한 번(8초) · 그 밖(warn · error · info) → 본문 위 알림 + fields[] 항목별 사유. POP 채널은 app.js 의 #flash-data 팝업(S-09).
+   사용자 문구는 전부 t(). 스크립트는 static/app.js 하나(디자이너2). #}
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -10,102 +11,145 @@
 {% if device == 'board' %}<noscript><meta http-equiv="refresh" content="{{ board_refresh_seconds }}"></noscript>{% endif %}
 <title>{{ screen_name or system_name }} · {{ system_name }}</title>
 <link rel="stylesheet" href="/static/style.css?v={{ asset_v }}">
+{% if device == 'pop' %}<link rel="stylesheet" href="/static/pop.css?v={{ asset_v }}">{% endif %}
+{% if device == 'mobile' %}<link rel="stylesheet" href="/static/mobile.css?v={{ asset_v }}">{% endif %}
 {% block head %}{% endblock %}
 </head>
-<body class="ch-{{ device }}" data-device="{{ device }}" data-grid-page-size="{{ grid_page_size }}"{% if device == 'board' %} data-refresh-seconds="{{ board_refresh_seconds }}"{% endif %}>
+<body class="ch-{{ device }}" data-device="{{ device }}" data-screen="{{ screen_id or '' }}" data-grid-page-size="{{ grid_page_size }}"{% if device == 'board' %} data-refresh-seconds="{{ board_refresh_seconds }}"{% endif %}>
+{% set show_side = menus and device != 'pop' %}
+{% set show_desc = settings.env == 'dev' and device in ('web', 'mobile') %}
+
 <header class="hdr">
   <div class="hdr-l">
+    {% if show_side %}<button type="button" class="hdr-btn" id="side-toggle" aria-controls="side-menu" aria-expanded="true" title="{{ t('메뉴 접기 · 펴기') }}">&#9776;</button>{% endif %}
     <a class="brand" href="/">{{ system_name }}</a>
     {% if screen_name %}
-    <span class="crumb">{% if menu_name %}{{ menu_name }} &gt; {% endif %}<strong>{{ screen_name }}</strong>{% if screen %} <code>{{ screen_id }}</code>{% endif %}</span>
+    <span class="crumb">{% if menu_name %}{{ menu_name }} &rsaquo; {% endif %}<strong>{{ screen_name }}</strong>{% if screen %} <code>{{ screen_id }}</code>{% endif %}</span>
     {% endif %}
   </div>
   <div class="hdr-r">
-    <span class="meta">{{ t('마지막 갱신') if device == 'board' else t('현재 일시') }} <b id="refreshed-at">{{ now }}</b></span>
+    <span class="meta">{{ t('마지막 갱신') if device == 'board' else t('갱신') }} <b id="refreshed-at">{{ now }}</b></span>
     <span class="meta">{{ t('채널') }} <b>{{ channel }}</b></span>
     {% if pack_name %}<span class="meta">{{ t('팩') }} <b>{{ pack_name }}</b></span>{% endif %}
-    {% if menus %}<a class="btn btn-ghost menu-jump" href="#side-menu">{{ t('메뉴') }}</a>{% endif %}
+    {% if show_side %}<a class="btn btn-ghost btn-sm menu-jump" href="#side-menu">{{ t('메뉴') }}</a>{% endif %}
     {% if user %}
     <span class="meta user">{{ user.user_name }} <em>{{ user.role_name }}</em></span>
-    <form method="post" action="/logout" class="inline"><button class="btn btn-ghost">{{ t('로그아웃') }}</button></form>
+    {% if show_desc %}<button type="button" class="hdr-btn" id="desc-toggle" aria-controls="desc-panel" aria-expanded="true" title="{{ t('계약 패널 접기 · 펴기') }}">{{ t('계약') }}</button>{% endif %}
+    <form method="post" action="/logout" class="inline"><button type="submit" class="btn btn-ghost btn-sm">{{ t('로그아웃') }}</button></form>
     {% else %}
-    <a class="btn btn-ghost" href="/login">{{ t('로그인') }}</a>
+    <a class="btn btn-ghost btn-sm" href="/login">{{ t('로그인') }}</a>
+    {% endif %}
+    {% if device == 'pop' and menus %}
+    {# POP — 좌측 메뉴 대신 상단 탭: 이 역할이 볼 수 있는 메뉴 중 POP 채널에 허용된 화면만 (core.yaml: channels.pop) #}
+    <nav class="pop-tabs" aria-label="{{ t('화면') }}">
+      {% for m in menus %}{% for s in m.screens if nav.channel_allowed(s.screen_id, 'pop') %}
+      <a href="{{ s.path }}"{% if s.screen_id == screen_id %} aria-current="page"{% endif %}>{{ t(s.name) }}</a>
+      {% endfor %}{% endfor %}
+    </nav>
     {% endif %}
   </div>
 </header>
 
-<div class="shell">
+<div class="shell{% if not show_side %} no-side{% endif %}{% if not show_desc %} no-desc{% endif %}">
+  {% if show_side %}
   <nav class="side" id="side-menu" aria-label="{{ t('메뉴') }}">
-    <div class="menu-group{% if screen_id == 'CMN-02' %} on{% endif %}"><a class="menu-head" href="/">{{ t('메인') }}</a></div>
+    <div class="mg menu-group{% if screen_id == 'CMN-02' %} on{% endif %}"><a class="mg-h" href="/"><span>{{ t('메인') }}</span></a></div>
     {% for m in menus %}
-    <div class="menu-group{% if m.code == active_menu %} on{% endif %}" data-menu="{{ m.code }}">
-      <div class="menu-head">{{ t(m.name) }}<span class="cnt">{{ m.screens|length }}</span></div>
+    <div class="mg menu-group{% if m.code == active_menu %} on{% endif %}" data-menu="{{ m.code }}">
+      <button type="button" class="mg-h menu-head" aria-expanded="{{ 'true' if m.code == active_menu else 'false' }}"><span>{{ t(m.name) }}{% if m.is_pack %} <i class="tag">{{ t('팩') }}</i>{% endif %}</span><small>{{ m.screens|length }}</small></button>
       <ul>
         {% for s in m.screens %}
-        <li><a href="{{ s.path }}"{% if s.screen_id == screen_id %} class="cur"{% endif %}>{{ t(s.name) }}</a></li>
+        <li><a href="{{ s.path }}"{% if s.screen_id == screen_id %} class="cur" aria-current="page"{% endif %}>{{ t(s.name) }}{% if s.channels and nav.DEVICE_CHANNEL['web'] not in s.channels %} <i class="ch" title="{{ t('주로 쓰는 채널') }}: {{ s.channels|join(' · ') }}">{{ s.channels[0] }}</i>{% endif %}</a></li>
         {% endfor %}
       </ul>
     </div>
     {% endfor %}
-    {% if not menus %}
-    <div class="menu-group"><div class="menu-head">{{ t('메뉴') }}</div><ul><li><a href="/login">{{ t('로그인이 필요합니다') }}</a></li></ul></div>
-    {% endif %}
   </nav>
+  {% endif %}
 
-  <main class="main">
+  <main class="main" id="main">
+    {% if flash and flash.kind != 'ok' and device != 'pop' %}
+    <div class="alert{% if flash.kind == 'info' %} info{% elif flash.kind == 'warn' %} warn{% endif %}" role="alert">
+      <button type="button" class="alert-x" data-alert-close aria-label="{{ t('닫기') }}">&times;</button>
+      <strong>{{ flash.title or t('입력값을 확인해 주세요') }}</strong>{% if flash.message %} — {{ flash.message }}{% endif %}
+      {% if flash.fields %}
+      <ul class="fields">
+        {% for f in flash.fields %}<li><b>{{ f.label or f.name }}</b>{% if f.name %} <code>{{ f.name }}</code>{% endif %} — {{ f.reason }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endif %}
+
     {% block body %}
-    <section class="panel search">
-      <h2>{{ t('조회 조건') }}</h2>
+    {% set search_html = self.search() %}
+    {% if search_html|trim %}
+    <section class="panel search" aria-labelledby="h-search">
+      <h2 id="h-search">{{ t('조회 조건') }}</h2>
       <form class="search-form" method="get" id="screen-search">
         {% block search %}{% endblock %}
       </form>
     </section>
+    {% endif %}
 
-    <section class="panel grid-panel">
+    <section class="panel grid-panel" aria-labelledby="h-grid">
       {% block grid %}{% endblock %}
     </section>
 
+    {# 쓰기 폼 패널(section.panel#form) — 표 아래 · 버튼 띠 위. 비우면 안 그려진다 #}
+    {% block form %}{% endblock %}
+
     <section class="actions">
       {% block actions %}
-      <button type="submit" form="screen-search" class="btn btn-primary">{{ t('조회') }}</button>
+      {% if search_html|trim %}<button type="submit" form="screen-search" class="btn btn-primary">{{ t('조회') }}</button>{% endif %}
       {% endblock %}
     </section>
     {% endblock %}
   </main>
 
-  <aside class="desc">
-    <h2>{{ t('계약') }}</h2>
+  {% if show_desc %}
+  <aside class="desc" id="desc-panel" data-env="{{ settings.env }}" aria-label="{{ t('계약') }}">
+    <h2>{{ t('계약') }} <span class="tag">{{ t('개발용') }}</span></h2>
     {% if functions %}
-    <div class="desc-block">
-      <h3>{{ t('이 화면의 기능') }} <small>contracts/function-list.md</small></h3>
+    <div class="desc-b">
+      <h3>{{ t('이 화면의 기능') }} <small>function-list.md</small></h3>
       <ul>
         {% for it in functions %}
         <li{% if not it.allowed %} class="off" title="{{ t('이 역할은 할 수 없는 기능') }}"{% endif %}><code>{{ it.fn.id }}</code> {{ t(it.fn.name) }} <small>{{ it.fn.kind }}</small></li>
         {% endfor %}
       </ul>
     </div>
-    <div class="desc-block">
+    {% if screen %}
+    <div class="desc-b">
       <h3>{{ t('주로 쓰는 채널') }}</h3>
-      <ul>{% for c in screen.channels %}<li>{{ c }}</li>{% endfor %}</ul>
+      <p>{{ screen.channels|join(' · ') }}</p>
     </div>
+    {% endif %}
     {% else %}
-    <p class="empty">{{ t('이 화면에 묶인 기능 줄이 없다') }}</p>
+    <p class="empty-inline">{{ t('이 화면에 묶인 기능 줄이 없다') }}</p>
     {% endif %}
   </aside>
+  {% endif %}
 </div>
 
-{% if flash %}
+{% if flash and flash.kind == 'ok' and device != 'pop' %}
+<div class="toast" role="status" aria-live="polite" data-auto>
+  <strong>{{ t('저장됨') }}</strong><span>{{ flash.message }}</span>
+  <button type="button" class="toast-x" data-toast-close aria-label="{{ t('닫기') }}">&times;</button>
+</div>
+{% endif %}
+
+{% if flash and device == 'pop' %}
 <script type="application/json" id="flash-data">{{ flash | tojson }}</script>
 {% endif %}
 <div class="popup-layer" id="popup-layer" hidden>
-  <div class="popup" role="dialog" aria-modal="true">
+  <div class="popup" role="dialog" aria-modal="true" aria-labelledby="popup-title">
     <h3 id="popup-title">{{ t('알림') }}</h3>
     <div id="popup-body"></div>
     <div class="popup-actions"><button type="button" class="btn" data-popup-close>{{ t('확인') }}</button></div>
   </div>
 </div>
 
-<footer class="ftr">{{ system_name }} · core {{ core_version }}{% if pack_name %} · {{ t('팩') }} {{ pack_name }}{% endif %}</footer>
+<footer class="ftr">{{ system_name }} · {{ t('갱신 시각') }} <b>{{ now }}</b> · {{ t('코어') }} {{ core_version }}{% if pack_name %} · {{ t('팩') }} {{ pack_name }}{% endif %}</footer>
 <script src="/static/app.js?v={{ asset_v }}"></script>
 </body>
 </html>

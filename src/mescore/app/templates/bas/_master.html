@@ -1,85 +1,108 @@
-{# 기준정보 마스터 공통 화면 (개발1) — routers/bas.py 의 Master 설정으로 검색 · 목록 · 등록/수정 폼을 그린다.
+{# 기준정보 마스터 공통 화면 (개발1 · 디자이너1 docs/design/web/screens/bas_items.html 이식) — routers/bas.py 의 Master 설정으로 조회 조건 · 목록 · 등록/수정 폼을 그린다.
    화면별 파일(items.html …)은 이것을 extends 만 한다 — 팩이 화면 하나만 덮어쓸 수 있게 이름을 따로 둔다.
-   최소 구현(웨이브 A): base.html 의 search · grid · actions 블록 + ui 매크로. 디자인 이식은 웨이브 A′ (class 는 docs/design/README.md §5 대응표). #}
+   라우터 ctx: master{label code name_col fields[{name label kind required}] filters group_by} · rows · f · editing · options · groups · attrs_specs · path · can{create update delete}.
+   마스터 4기능 한 벌: 조회 조건 → 목록(행 액션 수정 · 삭제 인라인 확인) → 수정 폼(코드 readonly) + 팩 속성 묶음(ui.attrs_fields) → 303 토스트. #}
 {% extends "base.html" %}
-{% import "home/_macros.html" as ui %}
+{% import "home/_macros.html" as ui with context %}
 
 {% macro cell(r, fld) %}
   {%- if fld.kind == 'ref' -%}
     {%- set lookup = dict(options.get(fld.name, [])) -%}
     {{ lookup.get(r[fld.name]|string, r[fld.name] if r[fld.name] is not none else '-') }}
-  {%- elif fld.kind == 'codes' or fld.kind == 'choice' or fld.kind == 'yn' -%}
+  {%- elif fld.kind == 'yn' -%}
+    {%- if r[fld.name] == 'Y' -%}{{ ui.badge('사용', 'ok') }}{%- elif r[fld.name] == 'N' -%}{{ ui.badge('미사용', 'neutral') }}{%- else -%}-{%- endif -%}
+  {%- elif fld.kind == 'codes' or fld.kind == 'choice' -%}
     {%- set lookup = dict(options.get(fld.name, [])) -%}
     {{ lookup.get(r[fld.name]|string, r[fld.name]) if r[fld.name] is not none else '-' }}
   {%- elif fld.kind == 'list' -%}
     {{ (r[fld.name] or [])|join(', ') if r[fld.name] else '-' }}
+  {%- elif fld.kind == 'code' or fld.kind == 'key' -%}
+    <code>{{ r[fld.name]|txt }}</code>
+  {%- elif fld.kind in ('int', 'decimal') -%}
+    {{ r[fld.name]|num(3) if fld.kind == 'decimal' else r[fld.name]|txt }}
   {%- else -%}
     {{ r[fld.name]|txt }}
   {%- endif -%}
 {% endmacro %}
 
+{% macro field_label(col) %}{{ master.fields|selectattr('name', 'equalto', col)|map(attribute='label')|first or col }}{% endmacro %}
+
 {% block search %}
-  {{ ui.field('검색 (코드 · 이름)', 'q', f.q) }}
+  {{ ui.field('검색 (코드 · 이름)', 'q', f.q, cls='w-md', placeholder=t('일부 일치')) }}
   {% for col in master.filters %}
-    {% if options.get(col) %}{{ ui.select(master.fields|selectattr('name', 'equalto', col)|map(attribute='label')|first or col, col, options[col], f.get(col, ''), blank='전체') }}
-    {% else %}{{ ui.field(master.fields|selectattr('name', 'equalto', col)|map(attribute='label')|first or col, col, f.get(col, '')) }}{% endif %}
+    {% if options.get(col) %}{{ ui.select(field_label(col), col, options[col], f.get(col, ''), blank='전체', cls='w-md') }}
+    {% else %}{{ ui.field(field_label(col), col, f.get(col, ''), cls='w-md') }}{% endif %}
   {% endfor %}
-  {{ ui.select('사용 여부', 'use_yn', [('Y', t('사용')), ('N', t('미사용'))], f.use_yn, blank='전체') }}
+  {{ ui.select('사용 여부', 'use_yn', [('Y', t('사용')), ('N', t('미사용'))], f.use_yn, blank='전체', cls='w-sm') }}
 {% endblock %}
 
 {% block grid %}
-<h2>{{ t(master.label) }} <small>{{ rows|length }}{{ t('건') }}</small></h2>
-<table class="grid">
+{% set ncol = master.fields|length + 2 + (1 if master.group_by else 0) %}
+<h2 id="h-grid">{{ t(master.label) }} {{ t('목록') }} <small>{{ rows|length }}{{ t('건') }}</small>
+  <span class="right"><small>{{ t('상한') }} 1,000{{ t('건') }} — {{ t('넘으면 조회 조건을 좁힌다') }}</small></span></h2>
+<table class="grid cardify">
   <thead><tr>
-    {% if master.group_by %}<th>{{ t('그룹') }}</th>{% endif %}
-    {% for fld in master.fields %}<th>{{ t(fld.label) }}</th>{% endfor %}
+    {% for fld in master.fields %}<th{% if fld.kind in ('int', 'decimal') %} class="num"{% endif %}>{{ t(fld.label) }}</th>{% endfor %}
     {% block extra_head %}{% endblock %}
-    <th class="act">{{ t('작업') }}</th>
+    <th>{{ t('수정') }} · {{ t('삭제') }}</th>
   </tr></thead>
   <tbody>
+  {% set ns = namespace(group=none) %}
   {% for r in rows %}
-    <tr{% if editing and editing.id == r.id %} class="sel"{% endif %}>
-      {% if master.group_by %}<td>{{ r[master.group_by]|txt }}</td>{% endif %}
-      {% for fld in master.fields %}<td>{{ cell(r, fld) }}</td>{% endfor %}
+    {% if master.group_by and r[master.group_by]|string != ns.group|string %}
+      {% set ns.group = r[master.group_by] %}
+      <tr class="group"><td colspan="{{ ncol }}">{{ r[master.group_by]|txt }}</td></tr>
+    {% endif %}
+    <tr{% if editing and editing.id == r.id %} class="sel"{% elif r.get('use_yn') == 'N' %} class="dim"{% endif %}>
+      {% for fld in master.fields %}<td data-l="{{ t(fld.label) }}"{% if fld.kind in ('int', 'decimal') %} class="num"{% endif %}>{{ cell(r, fld) }}</td>{% endfor %}
       {% block extra_cells scoped %}{% endblock %}
       <td class="act">
-        {% if can.update %}<a class="btn btn-sm" href="{{ path }}?edit={{ r.id }}">{{ t('수정') }}</a>{% endif %}
-        {% if can.delete %}<form method="post" action="{{ path }}/{{ r.id }}/delete" class="inline"><button class="btn btn-sm btn-err">{{ t('삭제') }}</button></form>{% endif %}
+        {% if can.update %}<a class="btn btn-sm" href="{{ path }}?edit={{ r.id }}#form">{{ t('수정') }}</a>{% endif %}
+        {% if can.delete %}{{ ui.confirm_button('삭제', path ~ '/' ~ r.id ~ '/delete', t('참조가 있으면 422 — 대신 사용 여부를 N 으로'), '삭제 확인') }}{% endif %}
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="{{ master.fields|length + 2 }}" class="empty"><b>{{ NOT_COLLECTED }}</b></td></tr>
+    {{ ui.empty_row(ncol, hint='조회 조건에 맞는 행이 없다') }}
   {% endfor %}
   </tbody>
 </table>
+{% endblock %}
 
-<section class="panel form-panel">
-  <h2>{% if editing %}{{ t('수정') }} — <code>{{ editing[master.code] }}</code>{% else %}{{ t('등록') }}{% endif %}</h2>
+{% block form %}
+<section class="panel" id="form" aria-labelledby="h-form">
+  <h2 id="h-form">{% if editing %}{{ t(master.label) }} {{ t('수정') }} <small><code>{{ editing[master.code] }}</code> — {{ t('코드는 바꿀 수 없다') }}</small>
+    <span class="right"><a class="btn btn-sm" href="{{ path }}#form">{{ t('새로 등록') }}</a></span>
+    {% else %}{{ t(master.label) }} {{ t('등록') }}{% endif %}</h2>
   <form method="post" action="{{ path }}{% if editing %}/{{ editing.id }}{% endif %}" id="master-form" class="form-grid cols" autocomplete="off">
     {% for fld in master.fields %}
       {% set val = editing[fld.name] if editing else '' %}
-      {% if fld.kind in ('ref', 'codes', 'choice', 'yn') %}
+      {% if fld.kind in ('ref', 'codes', 'choice') %}
         {{ ui.select(fld.label, fld.name, options.get(fld.name, []), val if val is not none else '', required=(fld.required and not editing)) }}
+      {% elif fld.kind == 'yn' %}
+        {{ ui.select(fld.label, fld.name, [('Y', t('사용')), ('N', t('미사용'))], val if val is not none else 'Y', blank=none, cls='w-sm') }}
       {% elif fld.kind == 'list' %}
-        {{ ui.field(fld.label, fld.name, (val or [])|join(', ') if val else '') }}
+        {{ ui.field(fld.label, fld.name, (val or [])|join(', ') if val else '', hint=t('쉼표로 구분')) }}
       {% elif fld.kind in ('int', 'decimal') %}
         {{ ui.field(fld.label, fld.name, val if val is not none else '', type='number', required=(fld.required and not editing), step='any' if fld.kind == 'decimal' else '1') }}
       {% else %}
         {{ ui.field(fld.label, fld.name, val if val is not none else '', required=(fld.required and not editing), readonly=(editing and fld.name == master.code)) }}
       {% endif %}
     {% endfor %}
-    {% if attrs_specs %}
-    <fieldset class="attrs"><legend>{{ t('업종 속성') }}</legend>
-      {{ ui.attrs_fields(attrs_specs, (editing.attrs if editing else {}) or {}) }}
-    </fieldset>
-    {% endif %}
+    {{ ui.attrs_fields(attrs_specs, (editing.attrs if editing else {}) or {}) }}
     {% block form_extra %}{% endblock %}
   </form>
+  <div class="form-actions">
+    {{ ui.write_button('수정 저장' if editing else '등록', (can.update if editing else can.create), form='master-form') }}
+    {% if editing %}<a class="btn" href="{{ path }}">{{ t('취소') }}</a>{% endif %}
+    <span class="why">{{ t('저장 → 303 → 이 화면 + 알림 한 번 · 코드 중복 · 필수 누락은 422 항목별 사유') }}</span>
+  </div>
+  <ul class="notes">
+    <li>{{ t('삭제 대신 사용 여부 N — 다른 데이터가 참조하면 삭제는 422') }}.</li>
+    {% block notes_extra %}{% endblock %}
+  </ul>
 </section>
 {% endblock %}
 
 {% block actions %}
-  <button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
-  {{ ui.write_button('저장', (can.update if editing else can.create), form='master-form') }}
-  {% if editing %}<a class="btn" href="{{ path }}">{{ t('새로 등록') }}</a>{% endif %}
+  <button type="submit" form="screen-search" class="btn btn-primary">{{ t('조회') }}</button>
 {% endblock %}

@@ -1,0 +1,190 @@
+/* ============================================================================
+   MES 표준플랫폼 — 디자인 토큰 (전 채널 공용 · 디자이너1 소유 · docs/design/tokens.css 그대로)
+   ----------------------------------------------------------------------------
+   · style.css 가 @import 한다. base.html 을 쓰지 않는 독립 문서(현황판 kpi/board.html · 출력물 print/*.html)는
+     <link rel="stylesheet" href="/static/tokens.css"> 로 이 파일만 읽는다 — 색상값을 직접 적지 않는다(바코드 fill:#000 만 예외).
+   · 라이트 :root 97 + 다크(prefers-color-scheme · html[data-theme]) 재정의 + 인쇄. 업종어 · 회사명 없음.
+   ============================================================================ */
+
+:root {
+  /* 1. 글꼴 */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+               "Malgun Gothic", "맑은 고딕", "Noto Sans KR", "Segoe UI", Roboto,
+               Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "D2Coding",
+               "Liberation Mono", monospace;
+
+  /* 2. 글자 크기 — Web 기본 */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 15px;
+  --fs-xl: 18px;
+  --fs-2xl: 24px;
+  --lh-tight: 1.25;
+  --lh-base: 1.5;
+
+  /* 2b. 글자 크기 — POP(확대) · 모바일 · 현황판 */
+  --fs-pop-base: 20px;
+  --fs-pop-badge: 16px;
+  --fs-pop-note: 17px;
+  --fs-pop-input: 20px;
+  --fs-pop-scan: 30px;
+  --fs-pop-alert: 28px;
+  --fs-pop-num: 32px;
+  --fs-pop-primary: 26px;
+  --fs-mobile-base: 16px;
+  --fs-mobile-no: 15px;
+  --fs-board-base: 20px;
+  --fs-board-label: 24px;
+  --fs-board-num: 56px;
+  --touch-min: 48px;
+  --touch-pop: 56px;
+  --touch-min-pop: 56px;
+  --touch-pop-choice: 64px;
+  --touch-pop-primary: 80px;
+  --touch-pop-scan: 72px;
+  --touch-mobile-tab: 56px;
+
+  /* 3. 간격 (4px 배수) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  /* 4. 테두리 · 모서리 · 그림자 */
+  --bw: 1px;
+  --bw-strong: 2px;
+  --r-sm: 2px;
+  --r-md: 4px;
+  --r-lg: 6px;
+  --sh-1: 0 1px 2px rgba(16, 20, 24, .08);
+  --sh-2: 0 4px 14px rgba(16, 20, 24, .16);
+  --focus-ring: 0 0 0 2px var(--c-focus);
+
+  /* 5. 레이아웃 치수 */
+  --w-page: 1280px;
+  --w-side: 212px;
+  --w-side-min: 176px;
+  --w-desc: 272px;
+  --h-hdr: 44px;
+  --w-mobile: 390px;
+  --z-hdr: 20;
+  --z-side: 15;
+  --z-toast: 40;
+
+  /* 6. 색 — 바탕 · 표면 · 선 · 글자 */
+  --c-bg: #f2f3f5;
+  --c-surface: #ffffff;
+  --c-surface-2: #eef0f2;
+  --c-surface-3: #e3e6ea;
+  --c-line: #d3d7dc;
+  --c-line-strong: #a9b0b8;
+  --c-ink: #1b1f24;
+  --c-ink-2: #5c6670;
+  --c-ink-3: #8c959e;
+  --c-ink-inverse: #ffffff;
+  --c-head: #23272d;
+  --c-head-ink: #e9ecef;
+  --c-head-ink-2: #aab2bb;
+
+  /* 7. 색 — 강조 (한 가지만. 팩이 바꿀 수 있다) */
+  --c-accent: #1f5fa8;
+  --c-accent-hover: #184d89;
+  --c-accent-ink: #ffffff;
+  --c-accent-tint: #e6eef9;
+  --c-focus: #8fb4e3;
+  --c-focus-pop: #ffd600;
+  --c-link: #1f5fa8;
+
+  /* 8. 색 — 상태 4종 + 중립 */
+  --c-ok: #1e7b3f;      --c-ok-bg: #e4f4e9;      --c-ok-line: #9fd3b0;
+  --c-warn: #9a6200;    --c-warn-bg: #fff3d4;    --c-warn-line: #ecc77a;
+  --c-err: #b42318;     --c-err-bg: #fbe9e7;     --c-err-line: #f0a69e;
+  --c-info: #1f5fa8;    --c-info-bg: #e6eef9;    --c-info-line: #a3bfe6;
+  --c-neutral: #5c6670; --c-neutral-bg: #eceff2; --c-neutral-line: #c3c9d0;
+
+  /* 9. 색 — LOT 상태 (재고 · 소진 · 출하) */
+  --c-lot-stock: #0f6f7c;     --c-lot-stock-bg: #dff3f6;
+  --c-lot-consumed: #5c6670;  --c-lot-consumed-bg: #eceff2;
+  --c-lot-shipped: #233f8a;   --c-lot-shipped-bg: #e3e8f7;
+
+  /* 10. 색 — 검사 판정 (별칭) */
+  --c-pass: var(--c-ok);        --c-pass-bg: var(--c-ok-bg);
+  --c-fail: var(--c-err);       --c-fail-bg: var(--c-err-bg);
+  --c-cond: var(--c-warn);      --c-cond-bg: var(--c-warn-bg);
+  --c-none: var(--c-neutral);   --c-none-bg: transparent;
+
+  /* 11. 색 — 설비 상태 (별칭) */
+  --c-eq-run: var(--c-ok);      --c-eq-run-bg: var(--c-ok-bg);
+  --c-eq-stop: var(--c-neutral);--c-eq-stop-bg: var(--c-neutral-bg);
+  --c-eq-check: var(--c-info);  --c-eq-check-bg: var(--c-info-bg);
+  --c-eq-fault: var(--c-err);   --c-eq-fault-bg: var(--c-err-bg);
+
+  /* 12. 색 — 미확정 · 미수집 · 범위 이탈 */
+  --c-undecided: #8a5a00;     --c-undecided-bg: #fff3d4;  --c-undecided-line: #e8cf9a;
+  --c-empty: #8c959e;
+  --c-deviated: var(--c-warn);
+  --c-deviated-bg: var(--c-warn-bg);
+
+  /* 13. 색 — 인쇄 */
+  --c-print-ink: #000000;
+  --c-print-line: #000000;
+  --c-print-bg: #ffffff;
+}
+
+/* 다크 — 같은 이름을 다시 정의한다. 상태색은 밝기만 올리고 색상(hue)은 유지 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --c-bg: #15181c; --c-surface: #1e2227; --c-surface-2: #262b31; --c-surface-3: #2f353c;
+    --c-line: #353b43; --c-line-strong: #525a64;
+    --c-ink: #e6e9ec; --c-ink-2: #a3acb5; --c-ink-3: #6f7983; --c-ink-inverse: #15181c;
+    --c-head: #0f1114; --c-head-ink: #e6e9ec; --c-head-ink-2: #8e98a2;
+    --c-accent: #6ea3e8; --c-accent-hover: #8ab6ee; --c-accent-ink: #0f1114; --c-accent-tint: #1f2d40;
+    --c-focus: #4e7fc0; --c-focus-pop: #ffd600; --c-link: #8ab6ee;
+    --c-ok: #6dc98b; --c-ok-bg: #16301f; --c-ok-line: #2d6b43;
+    --c-warn: #e9b84a; --c-warn-bg: #3a2c0c; --c-warn-line: #7a5f1a;
+    --c-err: #f08a7f; --c-err-bg: #3c1a16; --c-err-line: #8a3a31;
+    --c-info: #6ea3e8; --c-info-bg: #1b2a3f; --c-info-line: #345a8f;
+    --c-neutral: #a3acb5; --c-neutral-bg: #262b31; --c-neutral-line: #454c55;
+    --c-lot-stock: #5fc3d0; --c-lot-stock-bg: #10303a;
+    --c-lot-consumed: #a3acb5; --c-lot-consumed-bg: #262b31;
+    --c-lot-shipped: #93a9ee; --c-lot-shipped-bg: #1c2447;
+    --c-undecided: #e9b84a; --c-undecided-bg: #3a2c0c; --c-undecided-line: #7a5f1a;
+    --c-empty: #6f7983;
+    --sh-1: 0 1px 2px rgba(0, 0, 0, .4); --sh-2: 0 4px 14px rgba(0, 0, 0, .5);
+  }
+}
+/* 사용자가 명시적으로 고른 다크 (html[data-theme="dark"] — 현황판 야간 전환) */
+:root[data-theme="dark"] {
+  --c-bg: #15181c; --c-surface: #1e2227; --c-surface-2: #262b31; --c-surface-3: #2f353c;
+  --c-line: #353b43; --c-line-strong: #525a64;
+  --c-ink: #e6e9ec; --c-ink-2: #a3acb5; --c-ink-3: #6f7983; --c-ink-inverse: #15181c;
+  --c-head: #0f1114; --c-head-ink: #e6e9ec; --c-head-ink-2: #8e98a2;
+  --c-accent: #6ea3e8; --c-accent-hover: #8ab6ee; --c-accent-ink: #0f1114; --c-accent-tint: #1f2d40;
+  --c-focus: #4e7fc0; --c-focus-pop: #ffd600; --c-link: #8ab6ee;
+  --c-ok: #6dc98b; --c-ok-bg: #16301f; --c-ok-line: #2d6b43;
+  --c-warn: #e9b84a; --c-warn-bg: #3a2c0c; --c-warn-line: #7a5f1a;
+  --c-err: #f08a7f; --c-err-bg: #3c1a16; --c-err-line: #8a3a31;
+  --c-info: #6ea3e8; --c-info-bg: #1b2a3f; --c-info-line: #345a8f;
+  --c-neutral: #a3acb5; --c-neutral-bg: #262b31; --c-neutral-line: #454c55;
+  --c-lot-stock: #5fc3d0; --c-lot-stock-bg: #10303a;
+  --c-lot-consumed: #a3acb5; --c-lot-consumed-bg: #262b31;
+  --c-lot-shipped: #93a9ee; --c-lot-shipped-bg: #1c2447;
+  --c-undecided: #e9b84a; --c-undecided-bg: #3a2c0c; --c-undecided-line: #7a5f1a;
+  --c-empty: #6f7983;
+  --sh-1: 0 1px 2px rgba(0, 0, 0, .4); --sh-2: 0 4px 14px rgba(0, 0, 0, .5);
+}
+
+/* 인쇄 — 색을 걷어낸다. 상태는 글자(배지 텍스트)로 남는다 */
+@media print {
+  :root {
+    --c-bg: #ffffff; --c-surface: #ffffff; --c-surface-2: #ffffff; --c-surface-3: #f2f2f2;
+    --c-line: #000000; --c-line-strong: #000000;
+    --c-ink: #000000; --c-ink-2: #333333; --c-ink-3: #666666;
+    --sh-1: none; --sh-2: none;
+  }
+}

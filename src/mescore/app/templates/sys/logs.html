@@ -1,20 +1,45 @@
-{# SYS-04 접근 로그 (F-SYS-10 · G-C18) — 기간 · 사용자 · 종류(login_ok · login_fail · view · change · error) · 화면 · 기능 · 대상. 비밀번호 · 세션 ID 는 없다. #}
+{# SYS-04 접근 로그 (F-SYS-10 · G-C18 · 개발1 · 디자이너1 이식) — 기간 · 사용자 · 종류(login_ok · login_fail · view · change · error) · 화면 · 기능 · 대상. 비밀번호 · 세션 ID 는 없다. 쓰기 0.
+   라우터 ctx: rows · by_kind · total · limit · kinds · kind_options · path · f. #}
 {% extends "base.html" %}
-{% import "home/_macros.html" as ui %}
+{% import "home/_macros.html" as ui with context %}
 
 {% block search %}
-  {{ ui.field('시작일', 'date_from', f.date_from, type='date') }}
-  {{ ui.field('종료일', 'date_to', f.date_to, type='date') }}
-  {{ ui.field('로그인 ID', 'login_id', f.login_id) }}
-  {{ ui.select('종류', 'kind', kind_options, f.kind, blank='전체') }}
-  {{ ui.field('화면 ID', 'screen_id', f.screen_id) }}
-  {{ ui.field('기능 ID', 'fn_id', f.fn_id) }}
-  {{ ui.field('대상', 'target', f.target) }}
+  {{ ui.field('시작일', 'date_from', f.date_from, type='date', cls='w-sm') }}
+  {{ ui.field('종료일', 'date_to', f.date_to, type='date', cls='w-sm') }}
+  {{ ui.field('로그인 ID', 'login_id', f.login_id, cls='w-sm') }}
+  {{ ui.select('종류', 'kind', kind_options, f.kind, blank='전체', cls='w-sm') }}
+  {{ ui.field('화면 ID', 'screen_id', f.screen_id, cls='w-sm', placeholder='BAS-01') }}
+  {{ ui.field('기능 ID', 'fn_id', f.fn_id, cls='w-sm', placeholder='F-BAS-01') }}
+  {{ ui.field('대상', 'target', f.target, cls='w-md', placeholder=t('일부 일치')) }}
 {% endblock %}
 
 {% block grid %}
-<h2>{{ t('접근 로그') }} <small>{{ total }}{{ t('건') }}{% if total > limit %} ({{ t('최근') }} {{ limit }}{{ t('건만') }}){% endif %} — {% for k, n in by_kind.items() %}{{ k }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}</small></h2>
-{% set log_rows = [] %}
-{% for r in rows %}{% set _ = log_rows.append([r.logged_at|dt('%Y-%m-%d %H:%M:%S'), r.kind, r.login_id|txt, r.screen_id|txt, r.fn_id|txt, r.target|txt, (r.detail.name if r.detail and r.detail.name else (r.detail.text if r.detail and r.detail.text else ''))|txt, r.device|txt, r.ip|txt]) %}{% endfor %}
-{{ ui.grid(['시각', '종류', '로그인 ID', '화면', '기능', '대상', '상세', '채널', 'IP'], log_rows) }}
+{% set kind_badge = {'login_ok': 'ok', 'login_fail': 'err', 'view': 'neutral', 'change': 'info', 'error': 'err'} %}
+<h2 id="h-grid">{{ t('접근 로그') }} <small>{{ total }}{{ t('건') }}{% if total > limit %} · {{ t('최근') }} {{ limit }}{{ t('건만') }}{% endif %}</small>
+  <span class="right">{% for k, n in by_kind.items() %}<span class="badge badge-{{ kind_badge.get(k, 'neutral') }}">{{ k }} {{ n }}</span>{% endfor %}</span></h2>
+<table class="grid cardify">
+  <thead><tr><th>{{ t('시각') }}</th><th>{{ t('종류') }}</th><th>{{ t('로그인 ID') }}</th><th>{{ t('화면') }}</th><th>{{ t('기능') }}</th><th>{{ t('대상') }}</th><th>{{ t('상세') }}</th><th>{{ t('채널') }}</th><th>IP</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td data-l="{{ t('시각') }}">{{ r.logged_at|dt('%Y-%m-%d %H:%M:%S') }}</td>
+      <td data-l="{{ t('종류') }}"><span class="badge badge-{{ kind_badge.get(r.kind, 'neutral') }}">{{ r.kind }}</span></td>
+      <td data-l="{{ t('로그인 ID') }}">{{ r.login_id|txt }}</td>
+      <td data-l="{{ t('화면') }}">{% if r.screen_id %}<code>{{ r.screen_id }}</code>{% else %}-{% endif %}</td>
+      <td data-l="{{ t('기능') }}">{% if r.fn_id %}<code>{{ r.fn_id }}</code>{% else %}-{% endif %}</td>
+      <td data-l="{{ t('대상') }}">{{ r.target|txt }}</td>
+      <td class="wrap" data-l="{{ t('상세') }}">{{ (r.detail.name if r.detail and r.detail.name else (r.detail.text if r.detail and r.detail.text else ''))|txt }}</td>
+      <td data-l="{{ t('채널') }}">{{ r.device|txt }}</td>
+      <td data-l="IP"><code>{{ r.ip|txt }}</code></td>
+    </tr>
+  {% else %}
+    {{ ui.empty_row(9, hint='조회 조건에 맞는 로그가 없다') }}
+  {% endfor %}
+  </tbody>
+</table>
+<ul class="notes"><li>{{ t('화면 조회(view) 는 templating.render 가, 쓰기(change) 는 audit.log_change 가 남긴다. 비밀번호 · 세션 ID 는 기록하지 않는다') }}.</li></ul>
+{% endblock %}
+
+{% block actions %}
+  <button type="submit" form="screen-search" class="btn btn-primary">{{ t('조회') }}</button>
 {% endblock %}
