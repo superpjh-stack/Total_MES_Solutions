@@ -1,0 +1,131 @@
+{# printfilm COA — 코어 print/document.html 덮어쓰기(R10 · README §0). 스냅샷만 그린다(발행 뒤 불변 · D-304). 바코드 값 = 출하 LOT 번호(snapshot.shipment.shipment_lot_no · 엘컴화인 D-305), 없으면 발행 번호.
+   롤별 ΔE · 판정 · 불량 · 길이 · 폭 · 공정 구분은 hooks.validate_shp_document 가 발행 시점에 스냅샷에 넣은 값(CR-8 임시).
+   원형(코어 개발2): 성적서 — A4 세로. 디자이너3 docs/design/print/document.html 이식(개발2 가 디자이너3 필드로 만든 것 — 모양만 바꿨다).
+   개발3 F-SHP-10 이 render_print("document", data, screen_id="SHP-04") 로 부른다. data(바꾸지 않는다):
+   doc{document_no doc_type issued_at issued_by} · snapshot(shp_document.snapshot 그대로 — DB 를 다시 읽지 않는다 · 발행본 불변):
+     shipment{shipment_no partner_code partner_name ship_date order_no approved_at approved_by} · columns[{item_key label unit standard min_value max_value}]
+     lots[{lot_no item_code item_name qty unit inspection: null | {insp_type inspected_at inspector judgement values{item_key:{value deviated item_judgement}}}}]
+     summary{lot_count passed failed conditional uninspected judgement}
+   LOT × 검사 항목 피벗 · 범위 이탈 ▲ + 굵게(색만으로 뜻을 주지 않는다) · 검사 없음 `미수집` · 종합 판정. 바코드 값 = doc.document_no. 스타일은 static/print.css. #}
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ t(doc.doc_type or '성적서') }} · {{ doc.document_no }} · {{ system_name }}</title>
+<link rel="stylesheet" href="/static/print.css?v={{ asset_v }}">
+<style>@media print{@page{size:A4 portrait;margin:14mm 12mm 16mm}}</style>
+</head>
+<body data-print="document">
+<div class="toolbar no-print">
+  <span class="cap">{{ t(doc.doc_type or '성적서') }} · A4 · {{ t('발행 시점 스냅샷 — 재발행은 새 발행 번호') }}</span>
+  <button class="btn" type="button" onclick="window.print()">{{ t('인쇄') }}</button>
+</div>
+{% set sh = snapshot.shipment if snapshot and snapshot.shipment else {} %}
+{% set cols = snapshot.columns if snapshot and snapshot.columns else [] %}
+{% set lots = snapshot.lots if snapshot and snapshot.lots else [] %}
+{% set sm = snapshot.summary if snapshot and snapshot.summary else {} %}
+{% set judgement = sm.judgement if sm.judgement else NOT_COLLECTED %}
+
+<article class="sheet" data-print="document" data-no="{{ doc.document_no }}">
+  <header class="sheet-head">
+    <div>
+      <h1>{{ t(doc.doc_type or '성적서') }} <small>{{ t('검사 결과 증명') }}</small></h1>
+      <p class="no">{{ t('발행 번호') }} <strong>{{ doc.document_no }}</strong></p>
+      <p class="no meta">{{ t('발행') }} {{ doc.issued_at|dt }} · {{ doc.issued_by|txt }}</p>
+    </div>
+    <div class="code">
+      {% set bc = sh.shipment_lot_no or doc.document_no %}
+      {{ barcode_svg(bc, height=45) }}
+      <div class="txt">{{ bc }}</div>
+      <div class="cap">{{ t('출하 LOT 바코드') if sh.shipment_lot_no else t('발행 번호 바코드') }} · Code128</div>
+    </div>
+  </header>
+
+  <table class="kv">
+    <tbody>
+      <tr><th>{{ t('출하 번호') }}</th><td class="mono">{{ sh.shipment_no|txt }}</td><th>{{ t('출하일') }}</th><td>{{ sh.ship_date|txt }}</td></tr>
+      <tr><th>{{ t('거래처') }}</th><td><span class="mono">{{ sh.partner_code|txt('') }}</span> {{ sh.partner_name|txt }}</td><th>{{ t('수주') }}</th><td class="mono">{{ sh.order_no|txt }}</td></tr>
+      <tr><th>{{ t('출하 승인') }}</th><td>{{ sh.approved_at|txt }}{% if sh.approved_by %} · {{ sh.approved_by }}{% endif %}</td><th>{{ t('LOT 수') }}</th><td><b>{{ sm.lot_count|txt('0') }}</b> ({{ t('합격') }} {{ sm.passed|txt('0') }} · {{ t('조건부') }} {{ sm.conditional|txt('0') }} · {{ t('불합격') }} {{ sm.failed|txt('0') }} · {{ NOT_COLLECTED }} {{ sm.uninspected|txt('0') }})</td></tr>
+    </tbody>
+  </table>
+
+  <h2>{{ t('출하 LOT') }} <small>{{ t('발행 시점 값 · LOT 별 최신 검사 1건') }}</small></h2>
+  <table>
+    <thead><tr><th class="c" style="width:7mm">#</th><th style="width:40mm">{{ t('LOT 번호') }}</th><th>{{ t('품목') }}</th><th class="num" style="width:22mm">{{ t('수량') }}</th><th style="width:32mm">{{ t('검사 일시') }}</th><th style="width:18mm">{{ t('검사자') }}</th><th class="c" style="width:16mm">{{ t('판정') }}</th></tr></thead>
+    <tbody>
+    {% for l in lots %}
+      <tr><td class="c">{{ loop.index }}</td><td class="mono">{{ l.lot_no }}</td><td>{{ l.item_name|txt }}</td><td class="num">{{ l.qty|txt }} {{ l.unit|txt('') }}</td>
+      {% if l.inspection %}<td>{{ l.inspection.inspected_at|txt }}</td><td>{{ l.inspection.inspector|txt }}</td><td class="c judge" data-j="{{ l.inspection.judgement|txt('') }}">{{ t(l.inspection.judgement) if l.inspection.judgement else '-' }}</td>
+      {% else %}<td class="empty" colspan="3">{{ NOT_COLLECTED }} — {{ t('검사 기록 없음') }}</td>{% endif %}</tr>
+    {% else %}
+      <tr><td colspan="7" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  {% if cols %}
+  <h2>{{ t('LOT 별 검사 항목 값') }} <small>{{ t('최신 검사 1건') }} · ▲ = {{ t('기준 이탈') }}</small></h2>
+  <table>
+    <thead>
+      <tr><th style="width:40mm">{{ t('LOT 번호') }}</th>{% for c in cols %}<th class="c">{{ t(c.label) }}<br><small>{{ c.unit|txt }}</small></th>{% endfor %}</tr>
+      <tr class="std"><td>{{ t('기준') }}</td>{% for c in cols %}<td class="c">{% if c.standard %}{{ c.standard }}{% elif c.min_value is not none or c.max_value is not none %}{{ c.min_value|txt }} ~ {{ c.max_value|txt }}{% else %}-{% endif %}</td>{% endfor %}</tr>
+    </thead>
+    <tbody>
+    {% for l in lots %}
+      <tr><td class="mono">{{ l.lot_no }}</td>
+      {% if l.inspection %}{% for c in cols %}{% set v = l.inspection['values'].get(c.item_key) if l.inspection['values'] else none %}
+        <td class="c{% if v and v.deviated %} dev{% endif %}">{% if v and v.value is not none %}{% if v.deviated %}▲ {% endif %}{{ v.value }}{% else %}-{% endif %}</td>{% endfor %}
+      {% else %}<td class="empty" colspan="{{ cols|length }}">{{ NOT_COLLECTED }}</td>{% endif %}</tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <h2>{{ t('롤') }} · ΔE · {{ t('불량') }}</h2>
+
+  <table>
+
+    <thead><tr><th class="c" style="width:7mm">#</th><th style="width:36mm">{{ t('롤 번호') }}</th><th class="c" style="width:18mm">{{ t('공정 구분') }}</th><th class="num" style="width:16mm">ΔE</th><th class="c" style="width:14mm">{{ t('판정') }}</th><th class="num" style="width:18mm">{{ t('길이(m)') }}</th><th class="num" style="width:18mm">{{ t('폭(mm)') }}</th><th>{{ t('불량') }}</th></tr></thead>
+
+    <tbody>
+
+    {% for l in lots %}
+
+      <tr><td class="c">{{ loop.index }}</td><td class="mono">{{ l.lot_no }}</td><td class="c">{{ l.process_type|txt }}{% if l.slit_seq %} #{{ l.slit_seq }}{% endif %}</td>
+
+          <td class="num{% if l.delta_e_deviated %} dev{% endif %}">{% if l.delta_e is not none %}{% if l.delta_e_deviated %}▲ {% endif %}{{ l.delta_e }}{% else %}{{ t('미수집') }}{% endif %}</td>
+
+          <td class="c">{{ l.judgement|txt(t('미수집')) }}</td><td class="num">{{ l.length_m|txt }}</td><td class="num">{{ l.width_mm|txt }}</td>
+
+          <td>{% for df in (l.defects or []) %}{{ df.defect_code }} {{ df.defect_name|txt('') }}{% if df.qty is not none %} {{ df.qty }}{% endif %}{% if df.position %} @{{ df.position }}{% endif %}{% if not loop.last %} · {% endif %}{% else %}-{% endfor %}</td></tr>
+
+    {% else %}
+
+      <tr><td colspan="8" class="empty">{{ t('미수집') }}</td></tr>
+
+    {% endfor %}
+
+    </tbody>
+
+  </table>
+
+  <div class="verdict">
+    <div class="sum">{{ t('종합 판정') }} — LOT <b>{{ sm.lot_count|txt('0') }}</b> {{ t('건 중') }} {{ t('합격') }} <b>{{ sm.passed|txt('0') }}</b> · {{ t('조건부') }} <b>{{ sm.conditional|txt('0') }}</b> · {{ t('불합격') }} <b>{{ sm.failed|txt('0') }}</b> · {{ t('검사 없음') }} <b>{{ sm.uninspected|txt('0') }}</b><br>
+      <small>{{ t('불합격이 1건이라도 있으면 불합격, 검사 없는 LOT 이 있으면 미확정으로 표시한다.') }}</small></div>
+    <div class="big judge" data-j="{{ judgement }}">{{ t(judgement) }}</div>
+  </div>
+
+  <div class="issue">
+    <div><h3>{{ t('발행') }}</h3>{{ doc.issued_by|txt }}<br>{{ doc.issued_at|dt }}</div>
+    <div><h3>{{ t('확인') }}</h3>&nbsp;</div>
+    <div class="seal">{{ t('직인 · 서명란 — 양식은 팩이 정한다') }}</div>
+  </div>
+
+  <footer class="foot">
+    <span>{{ t('이 문서는 발행 시점의 검사 결과 스냅샷이다. 재발행은 새 발행 번호로 한다.') }} · {{ t('출력') }} {{ printed_at|dt }} {{ printed_by|txt('') }}</span>
+    <span>{{ doc.document_no }}</span>
+  </footer>
+</article>
+</body>
+</html>

@@ -1,0 +1,51 @@
+{# X-PRT-01 판사양 관리 — F-X-PRT-01 등록 · 02 수정 · 03 삭제 · 04 조회 (printfilm · 개발2 · 최소 템플릿) #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.field('판 코드', 'code', q.code) }}
+{{ ui.field('판명', 'name', q.name) }}
+{{ ui.select('품목', 'item_id', product_options, q.item_id) }}
+{{ ui.select('사용 여부', 'use_yn', [('Y', 'Y'), ('N', 'N')], q.use_yn) }}
+{% endblock %}
+{% block grid %}
+<h2>{{ t('판사양') }} <small>X-PRT-01</small></h2>
+<table class="grid">
+  <thead><tr><th>{{ t('판 코드') }}</th><th>{{ t('판명') }}</th><th>{{ t('품목') }}</th><th>{{ t('도수') }}</th><th>{{ t('사양 메모') }}</th><th>{{ t('사용') }}</th><th>Job</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr><td><a href="{{ nav.path_of('X-PRT-01') }}?edit={{ r.id }}">{{ r.plate_code }}</a></td><td>{{ r.plate_name }}</td><td>{{ r.item_code|txt }} {{ r.item_name|txt('') }}</td>
+      <td>{{ r.color_count|txt(t('미확정')) }}</td><td>{{ r.spec_note|txt }}</td><td>{{ r.use_yn }}</td><td>{{ r.job_count }}</td>
+      <td><form method="post" action="{{ nav.path_of('X-PRT-01') }}/{{ r.id }}/delete" class="inline">{{ ui.write_button('삭제', user.can('F-X-PRT-03'), kind='ghost') }}</form></td></tr>
+  {% else %}
+  <tr><td colspan="8" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<section class="panel">
+  {% if editing %}
+  <h2>{{ t('판사양 수정') }} <small>F-X-PRT-02 · {{ editing.plate_code }}</small></h2>
+  <form method="post" action="{{ nav.path_of('X-PRT-01') }}/{{ editing.id }}" id="plate-form" class="form-grid">
+    {{ ui.field('판 코드', 'plate_code', editing.plate_code, readonly=true) }}
+    {{ ui.field('판명', 'plate_name', editing.plate_name, required=true) }}
+    {{ ui.select('품목', 'item_id', product_options, editing.item_id) }}
+    {{ ui.field('도수', 'color_count', editing.color_count, type='number') }}
+    {{ ui.field('사양 메모', 'spec_note', editing.spec_note) }}
+    {{ ui.select('사용 여부', 'use_yn', [('Y', 'Y'), ('N', 'N')], editing.use_yn) }}
+  </form>
+  {% else %}
+  <h2>{{ t('판사양 등록') }} <small>F-X-PRT-01</small></h2>
+  <form method="post" action="{{ nav.path_of('X-PRT-01') }}" id="plate-form" class="form-grid">
+    {{ ui.field('판 코드', 'plate_code', '', required=true) }}
+    {{ ui.field('판명', 'plate_name', '', required=true) }}
+    {{ ui.select('품목', 'item_id', product_options) }}
+    {{ ui.field('도수', 'color_count', '', type='number') }}
+    {{ ui.field('사양 메모', 'spec_note') }}
+  </form>
+  {% endif %}
+  <p class="notes">{{ t('도수 · 규격 값은 현업 확인 전이라 비워 둘 수 있다') }} — {{ ui.undecided('D-5nn', '규격값') }}</p>
+</section>
+{% endblock %}
+{% block actions %}
+<button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
+{% if editing %}{{ ui.write_button('수정', user.can('F-X-PRT-02'), form='plate-form') }}{% else %}{{ ui.write_button('등록', user.can('F-X-PRT-01'), form='plate-form') }}{% endif %}
+{% endblock %}

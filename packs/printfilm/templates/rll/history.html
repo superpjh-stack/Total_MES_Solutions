@@ -1,0 +1,48 @@
+{# X-RLL-03 롤 이력 — F-X-RLL-06 조회(?no= 스캔 · 롤 아님 422 재렌더) · 07 라벨 링크. 조상 인쇄 롤의 작업 실적까지 (G-C08) #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block body %}
+<section class="panel">
+  <h1>{{ t('롤 이력') }} <small>X-RLL-03</small></h1>
+  {% call ui.scan_box(nav.path_of('X-RLL-03'), name='no', label='롤 번호 스캔', method='get', placeholder=scan_no, button='확인') %}{% endcall %}
+  {% if scan_error %}<section class="result err" role="alert" id="scan-result"><p class="result-msg">{{ scan_error }} — {{ scan_no }}</p></section>{% endif %}
+</section>
+{% if roll %}
+<section class="panel">
+  <h2>{{ roll.lot_no }} <small>{{ t('롤') }} · {{ roll.process_type|txt(t('미확정')) }}{% if roll.slit_seq %} #{{ roll.slit_seq }}{% endif %}</small>
+    <a class="btn btn-sm" href="{{ label_url }}" target="_blank">{{ t('롤 라벨 출력') }}</a></h2>
+  <table class="grid">
+    <tbody>
+      <tr><th>Job</th><td>{{ roll.work_order_no|txt }} ({{ roll.job_status|txt }})</td><th>{{ t('상태') }}</th><td>{{ roll.state }}</td><th>{{ t('검사') }}</th><td>{{ roll.insp_status }}</td></tr>
+      <tr><th>{{ t('품목') }}</th><td>{{ roll.item_code|txt }} {{ roll.item_name|txt('') }}</td><th>{{ t('수량') }}</th><td>{{ roll.qty|num(3) }} {{ roll.unit|txt('') }}</td><th>{{ t('설비') }}</th><td>{{ roll.equip_code|txt }}</td></tr>
+      <tr><th>{{ t('길이(m)') }}</th><td>{{ roll.attrs.get('length_m')|txt }}</td><th>{{ t('폭(mm)') }}</th><td>{{ roll.attrs.get('width_mm')|txt }}</td><th>{{ t('생산 일시') }}</th><td>{{ roll.made_at|dt }}</td></tr>
+    </tbody>
+  </table>
+  <h3>{{ t('부모') }}</h3>
+  {% set prow = [] %}{% for e in parents %}{% set _ = prow.append([e.parent.no, e.parent.kind_label, e.relation, e.qty|num(3), e.parent.state]) %}{% endfor %}
+  {{ ui.grid(['번호', '종류', '관계', '수량', '상태'], prow) }}
+  <h3>{{ t('자식') }}</h3>
+  {% set crow = [] %}{% for e in children %}{% set _ = crow.append([e.child.no, e.child.kind_label, e.relation, e.qty|num(3), e.child.state]) %}{% endfor %}
+  {{ ui.grid(['번호', '종류', '관계', '수량', '상태'], crow) }}
+</section>
+<section class="panel">
+  <h2>{{ t('조상 인쇄 롤의 작업 실적') }} <small>{{ results|length }}</small></h2>
+  {% for r in results %}
+  <div class="card">
+    <b>{{ r.lot_no }}</b> · Job {{ r.work_order_no }} · {{ t('작업 시작') }} {{ r.started_at|dt }} · {{ t('작업 종료') }} {{ r.ended_at|dt }} · {{ t('양품') }} {{ r.good_qty|num(3) }} {{ r.unit|txt('') }} · {{ t('설비') }} {{ r.equip_code|txt }} · {{ t('작업자') }} {{ r.worker_name|txt }}
+    <div>{{ t('측정값') }}: {% for m in r.measures %}{{ m.key }}={{ m.value }}{% if not loop.last %} · {% endif %}{% else %}{{ NOT_COLLECTED }}{% endfor %}</div>
+    <div>{{ t('투입') }}: {% for i in r.inputs %}{{ i.lot_no }} {{ i.qty|num(3) }} {{ i.unit|txt('') }}{% if not loop.last %} · {% endif %}{% else %}{{ NOT_COLLECTED }}{% endfor %}</div>
+    <div>{{ t('정지') }} {{ r.stops|length }} · {{ t('폐기') }} {{ r.scraps|length }}</div>
+  </div>
+  {% else %}
+  <p class="empty">{{ NOT_COLLECTED }}</p>
+  {% endfor %}
+</section>
+{% else %}
+<section class="panel">
+  <h2>{{ t('최근 인쇄 롤') }}</h2>
+  {% set rrow = [] %}{% for r in recent %}{% set _ = rrow.append([r.lot_no, r.work_order_no|txt, r.qty|num(3), r.state, r.made_at|dt]) %}{% endfor %}
+  {{ ui.grid(['롤 번호', 'Job', '수량', '상태', '생산 일시'], rrow) }}
+</section>
+{% endif %}
+{% endblock %}

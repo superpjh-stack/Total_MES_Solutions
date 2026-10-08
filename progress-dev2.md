@@ -96,3 +96,48 @@ measure.values_of(work_result_id) -> {key: pop_measure 행} · measure.deviated(
 - **개발1**: 작업지시서는 `print/work_order.html` 이 `wo · bom_rows · params · barcode` 키 그대로 받는다(위 §1). `pop_work_result.worker_id` 는 `sys_user.worker_id` 를 기본으로 쓴다.
 - **개발3**: ① `routers/ifc.py` F-IFC-01 → `collect.CollectMessage.from_payload` + `collect.receive(cur, msg)`(§1 수신 예). ② `routers/shp.py` F-SHP-05/06 → `lineage.ship/unship(cur, shipment_id=, lot_id=, by=, user=)` · 출하 라벨 → `printing.render_print(request, "label_shipment", printing.shipment_label_for(id), screen_id="SHP-02")` · 성적서 → `render_print("document", {"doc": …, "snapshot": …}, screen_id="SHP-04")`. ③ `tests/test_arch_smoke::test_channel_layout_and_channel_rule` — KPI-01 HTML 에 `class="ch-board"` 가 없다.
 - **QA2**: 계보 행 수 대조는 `lineage.genealogy_rows(ids)` 또는 SQL. 테스트가 만든 LOT · 실적은 DB 에 남는다(유니크 키는 채번 · `T-…` 코드).
+
+## §3-B 요청 (웨이브 B · printfilm · 2026-10-09) — 코어 변경 요청 (`goal.md` §4.3 · 아키텍트가 `decisions.md` D-5nn 으로)
+
+| # | 어느 확장 지점이 왜 모자란가 | 코어의 어디를 어떻게 — 다른 팩도 쓰는가 | 팩의 임시 처리 |
+|---|---|---|---|
+| **CR-9 팩 시드** | E1 `seeds[]` 는 `codes* · items* · processes* · equipment* · partners*` 만 받고(`seed_core.seed_pack` 그 밖 SystemExit) `processes*` 의 `attrs.*` 열을 버린다. 팩 테이블(`x_<팩>_*`) · 불량코드 · 지표(`kpi_indicator`) 시드를 넣을 길이 없다. foodservice(`kpi_indicators.csv` · `bom_example.csv`) · kimchi 도 같다 | `seed_core`: ① `seeds[]` 항목을 `{file, table, key}` 로도 받아 `x_<팩>_*` · `kpi_indicator` · `bas_defect_code` 를 멱등 upsert ② 모든 기준정보 파일의 `attrs.<키>` 열을 attrs 로 ③ `process_params · inspection_items` 를 `seeds[]` **뒤에**(지금은 공정이 없으면 `bas_process_param.process_id` NOT NULL 로 실패) ④ `USERS` 를 역할 코드에서 유도(`QA` 고정 → 팩 역할 `QC` 의 계정 없음) | `seed/seed_pack.sql`(`\copy` 로 같은 CSV) 을 **`make db-seed` 앞에** 돌린다 · `qc` 는 F-SYS-01 로 |
+| **CR-8 스냅샷 훅** | E5 에 발행 스냅샷을 보강할 자리가 없다(`snapshot_extra`) | `shp.py` F-SHP-09: `packs.hook("snapshot_extra")(cur, snapshot, lots)` 또는 스냅샷에 `lot.attrs` 포함 — kimchi(염도) · foodservice 도 쓴다 | `validate_shp_document` 가 `row["snapshot"]` 을 제자리에서 보강(코어가 같은 객체를 저장) |
+| **CR-3 스캔 시점 훅** | `validate_lot_ship(cur, shipment, lot, user)` 없음 | `lineage.ship` 직전 한 자리 — kimchi 금속검출 미통과 스캔 거부도 같은 자리 | 승인 때 `validate_shipment` 로 일괄 |
+| **CR-10 G-P03 도구** | `check_trace` 는 `design_source` 가 있으면 `미검증`(import_design 출력 미연동) · `import_design.py` 는 `design.json` 만(설계도 HTML · README §1 매핑표 · `--pack` 없음) | `check_trace --pack` 이 `import_design --mapping packs/<팩>/README.md` 를 부르거나 매핑표 마크다운(§1.1)을 직접 읽어 고아 수를 판정 | README §1.1(32행 · 고아 0 · 밖 1 = JOB-02/CR-1) 수동 |
+| **CR-11 R9 범위** | 팩이 선언한 역할(`QC`) · 권한(관리자 `pop` 조회 · `eqp` 숨김) · 필수 attrs · 훅(`on_result_closed` 인쇄 공정만)이 코어 테스트의 전제(`qa` 계정 · 코어 권한 표 · 예시 공정으로 POP 종료)와 어긋난다 → `MES_PACK=printfilm uv run pytest tests/` 57 failed · 6 errors | R9 를 "코어 테스트는 **코어 단독** 전건 + 팩 폴더를 지운 채 전건" 으로 좁히거나, 코어 테스트가 `packs.current()` 의 역할 · 권한 · 시드 공정을 읽게 한다 | 코어 단독 통과만 보장 |
+| CR-4 lookup attrs | 그대로(코드 입력 + 훅 검증) | | |
+| CR-1 · CR-6 | 1차 범위 밖(D-503) · 이관 단계 | | |
+| SYS-04 t() | 접근 로그 화면이 기능명(계약 문구 '작업지시 등록' 등)을 `t()` 없이 찍는다 — G-P05 는 통과(같은 화면에 치환어도 있어서)하지만 엄격한 검사에서는 노출 | 개발1: `t(fn.name)` | 팩 테스트는 SYS-04 를 게이트 규칙으로만 본다 |
+
+## §4 웨이브 B 실측 — printfilm (2026-10-09)
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| **S1 계보 10행** | `lot_genealogy` = **투입 3 · splice 2 · 슬리팅 3 · 출하 2 = 10행** · `relation_base` 투입 3 · 합병 2 · 분할 3 · 출하 2 · ROLL 6 · ext 6(인쇄 2 · 후가공 1 · 슬리팅 3 · slit_seq 1,2,3) · 역추적 출하 LOT → M①② (edges 9) · 정방향 M① edges 9 · S③ 재고 · S①② 출하 · R①② F 소진 · 번호 M/J/R 형식 | `MES_PACK=printfilm uv run pytest -q packs/printfilm/tests/test_scenario_lineage.py::test_ten_rows` 1 passed |
+| S2 불합격 롤 출하 금지 | 스캔: 불합격 · 미검사 **422 validation_error**(코어) · 승인: 재검사 불합격 → **422 hook_rejected** 메시지에 롤 번호 · `shp_shipment.status=등록` · 출하 계보 1행 그대로 · 다른 Job 의 롤 승인 422 hook_rejected "한 Job 의 롤만" | `test_scenario_ship.py` 3 passed |
+| S3 COA | 번호 `C`+YYMMDD-+3 · snapshot.lots 2 각 `{delta_e, judgement, defects, length_m, width_mm, process_type=슬리팅, inspected_at, slit_seq}` · `shipment.shipment_lot_no` · 출력 제목 COA · 바코드 = 출하 LOT 번호 · '성적서' 노출 0 · 미승인 422 · 승인 뒤 새 검사 422 · 재발행 새 번호 · 이전 스냅샷 바이트 동일 | `test_scenario_coa.py` 1 passed |
+| 훅 6 | `on_result_closed` ROLL retag + ext · 인쇄 아닌 공정 422 hook_rejected(전체 되돌림) · `validate_job_work_order` 수주 상세 필수 · 제품만 · 없는/미사용 코드 422 · ext upsert 등록 · 수정 · 셋 다 비면 행 없음 · `validate_shipment` · `kpi_extra` 4 키(`pack:*` 지표 4 시드) | `test_hooks.py` 5 passed |
+| 기능 24 | F-X-PRT-01~12 · CLR-01~05 · RLL-01~07 전부 엔드포인트 + `@pytest.mark.fn` · `check_trace` 「팩 화면 7/7 · 기능 24/24」 · 고아 라우트 0 | `test_prt_api.py` 12 · `test_clr_api.py` 5 · `test_rll_api.py` 7 passed |
+| 팩 pytest | **39 passed** (9 파일) | `MES_PACK=printfilm uv run pytest -q packs/printfilm/tests` |
+| 코어 단독 pytest | **239 passed · 2 failed** — `tests/test_job_work_orders.py::{test_list_filters_and_progress_is_computed, test_status_board_today_week_and_drilldown}`(개발1 · 내 파일 아님) | `MES_PACK= uv run pytest -q tests/` (`make gate` 의 G-C21 행과 같다) |
+| 팩을 올린 코어 pytest (R9) | 178 passed · 57 failed · 6 errors — 사유 §3-B CR-11 | `MES_PACK=printfilm uv run pytest -q tests/` |
+| **G-P01** | `check_pack`: R2·R3 PASS(코어 DDL 0 · 생성 9 · 접두 밖 0) · R4~R6 PASS(모듈 15 · 화면 58 · 역할 4 · 용어 7) · R7 PASS(scope `lot` · 밖 0) · R8 PASS(직접 쓰기 0) · D-05 PASS(집계 0 · WHERE 0) · R10 WARN(덮어쓴 3 = README) · **R1 FAIL — 코어 해시 바뀜 27 · 생김 1**: `src/mescore/` 의 변동은 전부 다른 담당의 **커밋되지 않은 작업 트리**(`app.js` · `mobile.css` · `pop.css` · `templates/*` · `tools/gate.py` …, `git diff --name-only src/mescore` 45 파일). **내가 `src/mescore/**` 에 쓴 파일 0** (`git status packs/printfilm` 만 내 변경) | `MES_PACK=printfilm make check-pack` · `git status` |
+| G-P02 | PASS — 화면 7/7 · 기능 24/24 · 테이블 8/8 · 다른 접두 0 · 공통 컬럼 빠짐 0 | `make gate` |
+| G-P03 | **미검증** — `design_source` 설계도 HTML · `import_design` 미연동 (CR-10). 매핑표 README §1.1 32행 고아 0 | 〃 |
+| G-P04 | **PASS** — 시나리오 3 · 실행 3 · 실패 0 | 〃 |
+| G-P05 | **PASS** — 화면 57 · terms 키 7 · 치환 안 된 노출 0 | 〃 · `check_terms --pack` |
+| G-P06 | 미검증 (사람 실측) | |
+| 팩 DB · 시드 | `mes_printfilm_db` 테이블 60(52 + 8) · 뷰 3 · 권한 칸 60 · 역할 4(ADMIN PROD QC FIELD) · 채번 10(J L M R S C SO + 코어 X N + ISSUE) · 공정 구분 3 · 판사양 2 · 아니록스 2 · 잉크조성 2 · 조성 행 3 · 불량코드 4 · 지표 pack:* 4 · **`seed_pack.sql` → `db-seed` 2회 행 수 diff 0** | `psql -f packs/printfilm/seed/seed_pack.sql && MES_PACK=printfilm make db-seed` ×2 · `conn.table_counts()` diff |
+| 화면 캡처 | `outputs/e2e/printfilm/` 14장 — a0 메인(메뉴 순서 실적 현황 → 영업관리 → Job 관리 → 자재 · 입고 → 조색 기록 → 생산 실적 → 후가공 · 슬리팅 롤 이력 → 품질 → 출하 → LOT 추적 → 기준정보 → 인쇄 기준 → 시스템 → 인터페이스 · 설비 없음) · a2 판사양 · a4 Job · a10 조색 · a11 POP Roll · a13 롤 라벨 · a14 후가공 · a15 슬리팅 라벨 3장 · a16 롤 이력 · a21 출하 승인 · a22 COA · a24/a25 역·정방향 추적(모바일 390px) · a28 지표 | 서버 8042 · `MES_PACK=printfilm` |
+
+게이트 원문(`make gate` · printfilm 블록):
+```
+G-P01  격리 — 코어 해시 변동 0 · ALTER 0 · 경로 재정의 0 · scope 밖 쓰기 0  FAIL  검사 7 · 통과 못한 2 — R1 코어 파일 해시 변동 0: [printfilm] 바뀜 27 · 생김 1 · 없어짐 0 ['src/mescore/app/static/app.js', 'src/mescore/app/static/mobile.css', 'src/mescore/app/static/pop.css'] / R10 코어 템플릿 덮어쓰기 목록 (README.md 에 적는다): [printfilm] 덮어쓴 템플릿 ['print/document.html', 'print/label_lot.html', 'print/work_order.html']
+G-P02  규모 — 팩 화면 · 테이블 · 기능 수 = gates.yaml                  PASS  검사 2 전부 PASS
+G-P03  추적표 — 산출물 ID ↔ 화면 매핑 · 고아 0                          미검증  [printfilm] 추적표: design_source ../lcomFine MES/엘컴화인_MES_설계도 복사본.html · import_design 매핑 판정은 그 도구의 출력으로 (미구현)
+G-P04  시나리오 — gates.yaml: scenarios 재현                      PASS  [printfilm] 시나리오 3 · 실행 3 · 실패 0
+G-P05  용어 — terms 키 치환 안 된 노출 0                             PASS  [printfilm] 화면 57 · terms 키 7 · 치환 안 된 노출 0
+```
+
+미확정으로 둔 값(NULL · 화면 `미확정`): 도수 · 선수 · 셀 용적 · 기준 Lab · ΔE 상한(`inspection_items.csv` standard `(미확정)`) · 인쇄 속도 단위 · 슬리팅 분할 수 상한 · 프린터 규격(브라우저 인쇄) · LOT_SHIPMENT 형식(코어 X · D-501). 결정 후보 D-501~D-514 는 README §6 그대로 아키텍트에게.

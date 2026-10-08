@@ -1,0 +1,67 @@
+{# printfilm 롤 라벨 — 코어 print/label_lot.html 덮어쓰기(R10 · README §0). kind 로 3종 분기: MATERIAL 원재료 LOT · ROLL(process_type 인쇄/후가공/슬리팅) · 그 밖 코어 그대로.
+   롤 라벨: 롤 번호 바코드 · 공정 구분(분할 순번) · Job · 품목 · 길이 · 폭 · 생산 일시 (F-X-RLL-07 · F-POP-08). 바코드 값 = lot_no 글자 그대로 (G-C14).
+   ROLL 전용 키(process_type · slit_seq · length_m · width_mm · equip_code)는 rll 라우터(sh.roll_label)가 넣는다 — 코어 POP-04 가 그리면 없을 수 있으므로 있을 때만 찍는다.
+   원형(코어 개발2): LOT 라벨 — 100×50mm(기본) · 50×30mm(?size=50x30). 디자이너3 docs/design/print/label_lot.html 이식. 개발2 F-MAT-07 · F-POP-08 이
+   render_print("label_lot", {"labels": [printing.label_for(id, size=size)], "size": size, **label}) 로 부른다 — 키는 바꾸지 않는다.
+   label_for 키: lot_no kind kind_base kind_label item_code item_name spec qty unit made_at insp_status state work_order_no partner_name attrs[{label value}] size.
+   한 요청은 한 크기. labels[] 여러 장이면 .label 반복 = 페이지 하나씩. 바코드 값 = lot_no — POP 스캔칸에 넣으면 그 LOT 이 열린다(G-C14). 스타일은 static/print.css. #}
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ t('롤 라벨') if (labels and labels[0].kind == 'ROLL') else t('LOT 라벨') }} · {{ system_name }}</title>
+<link rel="stylesheet" href="/static/print.css?v={{ asset_v }}">
+<style>@media print{@page{size:{{ '50mm 30mm' if size == '50x30' else '100mm 50mm' }};margin:0}}</style>
+</head>
+<body data-print="label_lot" data-size="{{ size }}">
+<div class="toolbar no-print">
+  <span class="cap">{{ t('LOT 라벨') }} · {{ size }}mm · {{ t('바코드 값 = LOT 번호') }} · {{ t('배율 100% · 페이지에 맞춤 끔') }}</span>
+  <button class="btn" type="button" onclick="window.print()">{{ t('인쇄') }}</button>
+</div>
+
+<div class="labels">
+{% for l in labels %}
+<section class="label" data-size="{{ size }}" data-lot="{{ l.lot_no }}" data-kind="{{ l.kind }}">
+  {% if size == '50x30' %}
+  <div class="row1"><span class="item ell">{{ l.item_name|txt }}</span><span class="kind">{{ t(l.kind_label) }}</span></div>
+  {{ barcode_svg(l.lot_no, height=30) }}
+  <div class="lotno">{{ l.lot_no }}</div>
+  <div class="row4"><span class="qty">{{ l.qty|num(3) if l.qty is not none else '-' }} {{ l.unit|txt('') }}</span><span>{{ l.made_at|dt }}</span></div>
+  <div class="attrs">
+    {% if l.kind == 'ROLL' %}
+    <div><b>{{ l.process_type|txt(t('롤')) }}</b>{% if l.slit_seq %} #{{ l.slit_seq }}{% endif %} {{ l.work_order_no|txt('') }}</div>
+    <div><b>{{ t('폭') }}</b> {{ l.width_mm|txt }} · <b>{{ t('길이') }}</b> {{ l.length_m|txt }}</div>
+    {% else %}
+    <div>{% if l.work_order_no %}<b>{{ t('지시') }}</b> {{ l.work_order_no }}{% elif l.partner_name %}<b>{{ t('거래처') }}</b> {{ l.partner_name }}{% elif l.insp_status %}<b>{{ t('검사') }}</b> {{ t(l.insp_status) }}{% endif %}</div>
+    {% for a in l.attrs[:1] %}<div><b>{{ a.label }}</b> {{ a.value }}</div>{% endfor %}
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="row1">
+    <span><span class="kind">{{ t(l.kind_label) }}</span>&nbsp; {{ t(l.insp_status) if l.insp_status else '' }}</span>
+    <span>{{ l.made_at|dt }}</span>
+  </div>
+  <div class="item ell"><span class="mono">{{ l.item_code|txt }}</span>{{ l.item_name|txt }}</div>
+  {{ barcode_svg(l.lot_no, height=49) }}
+  <div class="lotno">{{ l.lot_no }}</div>
+  <div class="row5">
+    <div class="qty">{{ l.qty|num(3) if l.qty is not none else '-' }}<small>{{ l.unit|txt('') }}</small></div>
+    <div class="attrs">
+      {% if l.kind == 'ROLL' %}
+      <div><b>{{ t('공정 구분') }}</b> {{ l.process_type|txt(t('미확정')) }}{% if l.slit_seq %} #{{ l.slit_seq }}{% endif %}{% if l.work_order_no %} · <b>Job</b> {{ l.work_order_no }}{% endif %}{% if l.equip_code %} · {{ l.equip_code }}{% endif %}</div>
+      <div><b>{{ t('길이(m)') }}</b> {{ l.length_m|txt }} · <b>{{ t('폭(mm)') }}</b> {{ l.width_mm|txt }} · {{ l.insp_status|txt }}</div>
+      {% else %}
+      <div>{% if l.work_order_no %}<b>{{ t('지시') }}</b> {{ l.work_order_no }}{% endif %}{% if l.partner_name %}{% if l.work_order_no %} · {% endif %}<b>{{ t('거래처') }}</b> {{ l.partner_name }}{% endif %}{% if l.spec %} · {{ l.spec }}{% endif %}</div>
+      <div>{% for a in l.attrs[:2] %}<b>{{ a.label }}</b> {{ a.value }}{% if not loop.last %} · {% endif %}{% endfor %}</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</section>
+{% else %}
+<p class="empty-page">{{ NOT_COLLECTED }}</p>
+{% endfor %}
+</div>
+</body>
+</html>

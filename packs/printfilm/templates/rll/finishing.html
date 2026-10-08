@@ -1,0 +1,45 @@
+{# X-RLL-01 후가공 — F-X-RLL-01 후가공(1:1) · 02 splice(N:1) · 03 조회 (현장 POP · 롤을 하나씩 스캔해 ?rolls= 로 쌓는다 · 오류 422 재렌더 · data-scan 하나) #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block body %}
+<section class="panel">
+  <h1>{{ t('후가공') }} <small>X-RLL-01</small></h1>
+  {% call ui.scan_box(nav.path_of('X-RLL-01'), name='rolls', label='롤 스캔 (쌓기)', method='get', placeholder=scan_no, button='쌓기') %}
+    <input type="hidden" name="stacked" value="{{ stack_nos }}">
+  {% endcall %}
+  <script type="application/json" id="stack-nos">{{ stack_nos|tojson }}</script>
+  {% if scan_error %}<section class="result err" role="alert" id="scan-result"><p class="result-msg">{{ scan_error }} — {{ scan_no }}</p></section>{% endif %}
+  <p>{{ t('쌓인 롤') }} <b>{{ stack|length }}</b>{% if stack %}: {% for n in stack %}<code>{{ n.no }}</code> ({{ n.work_order_no|txt }} · {{ n.qty|num(3) }} {{ n.unit|txt('') }}){% if not loop.last %} · {% endif %}{% endfor %}{% endif %}</p>
+  {% if stack|length == 1 %}
+  <form method="post" action="{{ nav.path_of('X-RLL-01') }}" id="finish-form" class="form-grid">
+    <input type="hidden" name="roll_no" value="{{ stack[0].no }}">
+    {{ ui.select('설비', 'equipment_id', equipment_options) }}
+    {{ ui.field('길이(m)', 'length_m', '', type='number', step='any') }}{{ ui.field('폭(mm)', 'width_mm', '', type='number', step='any') }}
+    <div class="actions">{{ ui.write_button('후가공 실적 등록 (1:1)', user.can('F-X-RLL-01'), form='finish-form') }}</div>
+  </form>
+  {% elif stack|length >= 2 %}
+  <form method="post" action="{{ nav.path_of('X-RLL-01') }}/splice" id="splice-form" class="form-grid">
+    {% for n in stack %}<input type="hidden" name="roll_no" value="{{ n.no }}">{% endfor %}
+    {{ ui.select('설비', 'equipment_id', equipment_options) }}
+    {{ ui.field('길이(m)', 'length_m', '', type='number', step='any') }}{{ ui.field('폭(mm)', 'width_mm', '', type='number', step='any') }}
+    {{ ui.field('Job 번호 (부모 Job 이 서로 다를 때)', 'work_order_no') }}
+    <div class="actions">{{ ui.write_button('splice 등록 (' ~ stack|length ~ ':1)', user.can('F-X-RLL-02'), form='splice-form') }}</div>
+  </form>
+  {% endif %}
+</section>
+<section class="panel">
+  <h2>{{ t('후가공 롤') }}</h2>
+  <table class="grid">
+    <thead><tr><th>{{ t('롤 번호') }}</th><th>{{ t('부모 롤') }}</th><th>Job</th><th>{{ t('설비') }}</th><th>{{ t('길이(m)') }}</th><th>{{ t('수량') }}</th><th>{{ t('상태') }}</th><th>{{ t('생산 일시') }}</th><th>{{ t('라벨') }}</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr><td><a href="{{ nav.path_of('X-RLL-03') }}?no={{ r.lot_no }}">{{ r.lot_no }}</a></td><td>{{ r.parents|txt }}</td><td>{{ r.work_order_no|txt }}</td><td>{{ r.equip_code|txt }}</td>
+        <td>{{ r.attrs.get('length_m')|txt }}</td><td>{{ r.qty|num(3) }} {{ r.unit|txt('') }}</td><td>{{ r.state }}</td><td>{{ r.made_at|dt }}</td>
+        <td><a class="btn btn-sm" href="{{ label_path }}/{{ r.lot_no }}/label" target="_blank">{{ t('라벨') }}</a></td></tr>
+    {% else %}
+    <tr><td colspan="9" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

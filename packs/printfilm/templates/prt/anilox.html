@@ -1,0 +1,49 @@
+{# X-PRT-02 아니록스 관리 — F-X-PRT-05 등록 · 06 수정 · 07 삭제 · 08 조회 (printfilm · 개발2) #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.field('아니록스 코드', 'code', q.code) }}
+{{ ui.field('명칭', 'name', q.name) }}
+{{ ui.select('사용 여부', 'use_yn', [('Y', 'Y'), ('N', 'N')], q.use_yn) }}
+{% endblock %}
+{% block grid %}
+<h2>{{ t('아니록스') }} <small>X-PRT-02</small></h2>
+<table class="grid">
+  <thead><tr><th>{{ t('아니록스 코드') }}</th><th>{{ t('명칭') }}</th><th>{{ t('선수') }}</th><th>{{ t('셀 용적') }}</th><th>{{ t('비고') }}</th><th>{{ t('사용') }}</th><th>Job</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr><td><a href="{{ nav.path_of('X-PRT-02') }}?edit={{ r.id }}">{{ r.anilox_code }}</a></td><td>{{ r.anilox_name }}</td><td>{{ r.line_count|txt(t('미확정')) }}</td><td>{{ r.cell_volume|txt(t('미확정')) }}</td>
+      <td>{{ r.note|txt }}</td><td>{{ r.use_yn }}</td><td>{{ r.job_count }}</td>
+      <td><form method="post" action="{{ nav.path_of('X-PRT-02') }}/{{ r.id }}/delete" class="inline">{{ ui.write_button('삭제', user.can('F-X-PRT-07'), kind='ghost') }}</form></td></tr>
+  {% else %}
+  <tr><td colspan="8" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<section class="panel">
+  {% if editing %}
+  <h2>{{ t('아니록스 수정') }} <small>F-X-PRT-06 · {{ editing.anilox_code }}</small></h2>
+  <form method="post" action="{{ nav.path_of('X-PRT-02') }}/{{ editing.id }}" id="anilox-form" class="form-grid">
+    {{ ui.field('아니록스 코드', 'anilox_code', editing.anilox_code, readonly=true) }}
+    {{ ui.field('명칭', 'anilox_name', editing.anilox_name, required=true) }}
+    {{ ui.field('선수', 'line_count', editing.line_count, type='number', step='any') }}
+    {{ ui.field('셀 용적', 'cell_volume', editing.cell_volume, type='number', step='any') }}
+    {{ ui.field('비고', 'note', editing.note) }}
+    {{ ui.select('사용 여부', 'use_yn', [('Y', 'Y'), ('N', 'N')], editing.use_yn) }}
+  </form>
+  {% else %}
+  <h2>{{ t('아니록스 등록') }} <small>F-X-PRT-05</small></h2>
+  <form method="post" action="{{ nav.path_of('X-PRT-02') }}" id="anilox-form" class="form-grid">
+    {{ ui.field('아니록스 코드', 'anilox_code', '', required=true) }}
+    {{ ui.field('명칭', 'anilox_name', '', required=true) }}
+    {{ ui.field('선수', 'line_count', '', type='number', step='any') }}
+    {{ ui.field('셀 용적', 'cell_volume', '', type='number', step='any') }}
+    {{ ui.field('비고', 'note') }}
+  </form>
+  {% endif %}
+</section>
+{% endblock %}
+{% block actions %}
+<button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
+{% if editing %}{{ ui.write_button('수정', user.can('F-X-PRT-06'), form='anilox-form') }}{% else %}{{ ui.write_button('등록', user.can('F-X-PRT-05'), form='anilox-form') }}{% endif %}
+{% endblock %}

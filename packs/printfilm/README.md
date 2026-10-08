@@ -273,3 +273,41 @@
 | **D-514** | `rll` 라우터의 `lot` UPDATE | CR-2 전까지 `lineage.split/merge` 직후 같은 `tx` 에서 `update lot set process_id, equipment_id, attrs`. `write_scope.rll` 에 `lot` 이 있으므로 R7 안이고 R8(`lot_genealogy` · `sys_number_seq`) 밖이다. `check_pack` 이 이것을 잡으면 CR-2 를 앞당긴다 |
 
 미확정 값 요약 — 채번 형식 7종(가설) · `LOT_SHIPMENT` 형식 · 인쇄 속도 단위 · ΔE 상한 · 판사양 도수 · 아니록스 선수 · 셀 용적 · 잉크 기준 Lab · 불량 위치 형식 · 정지 사유 목록 · 슬리팅 분할 수 상한(엘컴화인 D-409) · COA 양식 항목 · 라벨 크기 · 심벌(D-04) · 실 고객 · 품목 · 규격값 전부.
+
+---
+
+## 구현 메모 (개발2 · 웨이브 B · 2026-10-09)
+
+기획 문서(§0~§6)는 그대로 두고 코드 · 테스트를 더했다. 아래는 **문서와 코드가 다른 곳**과 그 이유 — 코드가 맞다(CLAUDE.md).
+
+### 만든 것
+
+| 파일 | 내용 |
+|---|---|
+| `schema_ext.sql` | 테이블 8 = `schema_ext.md`. 1:1 ext 의 PK 겸 FK 컬럼명은 `_template` · `check_schema`(공통 컬럼 6) 규약대로 **`id`**(문서의 `lot_id` · `work_order_id` 와 같은 뜻). 코어 ALTER · 트리거 · 뷰 0 |
+| `hooks.py` | 훅 6 + 코어가 실제로 부르는 자리 2: `after_save_job_work_order`(D-504 — 등록 · 수정 모두 ext upsert · CR-5 대체) · `validate_shp_document`(스냅샷 보강 — CR-8 임시) |
+| `routers/{prt,clr,rll}.py` · `routers/_shared.py` | 기능 24 = 엔드포인트 24(`function-list.md` API 열 그대로). `rll` 의 계보는 `lineage.merge(relation="후가공"\|"splice", kind="ROLL", process_id=, equipment_id=, attrs=)` · `lineage.split(relation="슬리팅", …)` 만(D-503) — `lot_genealogy` 직접 SQL 0. `update lot` 은 둘(슬리팅 자식별 폭 attrs · splice 의 Job 지정 — D-514 · write_scope `lot`) |
+| `templates/{prt,clr,rll}/*.html` 7 · `templates/print/{label_lot,document,work_order}.html` 3(R10 덮어쓰기 — 위 §0 표와 같다) | 최소 템플릿 · `base.html` + `ui` 매크로 · 문구 `t()`. 롤 라벨은 kind=ROLL 분기(공정 구분 · 분할 순번 · Job · 길이 · 폭), COA 는 롤별 ΔE · 판정 · 불량 · 길이 · 폭 + 바코드 = 출하 LOT 번호, 작업지시서에 판사양 · 아니록스 · 잉크조성 |
+| `adapters/label_html.py` | `PrintAdapter`(코어 상속) — 브라우저 인쇄 `sent=False` + 양식 이름 검증(모르는 양식 ValueError) |
+| `seed/seed_pack.sql` | **코어 시드 로더가 받지 않는 시드**를 같은 CSV 에서 `\copy` 로 읽어 멱등 적재 — 판사양 · 아니록스 · 잉크조성(+조성 행) · 불량코드(`attrs.defect_group`) · 공정(`attrs.process_type`) · 품목 · 지표 4(`kpi_indicator calc_kind=pack:*`). 실행 순서 **`seed_pack.sql` → `make db-seed`**(코어가 `process_params`(EX-PR-10 참조)를 `seeds[]` 보다 먼저 넣어 공정이 없으면 실패한다). 2회 실행 행 수 diff 0 실측 |
+| `tests/` 9 파일 · 39 테스트 | `gates.yaml` S1~S3 + 훅 + 기능 24 마다 `@pytest.mark.fn` + 용어(G-P05) |
+
+### pack.yaml 에서 고친 것 (기획 값 → 동작하는 값)
+
+| 키 | 기획 | 고침 | 이유 |
+|---|---|---|---|
+| `screens[].channels` | `[web]` · `[pop]` | `[관리자 Web]` · `[현장 POP]` | 코어 `nav` 는 채널 **이름**(`core.yaml: devices`)만 받는다 — `[pop]` 이면 기동 거부 |
+| `menus.add[].owner` | 없음 | `개발2` | 팩 `function-list.md` 의 담당(개발2)과 모듈 owner 가 같아야 `contracts` 가 읽는다 |
+| `terms` | `실적: 작업 실적` · `추적: LOT 추적` | **뺐다** | `t()` 는 긴 키부터 부분 치환(D-07) — 코어 메뉴명 "생산실적" → "생산작업 실적", "LOT 추적" → "LOT LOT 추적"(값이 키를 품는 용어는 겹말). 나머지 7(`투입` 포함)은 그대로 |
+| `seeds[]` | 10 파일 | 5 파일 | 코어 `seed_core` 는 `codes* · items* · processes* · equipment* · partners*` 만 받는다(그 밖은 SystemExit). 나머지 5 는 `seed/seed_pack.sql` 이 같은 CSV 를 읽는다 |
+
+### 코어와 다른 점 · 임시 처리 (progress-dev2.md §3 의 코어 변경 요청)
+
+- **CR-2 · D-503** 해결됨 — `lineage.split/merge` 가 `process_id · equipment_id · attrs` 를 받는다. D-514 의 `update lot` 은 "자식별 폭(슬리팅)" 과 "splice 의 Job 지정" 둘만 남았다(설비 · 공정 · 길이는 인자로).
+- **CR-5** — `after_save_job_work_order`(D-504) 가 코어 `job.py` 에 이미 있어 `on_work_order_updated` 없이 등록 · 수정 모두 ext 를 쓴다. `validate_job_work_order` 는 검증만 한다(문서 §2 의 "검증 훅이 쓴다" 예외를 쓰지 않았다).
+- **CR-8** — 스냅샷 보강 훅이 없어 `validate_shp_document(cur, row, user)` 가 `row["snapshot"]`(코어가 같은 객체를 저장)을 제자리에서 보강한다. 발행 뒤 ext 가 바뀌어도 발행본은 불변(S3 재발행 바이트 대조).
+- **CR-3** — 출하 스캔 시점 훅 없음 → 다른 Job 의 롤은 승인 때 422(`validate_shipment`). 그대로.
+- **S2 6단계** — "스캔 뒤 재검사 불합격" 은 코어 F-QUA-04 가 스캔된 LOT(상태 `출하`)의 새 검사를 422 로 막는다(D-304). 테스트는 **스캔 전에 등록해 둔 검사를 스캔 뒤 불합격 판정**(F-QUA-05 는 출하 상태를 보지 않는다)으로 같은 상태를 만든다.
+- **계정 `qc`** — 코어 `seed_core.USERS` 가 역할 코드 `QA` 로 고정돼 팩 역할 `QC` 의 계정을 만들지 않는다. 테스트 · 화면 캡처는 관리자가 F-SYS-01 로 `qc` 를 만든다.
+- **G-P03** — `check_trace` 는 `design_source` 가 있으면 `import_design` 출력을 기다리며 `미검증`, `import_design.py` 는 `design.json` 만 읽는다(설계도 HTML · README §1 매핑표 미지원 · `--pack` 없음). 매핑표 자체는 §1.1(32행 · 고아 0 · 밖 1 = JOB-02/CR-1) 에 있다.
+- **R9(코어 테스트를 팩을 올린 채로)** — `MES_PACK=printfilm uv run pytest tests/` 는 57 failed · 6 errors. 원인은 팩이 선언한 업종 규칙이 코어 테스트의 전제와 다른 것: 역할 `QA`→`QC`(계정 `qa` 없음) · 권한 표(관리자 `pop` 조회 · `eqp` 숨김 403) · `on_result_closed` 가 인쇄 공정(`attrs.process_type=인쇄`)이 아닌 코어 예시 공정의 종료를 422 · `bas_process.attrs.process_type` 필수. 코어 수정 없이 팩이 풀 수 없다 — §3 요청.

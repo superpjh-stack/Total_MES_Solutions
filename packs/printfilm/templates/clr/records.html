@@ -1,0 +1,53 @@
+{# X-CLR-01 조색 기록 — F-X-CLR-01 등록 · 02 배합비 · 03 수정 · 04 삭제 · 05 조회 (현장 POP · Job 스캔 ?no= · 없는 Job 422 재렌더 · data-scan 하나) #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block body %}
+<section class="panel">
+  <h1>{{ t('조색 기록') }} <small>X-CLR-01</small></h1>
+  {% call ui.scan_box(nav.path_of('X-CLR-01'), name='no', label='Job 번호 스캔', method='get', placeholder=scan_no, button='확인') %}{% endcall %}
+  {% if scan_error %}<section class="result err" role="alert" id="scan-result"><p class="result-msg">{{ scan_error }} — {{ scan_no }}</p></section>{% endif %}
+</section>
+{% if job %}
+<section class="panel">
+  <h2>Job {{ job.work_order_no }} <small>{{ job.status }}</small></h2>
+  <form method="post" action="{{ nav.path_of('X-CLR-01') }}" id="record-form" class="form-grid">
+    <input type="hidden" name="work_order_no" value="{{ job.work_order_no }}">
+    {{ ui.field('색 이름', 'color_name', '', required=true) }}
+    {{ ui.field('차수 (비우면 마지막 + 1)', 'seq_no', '', type='number') }}
+    {{ ui.field('L', 'color_l', '', type='number', step='any') }}{{ ui.field('a', 'color_a', '', type='number', step='any') }}{{ ui.field('b', 'color_b', '', type='number', step='any') }}
+    {{ ui.select('기준 잉크조성', 'ink_code', ink_options) }}
+    {{ ui.field('비고', 'note') }}
+    <div class="actions">{{ ui.write_button('조색 기록 등록', user.can('F-X-CLR-01'), form='record-form') }}</div>
+  </form>
+</section>
+{% endif %}
+<section class="panel">
+  <h2>{{ t('조색 기록') }} <small>{{ frm }} ~ {{ to }}{% if job %} · {{ job.work_order_no }}{% endif %}</small></h2>
+  <form class="search-form" method="get" id="screen-search">
+    <input type="hidden" name="no" value="{{ job.work_order_no if job else '' }}">
+    {{ ui.field('기간 시작', 'frm', frm, type='date') }}{{ ui.field('기간 끝', 'to', to, type='date') }}
+    <button type="submit" class="btn">{{ t('조회') }}</button>
+  </form>
+  <table class="grid">
+    <thead><tr><th>#</th><th>Job</th><th>{{ t('색 이름') }}</th><th>{{ t('차수') }}</th><th>L · a · b</th><th>{{ t('기준 잉크') }}</th><th>{{ t('배합비') }}</th><th>{{ t('기록 일시') }}</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr><td>{{ r.id }}</td><td><a href="{{ nav.path_of('X-CLR-01') }}?no={{ r.work_order_no }}">{{ r.work_order_no }}</a></td><td>{{ r.color_name }}</td><td>{{ r.seq_no }}</td>
+        <td>{{ r.color_l|txt }} · {{ r.color_a|txt }} · {{ r.color_b|txt }}</td><td>{{ r.ink_code|txt }}</td><td>{{ r.mix|txt(NOT_COLLECTED) }}{% if r.mix %} (= {{ r.mix_sum|num(3) }})
+        {% endif %}</td><td>{{ r.recorded_at|dt }}</td>
+        <td>
+          <form method="post" action="{{ nav.path_of('X-CLR-01') }}/{{ r.id }}/mix" class="form-grid inline">
+            {% for m in r.mix_rows %}<input type="text" name="component_name" value="{{ m.component_name }}" size="8"><input type="number" name="ratio_pct" value="{{ m.ratio_pct }}" step="0.001" size="6">{% endfor %}
+            <input type="text" name="component_name" placeholder="{{ t('성분명') }}" size="8"><input type="number" name="ratio_pct" placeholder="%" step="0.001" size="6">
+            {{ ui.write_button('배합비 등록', user.can('F-X-CLR-02'), kind='ghost') }}
+          </form>
+          <form method="post" action="{{ nav.path_of('X-CLR-01') }}/{{ r.id }}/delete" class="inline">{{ ui.write_button('삭제', user.can('F-X-CLR-04'), kind='ghost') }}</form>
+        </td></tr>
+    {% else %}
+    <tr><td colspan="9" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="notes">{{ t('배합비는 소수 셋째 자리로 반올림해 저장하고 저장되는 값의 합이 100 이어야 한다') }}</p>
+</section>
+{% endblock %}

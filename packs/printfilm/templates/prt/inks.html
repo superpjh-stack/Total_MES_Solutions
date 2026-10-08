@@ -1,0 +1,59 @@
+{# X-PRT-03 잉크조성 관리 — F-X-PRT-09 등록(+조성 행) · 10 수정 · 11 삭제 · 12 조회 (printfilm · 개발2) #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.field('잉크 코드', 'code', q.code) }}
+{{ ui.field('잉크명', 'name', q.name) }}
+{{ ui.field('색 이름', 'color', q.color) }}
+{{ ui.select('사용 여부', 'use_yn', [('Y', 'Y'), ('N', 'N')], q.use_yn) }}
+{% endblock %}
+{% block grid %}
+<h2>{{ t('잉크조성') }} <small>X-PRT-03</small></h2>
+<table class="grid">
+  <thead><tr><th>{{ t('잉크 코드') }}</th><th>{{ t('잉크명') }}</th><th>{{ t('색 이름') }}</th><th>L · a · b</th><th>{{ t('조성 행') }}</th><th>{{ t('사용') }}</th><th>Job · {{ t('조색') }}</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr><td><a href="{{ nav.path_of('X-PRT-03') }}?id={{ r.id }}">{{ r.ink_code }}</a></td><td>{{ r.ink_name }}</td><td>{{ r.color_name|txt }}</td>
+      <td>{{ r.target_l|txt(t('미확정')) }} · {{ r.target_a|txt(t('미확정')) }} · {{ r.target_b|txt(t('미확정')) }}</td><td>{{ r.component_count }}</td><td>{{ r.use_yn }}</td><td>{{ r.job_count }} · {{ r.record_count }}</td>
+      <td><form method="post" action="{{ nav.path_of('X-PRT-03') }}/{{ r.id }}/delete" class="inline">{{ ui.write_button('삭제', user.can('F-X-PRT-11'), kind='ghost') }}</form></td></tr>
+  {% else %}
+  <tr><td colspan="8" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if opened %}
+<section class="panel">
+  <h2>{{ opened.ink_code }} {{ opened.ink_name }} <small>{{ t('조성 행') }}</small></h2>
+  {% set crow = [] %}{% for c in components %}{% set _ = crow.append([c.seq_no, c.component_name, c.ratio_pct|num(3) ~ ' %']) %}{% endfor %}
+  {{ ui.grid(['#', '성분명', '비율'], crow) }}
+  <h2>{{ t('잉크조성 수정') }} <small>F-X-PRT-10 — {{ t('조성 행은 통째로 바꿔 넣는다') }}</small></h2>
+  <form method="post" action="{{ nav.path_of('X-PRT-03') }}/{{ opened.id }}" id="ink-form" class="form-grid">
+    {{ ui.field('잉크 코드', 'ink_code', opened.ink_code, readonly=true) }}
+    {{ ui.field('잉크명', 'ink_name', opened.ink_name, required=true) }}
+    {{ ui.field('색 이름', 'color_name', opened.color_name) }}
+    {{ ui.field('기준 L', 'target_l', opened.target_l, type='number', step='any') }}{{ ui.field('기준 a', 'target_a', opened.target_a, type='number', step='any') }}{{ ui.field('기준 b', 'target_b', opened.target_b, type='number', step='any') }}
+    {{ ui.field('비고', 'note', opened.note) }}
+    {{ ui.select('사용 여부', 'use_yn', [('Y', 'Y'), ('N', 'N')], opened.use_yn) }}
+    {% for c in components %}{{ ui.field('성분명 ' ~ loop.index, 'component_name', c.component_name) }}{{ ui.field('비율 % ' ~ loop.index, 'ratio_pct', c.ratio_pct, type='number', step='0.001') }}{% endfor %}
+    {{ ui.field('성분명 (추가)', 'component_name') }}{{ ui.field('비율 % (추가)', 'ratio_pct', '', type='number', step='0.001') }}
+  </form>
+</section>
+{% else %}
+<section class="panel">
+  <h2>{{ t('잉크조성 등록') }} <small>F-X-PRT-09</small></h2>
+  <form method="post" action="{{ nav.path_of('X-PRT-03') }}" id="ink-form" class="form-grid">
+    {{ ui.field('잉크 코드', 'ink_code', '', required=true) }}
+    {{ ui.field('잉크명', 'ink_name', '', required=true) }}
+    {{ ui.field('색 이름', 'color_name') }}
+    {{ ui.field('기준 L', 'target_l', '', type='number', step='any') }}{{ ui.field('기준 a', 'target_a', '', type='number', step='any') }}{{ ui.field('기준 b', 'target_b', '', type='number', step='any') }}
+    {{ ui.field('비고', 'note') }}
+    {% for i in range(1, 4) %}{{ ui.field('성분명 ' ~ i, 'component_name') }}{{ ui.field('비율 % ' ~ i, 'ratio_pct', '', type='number', step='0.001') }}{% endfor %}
+  </form>
+  <p class="notes">{{ t('기준 조성은 비율 합 100 을 강제하지 않는다 — 배합비(조색 기록)만 100 을 검사한다') }}</p>
+</section>
+{% endif %}
+{% endblock %}
+{% block actions %}
+<button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
+{% if opened %}{{ ui.write_button('수정', user.can('F-X-PRT-10'), form='ink-form') }}{% else %}{{ ui.write_button('등록', user.can('F-X-PRT-09'), form='ink-form') }}{% endif %}
+{% endblock %}

@@ -1,0 +1,52 @@
+{# X-RLL-02 슬리팅 — F-X-RLL-04 분할 등록 · 05 조회 (?parent= 자식 N + 라벨 N장 한 번에 인쇄 · data-scan 하나) #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block body %}
+<section class="panel">
+  <h1>{{ t('슬리팅') }} <small>X-RLL-02</small></h1>
+  {% call ui.scan_box(nav.path_of('X-RLL-02'), name='parent', label='롤 스캔', method='get', placeholder=scan_no, button='확인') %}{% endcall %}
+  {% if scan_error %}<section class="result err" role="alert" id="scan-result"><p class="result-msg">{{ scan_error }} — {{ scan_no }}</p></section>{% endif %}
+  <form method="post" action="{{ nav.path_of('X-RLL-02') }}" id="slit-form" class="form-grid">
+    {{ ui.field('부모 롤 번호', 'roll_no', parent.no if parent else scan_no, required=true) }}
+    {{ ui.field('분할 수', 'count', '', type='number', required=true) }}
+    {{ ui.field('폭(mm) — 쉼표로 분할 수만큼', 'widths_mm') }}
+    {{ ui.field('길이(m)', 'length_m', '', type='number', step='any') }}
+    {{ ui.select('설비', 'equipment_id', equipment_options) }}
+    <div class="actions">{{ ui.write_button('슬리팅 분할 등록', user.can('F-X-RLL-04'), form='slit-form') }}</div>
+  </form>
+  <p class="notes">{{ t('분할 수 상한') }} {{ ui.undecided('D-5nn') }}</p>
+</section>
+{% if parent %}
+<section class="panel">
+  <h2>{{ parent.no }} → {{ t('슬리팅 롤') }} {{ labels|length }} <small>{{ parent.state }}</small> {{ ui.print_button('라벨 ' ~ labels|length ~ '장 인쇄') }}</h2>
+  <div class="sheet" style="display:flex;flex-wrap:wrap;gap:12px">
+  {% for l in labels %}
+  <section class="label" data-size="{{ size }}" data-lot="{{ l.lot_no }}" style="width:100mm;border:1px solid #bbb;padding:3mm;background:#fff;page-break-after:always">
+    <div><span class="tag">{{ t('롤') }} · {{ l.process_type|txt }} #{{ l.slit_seq|txt }}</span> {{ l.work_order_no|txt }}</div>
+    <div>{{ l.item_code|txt }} {{ l.item_name|txt('') }}</div>
+    {{ barcode_svg(l.lot_no, height=40) }}
+    <div class="lotno" style="text-align:center;font-family:monospace">{{ l.lot_no }}</div>
+    <div>{{ l.qty|num(3) }} {{ l.unit|txt('') }} · {{ t('폭') }} {{ l.width_mm|txt }} · {{ t('길이') }} {{ l.length_m|txt }} · {{ l.made_at|dt }}</div>
+  </section>
+  {% else %}
+  <p class="empty">{{ NOT_COLLECTED }}</p>
+  {% endfor %}
+  </div>
+</section>
+{% endif %}
+<section class="panel">
+  <h2>{{ t('슬리팅 롤') }}</h2>
+  <table class="grid">
+    <thead><tr><th>{{ t('롤 번호') }}</th><th>{{ t('부모 롤') }}</th><th>{{ t('분할 순번') }}</th><th>Job</th><th>{{ t('폭(mm)') }}</th><th>{{ t('수량') }}</th><th>{{ t('상태') }}</th><th>{{ t('생산 일시') }}</th><th>{{ t('라벨') }}</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr><td><a href="{{ nav.path_of('X-RLL-03') }}?no={{ r.lot_no }}">{{ r.lot_no }}</a></td><td><a href="{{ nav.path_of('X-RLL-02') }}?parent={{ r.parents }}">{{ r.parents|txt }}</a></td><td>{{ r.slit_seq|txt }}</td><td>{{ r.work_order_no|txt }}</td>
+        <td>{{ r.attrs.get('width_mm')|txt }}</td><td>{{ r.qty|num(3) }} {{ r.unit|txt('') }}</td><td>{{ r.state }}</td><td>{{ r.made_at|dt }}</td>
+        <td><a class="btn btn-sm" href="{{ label_path }}/{{ r.lot_no }}/label" target="_blank">{{ t('라벨') }}</a></td></tr>
+    {% else %}
+    <tr><td colspan="9" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
