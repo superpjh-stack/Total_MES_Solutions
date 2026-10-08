@@ -1,4 +1,4 @@
 indicator_key,name,unit,target_value,calc_kind,visible_yn,seq,base_value,formula,note
 hourly_output,시간당 생산량,인분/시간,350,pack:hourly_output,Y,1,300,Σ 배치 양품 인분 ÷ Σ 가동시간(h),TD1 kpi_effects 생산성 300 → 350 (16.7% — 계획서 16% 는 오기 · 니즈푸드 D-12)
-defect_rate,완제품 불량률,%,6.5,pack:defect_rate,Y,2,7.5,Σ 불량 인분 ÷ Σ (양품 + 불량) × 100,TD1 kpi_effects 품질 7.5 → 6.5 (월 3,500인분 기준 6.51% · 3,200 대입은 오기 D-12)
+defect_rate,완제품 불량률,%,6.5,pack:defect_rate,Y,2,7.5,Σ 불량 인분 ÷ Σ (양품 + 불량) × 100,"TD1 kpi_effects 품질 7.5 → 6.5 (월 3,500인분 기준 6.51% · 3,200 대입은 오기 D-12)"
 recipe_std_rate,레시피 표준화율,%,90,pack:recipe_std_rate,Y,3,0,활성 레시피가 있는 메뉴 수 ÷ 전체 메뉴 수 × 100,TD1 kpi_effects 표준화 0 → 90 — 분모(전체 레시피 모집단) (미확정 D-10)

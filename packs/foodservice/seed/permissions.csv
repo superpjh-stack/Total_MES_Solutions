@@ -2,11 +2,11 @@ menu_code,role_code,level,scopes
 bas,ADMIN,입력,일반
 ord,ADMIN,입력,일반
 job,ADMIN,입력,일반
-mat,ADMIN,입력,일반|입고검사
+mat,ADMIN,입력,일반·입고검사
 pop,ADMIN,입력,일반
 qua,ADMIN,조회,
 eqp,ADMIN,입력,일반
-shp,ADMIN,입력,일반|승인
+shp,ADMIN,입력,일반·승인
 trc,ADMIN,조회,
 kpi,ADMIN,입력,지표
 sys,ADMIN,입력,일반
@@ -38,7 +38,7 @@ ifc,NUTRITIONIST,없음,
 bas,WORKER,조회,
 ord,WORKER,조회,
 job,WORKER,조회,
-mat,WORKER,입력,일반|입고검사
+mat,WORKER,입력,일반·입고검사
 pop,WORKER,입력,일반
 qua,WORKER,입력,일반
 eqp,WORKER,입력,일반

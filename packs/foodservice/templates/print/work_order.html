@@ -1,0 +1,113 @@
+{# 조리 지시서 — foodservice 팩이 코어 print/work_order.html 을 덮어쓴 양식 (pack-contract R10 · README §6 · 개발1).
+   코어 양식(개발2)의 data 계약(wo · bom_rows · params · printed_at · printed_by · barcode_svg)은 그대로 쓰고, 레시피 절을 더한다:
+   wo.attrs.recipe = validate_job_work_order 가 지시 시점에 고정한 레시피 스냅샷 {version batch_serve_qty cook_step_desc caution_note lines[{seq item_code item_name qty unit per_serving loss_rate}]}
+   bom_rows[].lot_no = on_work_order_created 가 채운 FIFO 추천 LOT(유통기한 오름차순). 값이 없으면 `-` · 목록 없음 `미수집` · 기준인분 없음 `(미확정)`. #}
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ t('작업지시') }} · {{ wo.work_order_no }} · {{ system_name }}</title>
+<link rel="stylesheet" href="/static/print.css?v={{ asset_v }}">
+<style>@media print{@page{size:A4 portrait;margin:14mm 12mm}}</style>
+</head>
+<body data-print="work_order">
+<div class="toolbar no-print">
+  <span class="cap">{{ t('작업지시') }} · A4 · {{ t('바코드 값 = 지시 번호') }}</span>
+  <button class="btn" type="button" onclick="window.print()">{{ t('인쇄') }}</button>
+</div>
+
+<article class="sheet" data-print="work_order" data-no="{{ wo.work_order_no }}">
+  <header class="sheet-head">
+    <div>
+      <h1>{{ t('작업지시') }}</h1>
+      <p class="no">{{ t('지시 번호') }} <strong>{{ wo.work_order_no }}</strong><span class="status">{{ wo.status|txt }}</span></p>
+      <p class="no meta">{{ t('등록') }} {{ wo.created_at|dt }} · {{ wo.created_by|txt }}</p>
+    </div>
+    <div class="code">
+      {{ barcode if barcode else barcode_svg(wo.work_order_no, height=53) }}
+      <div class="txt">{{ wo.work_order_no }}</div>
+      <div class="cap">{{ t('지시 번호 바코드') }} · Code128</div>
+    </div>
+  </header>
+
+  <table class="kv">
+    <tbody>
+      <tr><th>{{ t('품목') }}</th><td><span class="mono">{{ wo.item_code|txt }}</span> {{ wo.item_name|txt }}</td><th>{{ t('규격 · 단위') }}</th><td>{{ wo.spec|txt }} · {{ wo.unit|txt }}</td></tr>
+      <tr><th>{{ t('공정') }}</th><td>{{ wo.process_name|txt }}</td><th>{{ t('설비') }}</th><td><span class="mono">{{ wo.equipment_code|txt('') }}</span> {{ wo.equipment_name|txt }}</td></tr>
+      <tr><th>{{ t('계획 수량') }}</th><td><b>{{ wo.plan_qty|num(3) if wo.plan_qty is not none else '-' }}</b> {{ wo.unit|txt('') }}</td><th>{{ t('계획일') }}</th><td>{{ wo.plan_date|dt('%Y-%m-%d') }}</td></tr>
+      <tr><th>{{ t('생산계획') }}</th><td class="mono">{{ wo.plan_no|txt }}</td><th>{{ t('BOM') }} {{ t('버전') }}</th><td>{{ wo.bom_version|txt }}</td></tr>
+      <tr><th>{{ t('수주') }}</th><td><span class="mono">{{ wo.order_no|txt }}</span>{% if wo.partner_name %} · {{ wo.partner_name }}{% endif %}</td><th>{{ t('납기') }}</th><td>{{ wo.due_date|dt('%Y-%m-%d') }}</td></tr>
+      <tr><th>{{ t('비고') }}</th><td colspan="3">{{ wo.note|txt }}</td></tr>
+    </tbody>
+  </table>
+
+  <h2>{{ t('BOM') }} <small>{{ t('지시 시점 버전 고정') }}</small></h2>
+  {% set rc = (wo.attrs or {}).get('recipe') %}
+  <table>
+    <tbody>
+      <tr><th>{{ t('BOM') }} {{ t('버전') }}</th><td>{{ (rc.version if rc else wo.bom_version)|txt }}</td>
+          <th>{{ t('배치(솥) 기준인분') }}</th><td>{% if rc and rc.batch_serve_qty is not none %}<b>{{ rc.batch_serve_qty|num(2) }}</b> {{ t('인분') }}{% else %}{{ t('(미확정)') }}{% endif %}</td></tr>
+      <tr><th>{{ t('조리순서') }}</th><td colspan="3">{{ (rc.cook_step_desc if rc else none)|txt }}</td></tr>
+      <tr><th>{{ t('주의사항') }}</th><td colspan="3"><b>{{ ((wo.attrs or {}).get('caution_note') or (rc.caution_note if rc else none))|txt }}</b></td></tr>
+    </tbody>
+  </table>
+  <table>
+    <thead><tr><th class="c" style="width:8mm">#</th><th style="width:28mm">{{ t('품목 코드') }}</th><th>{{ t('구성품') }}</th><th class="num" style="width:26mm">{{ t('배합량') }} (1{{ t('솥') }})</th><th class="num" style="width:26mm">{{ t('1인량') }}</th><th style="width:12mm">{{ t('단위') }}</th><th class="num" style="width:18mm">{{ t('손실률') }} %</th></tr></thead>
+    <tbody>
+    {% for r in (rc.lines if rc else []) %}
+      <tr><td class="c">{{ r.seq }}</td><td class="mono">{{ r.item_code|txt }}</td><td>{{ r.item_name|txt }}</td><td class="num">{{ r.qty|num(3) }}</td>
+          <td class="num">{{ r.per_serving|num(4) if r.per_serving is not none else t('(미확정)') }}</td><td>{{ r.unit|txt }}</td><td class="num">{{ r.loss_rate|num(1) }}</td></tr>
+    {% else %}
+      <tr><td colspan="7" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>{{ t('소요 품목') }} <small>{{ t('식수') }} {{ wo.plan_qty|num(0) if wo.plan_qty is not none else '-' }} {{ wo.unit|txt('') }} × {{ t('1인량') }} · {{ t('지정 LOT') }} = {{ t('유통기한 순 추천') }}</small></h2>
+  <table>
+    <thead><tr><th class="c" style="width:8mm">#</th><th style="width:28mm">{{ t('품목 코드') }}</th><th>{{ t('품목명') }}</th><th class="num" style="width:22mm">{{ t('소요량') }}</th><th style="width:12mm">{{ t('단위') }}</th><th style="width:36mm">{{ t('지정 LOT') }}</th><th style="width:40mm">{{ t('투입 LOT (기록)') }}</th></tr></thead>
+    <tbody>
+    {% for r in bom_rows %}
+      <tr><td class="c">{{ r.seq }}</td><td class="mono">{{ r.item_code|txt }}</td><td>{{ r.item_name|txt }}</td><td class="num">{{ r.required_qty|num(3) if r.required_qty is not none else '-' }}</td><td>{{ r.unit|txt }}</td><td class="mono">{{ r.lot_no|txt }}</td><td class="blank"></td></tr>
+    {% else %}
+      <tr><td colspan="7" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>{{ t('공정 측정값 기록') }} <small>{{ t('공정 측정값 정의(BAS-04)에서 생성 · 종료 때 POP 에 같은 칸이 뜬다') }}</small></h2>
+  <table>
+    <thead><tr><th class="c" style="width:8mm">#</th><th>{{ t('항목') }}</th><th style="width:14mm">{{ t('단위') }}</th><th style="width:30mm">{{ t('기준 (하한 ~ 상한)') }}</th><th class="c" style="width:12mm">{{ t('필수') }}</th><th style="width:36mm">{{ t('기록값') }}</th><th style="width:26mm">{{ t('시각') }}</th></tr></thead>
+    <tbody>
+    {% for p in params %}
+      <tr><td class="c">{{ p.seq if p.seq is not none else loop.index }}</td><td>{{ t(p.label) }}{% if p.source == 'collect' %} <small>{{ t('수집') }}</small>{% endif %}</td><td>{{ p.unit|txt }}</td>
+          <td class="range">{% if p.min_value is not none or p.max_value is not none %}{{ p.min_value|txt }} ~ {{ p.max_value|txt }}{% else %}-{% endif %}</td>
+          <td class="c">{{ '●' if p.required_yn == 'Y' else '' }}</td>
+          {% if p.source == 'collect' %}<td class="auto">{{ t('자동 수집 — 기록 불필요') }}</td><td class="auto"></td>{% else %}<td class="blank"></td><td class="blank"></td>{% endif %}</tr>
+    {% else %}
+      <tr><td colspan="7" class="empty">{{ NOT_COLLECTED }} — {{ t('이 공정에 측정값 정의가 없다') }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>{{ t('작업 기록') }} <small>{{ t('손으로 적는 칸 · 전산 입력은 POP-02') }}</small></h2>
+  <table>
+    <thead><tr><th>{{ t('작업 시작') }}</th><th>{{ t('작업 종료') }}</th><th class="num">{{ t('양품 수량') }}</th><th class="num">{{ t('불량 수량') }}</th><th>{{ t('작업자') }}</th><th>{{ t('설비') }}</th></tr></thead>
+    <tbody><tr><td class="blank"></td><td class="blank"></td><td class="blank"></td><td class="blank"></td><td class="blank"></td><td class="blank"></td></tr></tbody>
+  </table>
+
+  <div class="sign">
+    <div>{{ t('작성') }}<span>{{ wo.created_by|txt('') }}</span></div>
+    <div>{{ t('검토') }}<span></span></div>
+    <div>{{ t('작업자') }}<span></span></div>
+    <div>{{ t('확인') }}<span></span></div>
+  </div>
+
+  <footer class="foot">
+    <span>{{ t('출력') }} {{ printed_at|dt }} · {{ printed_by|txt }}</span>
+    <span>{{ t('바코드 값 = 지시 번호. 스캔칸에 넣으면 그 지시가 열린다.') }}</span>
+  </footer>
+</article>
+</body>
+</html>

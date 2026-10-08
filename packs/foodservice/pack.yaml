@@ -36,11 +36,11 @@ menus:
     ord: 영업 · 수주
     mat: 자재 · 입고
     job: 조리 지시
-    pop: 조리 실적 (POP)
+    pop: 실적 (POP)                 # 코어가 메뉴 이름에도 t() 를 적용해 '실적'→'조리 실적' 으로 바뀐다 — 치환 전 꼴로 둔다 (기획값 '조리 실적 (POP)' 을 그대로 두면 '조리 조리 실적' · 개발1)
     qua: 품질 · 검식
     eqp: 설비
     shp: 출고
-    trc: 배치 추적
+    trc: 추적                       # 〃 '추적'→'배치 추적' (기획값 '배치 추적' 은 '배치 배치 추적' 이 된다)
     kpi: KPI · 현황판
     sys: 시스템
     ifc: 설비 수집
@@ -88,9 +88,19 @@ attrs:
     - { key: expiry_mng_yn,  label: 유통기한관리,      type: bool }                                          # Y 면 입고 때 유통기한 필수 (validate_mat_receipt)
     - { key: spare_rate,     label: 여유율(%),         type: number }                                        # 일부 원물·공산품 2%
     - { key: partner_code,   label: 주거래처,          type: text }
+    # ↓ 개발1 추가 — 폼 입력 경로. after_save_bas_item 이 x_foodservice_item_ext 로 복사한다 (hooks.md §10 의 "폼 → attrs → 훅이 ext 복사" 패턴 · D-504)
+    - { key: cook_process_code, label: 조리공정구분,   type: select, choices: [PRC-030, PRC-040, PRC-050, PRC-060] }   # → item_ext.cook_process_id
+    - { key: storage_temp,   label: 보관기준온도(℃),   type: number }                                        # → item_ext.storage_temp
   bas_bom:
     - { key: cook_step_desc, label: 조리순서 설명,     type: text }                                          # 작업지시서 출력에 찍는다
     - { key: caution_note,   label: 주의사항,          type: text }
+    # ↓ 개발1 추가 — 배치(솥) 기준인분 입력 칸. validate_bas_bom 이 필수 · > 0 검사, after_save_bas_bom 이 x_foodservice_bom_ext 로 복사
+    - { key: batch_serve_qty, label: 배치(솥) 기준인분, type: number, required: true }
+  bas_process:
+    # ↓ 개발1 추가 — after_save_bas_process → x_foodservice_process_ext (값 없음 = 미확정 D-506)
+    - { key: collect_type,   label: 수집 방식,         type: select, choices: [자동(PLC), 반자동(POP), 수동] }
+    - { key: std_lead_min,   label: 표준 소요시간(분), type: number }
+    - { key: batch_std_qty,  label: 배치(솥) 기준수량, type: number }
   bas_partner:
     - { key: biz_no,         label: 사업자등록번호,    type: text }
     - { key: delivery_addr,  label: 납품지 주소,       type: text }
@@ -103,9 +113,17 @@ attrs:
     - { key: maker_model,    label: 제조사·모델,       type: text }
     - { key: comm_type,      label: 통신방식,          type: select, choices: [RS-485, Ethernet, 수동] }
     - { key: install_loc,    label: 설치위치,          type: text }
+    # ↓ 개발1 추가 — after_save_bas_equipment → x_foodservice_equipment_ext (on_collect 판정값)
+    - { key: storage_kind,   label: 냉장/냉동 구분,    type: select, choices: [냉장, 냉동] }
+    - { key: temp_limit,     label: 임계온도(℃ 상한), type: number }
+    - { key: humi_limit,     label: 습도 상한(%RH),    type: number }
+    - { key: collect_path,   label: 수집 경로,         type: select, choices: [PLC(Ethernet), RS-485→Edge] }
   ord_order:
     - { key: src_system,     label: 연계출처,          type: select, choices: [SCM, 수기입력] }
     - { key: if_dt,          label: 연계일시,          type: text }
+    # ↓ 개발1 추가 — after_save_ord_order → x_foodservice_order_ext (정렬 · 검색 키)
+    - { key: due_time,       label: 납기시간(HH:MM),   type: text }
+    - { key: service_type,   label: 급식유형,          type: select, choices: [이동급식, 위탁급식] }
   ord_plan:
     - { key: line,           label: 조리라인(솥그룹),  type: text }
     - { key: resched_reason, label: 재스케줄 사유,     type: text }
@@ -117,7 +135,9 @@ attrs:
   pop_stop:
     - { key: fault_ref,      label: 연결 설비이상,     type: text }
     - { key: delay_desc,     label: 지연내용,          type: text }
-  mat_receipt:
+  # mat_receipt 의 보관위치 · 입고 시 보관온도는 lot 로 옮겼다 — 코어 F-MAT-01 은 폼의 attr_* 를 `read_attrs(form, "lot")` 로 읽어 lot 과 mat_receipt 둘 다에 저장한다 (개발1 구현 메모)
+  lot:
+    - { key: expiry_date,    label: 유통기한,          type: date }                                          # MAT-01 폼 → lot.attrs → on_lot_created 가 x_foodservice_lot_ext.expiry_date 로 (hooks.md §10)
     - { key: storage_loc,    label: 보관위치,          type: select, choices: [냉장보관실, 냉동보관실, 실온보관실, 조리장] }
     - { key: storage_temp,   label: 입고 시 보관온도,  type: number }
   mat_stock_trx:
@@ -134,6 +154,11 @@ attrs:
     - { key: fault_type,     label: 이상유형,          type: select, choices: [고장, 오작동, 통신단절, 센서이상] }
   sys_user:
     - { key: org_type,       label: 소속구분,          type: select, choices: [관리자, 영양사, 현장작업자, 외부업체] }
+  qua_insp_plan:
+    # ↓ 개발1 추가 — after_save_qua_insp_plan → x_foodservice_insp_plan_ext (샘플링 빈도 "10솥당 1솥" 파싱 · D-204)
+    - { key: sample_freq,    label: 샘플링 빈도,       type: text }
+    - { key: sample_qty,     label: 샘플링 수량,       type: number }
+    - { key: apply_from,     label: 적용시작일,        type: date }
 
 # ── E3 공정 측정값 · 검사 항목 ───────────────────────────────────────────────────
 process_params: seed/process_params.csv     # 교반기 RPM · 교반시간 · 조리온도 (collect, 취사·볶음) · 조리시간 (manual, 조리)
@@ -158,13 +183,13 @@ adapters:
   erp: null            # SCM 연계 규격 미정의 → 501 미확정 (D-511)
   printing: null       # 바코드 라벨 없음(AD2-012 "바코드를 사용하지 않고") — 브라우저 인쇄. print/work_order.html 만 덮어쓴다 (README §6)
 
-seeds:
+seeds:                                                  # seed_core 가 받는 이름만 (pack-contract.md §2: codes* items* processes* equipment* partners*)
   - seed/codes.csv
   - seed/processes.csv
   - seed/equipment.csv
-  - seed/kpi_indicators.csv
   - seed/partners_example.csv
   - seed/items_example.csv
-  - seed/bom_example.csv
+  # seed/kpi_indicators.csv · seed/bom_example.csv · 역할별 계정 6 · attrs → ext 복사는 `MES_PACK=foodservice uv run python packs/foodservice/seed_pack.py` 가
+  # 코어 API(F-KPI-06 · F-BAS-05 · F-SYS-01)와 hooks.sync_ext 로 넣는다 — seed_core 는 그 이름을 거부한다 (개발1 구현 메모 · README §10)
 tests: tests/
 gates: gates.yaml

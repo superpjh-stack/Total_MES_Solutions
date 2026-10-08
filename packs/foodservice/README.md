@@ -188,8 +188,9 @@
 | 파일 | 왜 |
 |---|---|
 | `templates/print/work_order.html` | 작업지시서에 레시피(구성품 · 배합량 · 배치 기준인분) · 조리순서 · 주의사항 · 투입 LOT 추천(유통기한 순)을 찍는다 — TD3-017 "레시피 · 주의사항 미리보기" · TD4-017 기능 2 |
+| `templates/sys/logs.html` | (개발1 웨이브 B 추가) SYS-04 「상세」 칸에 `\|t` 한 줄 — 코어 `audit.log_change` 가 기능 이름(중립어 '작업 종료' · '출하 LOT 스캔')을 `detail.name` 에 그대로 저장하고 코어 양식이 `t()` 없이 찍어 G-P05 에 걸린다. 코어가 고치면 지운다 (`progress-dev1.md` §3) |
 
-그 밖의 코어 템플릿은 덮어쓰지 않는다. `check_pack` WARN 목록이 이 1건과 같아야 한다.
+그 밖의 코어 템플릿은 덮어쓰지 않는다. `check_pack` WARN 목록이 이 2건과 같아야 한다.
 
 ---
 
@@ -246,3 +247,57 @@ E1~E7 로 **충분한 것**(코어 변경 불필요)이지만 적어 두는 것:
 | SCM 연계 규격 | `adapters.erp: null` | D-03 |
 | 불량사유 코드값 | `codes.csv` 에 없음(`bas_defect_code` 비움) | D-10 — 도입기업 입력 |
 | 교반기 제어 방식(EOCR vs 인버터) | 코어 무관(제어 없음) | D-13 — 참고 |
+
+---
+
+## 10. 구현 메모 (개발1 · 웨이브 B · 2026-10-09)
+
+기획 문서(§1~§9)는 손대지 않았다. 코드 · 시드 · 테스트를 더했고, 코어가 받지 못하는 꼴만 바꿨다. 실측은 `progress-dev1.md` §4.
+
+### 10.1 만든 것
+
+| 파일 | 내용 |
+|---|---|
+| `schema_ext.sql` | `schema_ext.md` 의 8 테이블 그대로 (`x_foodservice_item_ext · bom_ext · process_ext · equipment_ext · order_ext · lot_ext · insp_plan_ext · env_alarm`) · 공통 컬럼 6 · 코어 ALTER 0 |
+| `hooks.py` | `hooks.md` 12 (`validate_bas_bom` · `validate_job_work_order` · `on_work_order_created` · `on_result_closed` · `on_inspection_judged` · `validate_shipment` · `on_collect` · `kpi_extra` 7지표 · `validate_pop_input` · `validate_mat_receipt` · `on_lot_created` · `validate_qua_issue`) + `on_work_order_canceled`(D-505 · 소요량 되돌림) + ext 복사 `after_save_bas_item / bas_bom / bas_process / bas_equipment / ord_order / qua_insp_plan`(D-504) + `sync_ext`(시드 따라잡기). 쓰기 대상 = `mat_requirement · job_lot · qua_issue · lot(lineage.retag) · x_foodservice_*` 뿐 |
+| `templates/print/work_order.html` | 조리 지시서 — 레시피 절(버전 고정 · 배치 기준인분 · 조리순서 · 주의사항 · 배합량 · 1인량) + 소요 품목의 지정 LOT = FIFO 추천. 레시피는 `validate_job_work_order` 가 지시 시점에 `job_work_order.attrs.recipe` 로 고정한 스냅샷을 찍는다 |
+| `templates/sys/logs.html` | §6 참조 — 「상세」 칸 `\|t` 한 줄 (G-P05) |
+| `seed_pack.py` | 코어 시드 + 팩 시드 + 코어 API 로만 넣는 것(레시피 F-BAS-05 · KPI 지표 F-KPI-06 · 역할 6 계정 F-SYS-01 · 설비 · 거래처 attrs F-BAS-18/22) + `sync_ext`. 2회 실행 행 수 diff 0. 코어 테이블 SQL 0 |
+| `tests/` | `gates.yaml` S1~S8 8파일 + `test_hooks_unit.py` + `test_pack_smoke.py` = 19 테스트. 코어 API 만 부른다(픽스처용 SQL 은 시작 시각 당기기 · 앞선 실행의 수집값 정리 뿐) |
+
+### 10.2 기획값과 다르게 둔 것 (코어가 받는 꼴로)
+
+| 어디 | 기획 | 구현 | 왜 |
+|---|---|---|---|
+| `seed/permissions.csv` scopes | `일반\|입고검사` | `일반·입고검사` | 로더 `packs._read_permissions_csv` 가 `·` `,` 만 가른다 (D-512 "로더 형식이 다르면 그것으로") |
+| `seed/items_example.csv` 헤더 | `menu_type …` | `attrs.menu_type …` | `seed_core` 의 `items*` 로더가 `attrs.<키>` 열만 attrs 로 읽는다. `cook_process_code` · `storage_temp` 도 attrs 로 들어가고 `sync_ext` 가 ext 로 복사 |
+| `seed/inspection_items.csv` 공정 · 최종 행 | `process_code PRC-070 / PRC-080` | 비움 | 코어 `qua.plan_for_lot` 이 `(process_id is null or = lot.process_id)` 로 고르므로 배치 LOT(조리 공정 PRC-060)에 PRC-080 항목이 붙지 않는다 |
+| `seed/kpi_indicators.csv` | note 에 `3,500` 따옴표 없음 | 따옴표 | CSV 열 밀림 |
+| `pack.yaml: seeds` | `bom_example.csv` · `kpi_indicators.csv` 포함 | 제외 → `seed_pack.py` | `seed_core` 가 `codes* items* processes* equipment* partners*` 밖은 거부한다 |
+| `pack.yaml: attrs` | — | `bas_item.cook_process_code/storage_temp` · `bas_bom.batch_serve_qty(필수)` · `bas_process.collect_type/std_lead_min/batch_std_qty` · `bas_equipment.storage_kind/temp_limit/humi_limit/collect_path` · `ord_order.due_time/service_type` · `lot.expiry_date/storage_loc/storage_temp` · `qua_insp_plan.sample_freq/sample_qty/apply_from` 추가 | ext 값의 **입력 경로**. 코어 폼은 `attr_<키>` 만 받으므로 `hooks.md` §10 의 "폼 → attrs → 훅이 ext 복사" 를 전 ext 에 적용했다. `mat_receipt` 의 보관위치 · 보관온도는 `lot` 로 옮겼다 — 코어 F-MAT-01 이 `read_attrs(form, "lot")` 로 읽어 lot · mat_receipt 둘 다에 저장한다 |
+| `pack.yaml: menus.rename` | `pop: 조리 실적 (POP)` · `trc: 배치 추적` | `pop: 실적 (POP)` · `trc: 추적` | 코어가 메뉴 이름에도 `t()` 를 적용해 '조리 조리 실적' · '배치 배치 추적' 이 됐다 — 치환 전 꼴로 두면 화면은 기획값과 같다 |
+| `function-list.md` 절 번호 | 표가 §1 · `(없음)` 행 | 머리행만 있는 표를 §2 로 | 코어 `contracts._parse` 가 §2 에서 13열 표를 읽고 행을 기능으로 센다 |
+| `gates.yaml: template_overrides` | 1건 | 2건 (`sys/logs.html` 추가) | §6 |
+| ISSUE 채번 | `(미확정)` QI-… | 코어 `ISSUE` 규칙(`Q-YYMMDD-nnn` · D-202)을 쓴다 | 니즈푸드 목업 `QI-260812-01` 은 `pack.yaml: numbering` 에 넣지 않았다 — 도입기업 확인 전까지 코어 기본 |
+
+### 10.3 가설 · 미확정으로 둔 것 (D-5nn 후보 — 오케스트레이터가 옮긴다)
+
+- **급식 규칙의 적용 범위 = 팩 품목**: `hooks._pack_item` — `x_foodservice_item_ext` 행이 있거나 `bas_item.attrs` 에 팩 속성 키(`menu_type · material_type · expiry_mng_yn …`)가 있는 품목에만 `validate_bas_bom · validate_job_work_order · on_work_order_created · on_result_closed(BATCH 재태깅) · validate_shipment(원료 출고 금지)` 가 돈다. 검식 규칙은 `kind=BATCH` LOT 에만. 코어 예시 데이터(`-EX-` · attrs `{}`)는 중립 흐름으로 통과 — pack-contract R9(팩을 올린 채 코어 테스트)를 위한 가설.
+- `validate_shipment` R1' (같은 지시 안 최종 합격 1건이면 다른 배치도 통과 · 불합격 1건이면 전부 거부) — `hooks.md` §6 의 가설 그대로. 영양사 확인 필요.
+- `x_foodservice_lot_ext.input_type`: collect 측정값이 있으면 `자동(PLC)`, 없으면 로그인 채널 pop → `POP수동` · mobile → `스마트패드` · 그 밖 NULL(미확정). 코어 F-POP-03 이 실적 attrs 를 받지 않아 폼 값은 없다.
+- `kpi_extra` 의 `target · base · note` 는 `seed/kpi_indicators.csv` 에서 읽는다(코어 `kpi_indicator` 에 기준값 칸이 없다). `recipe_std_rate` 분모 note `(미확정 D-10)` · 범위 NULL 측정값은 어떤 값도 이탈이 아니다(D-506).
+- `x_foodservice_insp_plan_ext` 는 0행 — 샘플링 빈도 원문이 니즈푸드 시드에 없고 코어 QUA-01 폼이 attrs 를 받지 않는다(`after_save_qua_insp_plan` 은 dict 로 단위 검증).
+- `validate_pop_input` 의 FIFO 경고는 `row["attrs"]["fifo_warning"]` 에 남기지만 코어 `pop_input` 저장 경로가 attrs 를 쓰지 않아 화면에 나오지 않는다(거부는 하지 않는다 — 사양 그대로).
+- 로그인 화면의 개발용 바로 로그인 버튼(D-605)은 코어 역할 4 이름이라 이 팩에서는 `관리자` 만 맞다 — 코어 `login.html`(개발1 웨이브 A 파일) 몫.
+
+### 10.4 실행 순서
+
+```
+createdb -h /tmp mes_foodservice_db
+MES_PACK=foodservice MES_PG_DSN=postgresql:///mes_foodservice_db make db-schema
+MES_PACK=foodservice MES_PG_DSN=postgresql:///mes_foodservice_db uv run python packs/foodservice/seed_pack.py      # 2회 멱등 · 이후 make db-seed 도 멱등
+MES_PACK=foodservice MES_PG_DSN=postgresql:///mes_foodservice_db uv run pytest -q packs/foodservice/tests           # 19 passed
+MES_PACK=foodservice MES_PG_DSN=postgresql:///mes_foodservice_db make pack-check check-pack check-schema check-trace check-terms
+MES_PACK=foodservice uv run python src/mescore/tools/import_design.py                                                # G-P03
+MES_PACK=foodservice MES_PG_DSN=postgresql:///mes_foodservice_db MES_PORT=8041 make run
+```

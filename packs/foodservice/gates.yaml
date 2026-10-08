@@ -105,4 +105,4 @@ seed_counts:                 # G-C09 팩판 — make db-seed ×2 diff 0 · 아�
   bas_bom_example_rows: 2
   x_foodservice_equipment_ext_with_limit: 1      # EQ-TC-05 만 임계가 있다
 
-template_overrides: [templates/print/work_order.html]   # check_pack WARN 목록과 같아야 한다 (README §6)
+template_overrides: [templates/print/work_order.html, templates/sys/logs.html]   # check_pack WARN 목록과 같아야 한다 (README §6 · sys/logs.html 은 개발1 웨이브 B 추가)
