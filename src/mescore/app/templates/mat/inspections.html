@@ -1,30 +1,70 @@
-{# MAT-02 입고검사 — F-MAT-04 판정 · F-MAT-05 조회 (스캔 ?no= · 없는 번호는 이 화면 422 재렌더 · data-scan 하나) #}
-{% extends "base.html" %}
+{# MAT-02 입고검사 — F-MAT-04 판정 · F-MAT-05 조회 (스캔 ?no= · 없는 번호는 이 화면 422 재렌더 · data-scan 하나 · S-11).
+   POP: docs/design/pop/mat_inspections_pop.html — LOT 스캔 → 검사 항목(측정값 폼과 같은 모양 mf.measure_fields) → 판정 3버튼 → 미검사 LOT.
+   ctx: rows · lot · plan · fields · judgement_options · scan_no · scan_error · last #}
+{% extends "pop/_layout.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "home/_measure.html" as mf %}
-{% block body %}
-<section class="panel">
-  <h1>{{ t('입고검사') }} <small>MAT-02</small></h1>
-  {% call ui.scan_box(nav.path_of('MAT-02'), name='no', label='원재료 LOT 스캔', method='get', placeholder=scan_no, button='확인') %}{% endcall %}
-  {% if scan_error %}<section class="result err" role="alert" id="scan-result"><p class="result-msg">{{ scan_error }} — {{ scan_no }}</p></section>{% endif %}
-</section>
-{% if lot %}
-<section class="panel">
-  <h2>{{ lot.no }} <small>{{ lot.item_code }} {{ lot.item }} · {{ lot.qty|num(3) }} {{ lot.unit|txt('') }} · {{ t('검사') }} {{ lot.insp_status }}</small></h2>
-  {% if last %}<p>{{ t('최근 검사') }} {{ last.inspected_at|dt }} · {{ last.judgement|txt }}</p>{% endif %}
-  <form method="post" action="{{ nav.path_of('MAT-02') }}" id="judge-form">
-    <input type="hidden" name="lot_id" value="{{ lot.id }}">
+{% import "pop/_ui.html" as pui %}
+
+{% macro lot_form() %}
+<form method="post" action="{{ nav.path_of('MAT-02') }}" id="judge-form">
+  <input type="hidden" name="lot_id" value="{{ lot.id }}">
+  <section class="panel">
+    <h2>{{ t('원재료 LOT') }} <small><code>{{ lot.no }}</code> · {{ pui.badge(lot.insp_status) }}</small></h2>
+    <dl class="kv">
+      <dt>{{ t('품목') }}</dt><dd>{{ lot.item_code|txt('') }} {{ lot.item|txt }}</dd>
+      <dt>{{ t('수량') }}</dt><dd class="num">{{ lot.qty|num(3) }} {{ lot.unit|txt('') }}</dd>
+      <dt>{{ t('상태') }}</dt><dd>{{ pui.badge(lot.state) }}</dd>
+      {% if last %}<dt>{{ t('최근 검사') }}</dt><dd>{{ last.inspected_at|dt }} · {{ last.judgement|txt }}</dd>{% endif %}
+    </dl>
+  </section>
+  <section class="panel">
+    <h2>{{ t('검사 항목') }} <small>{{ t('검사 계획(입고)에서 자동 — 측정값 폼과 같은 모양') }}</small></h2>
     {{ mf.measure_fields(fields) }}
-    {{ ui.select('판정', 'judgement', judgement_options, '', required=true) }}
-    {{ ui.field('비고', 'note') }}
-    <div class="actions">{{ ui.write_button('판정 저장', user.can('F-MAT-04'), form='judge-form') }}</div>
-  </form>
-</section>
+  </section>
+  <section class="panel">
+    <h2>{{ t('판정') }} <small>{{ t('하나를 누르고 저장 — 판정 뒤 수정은 새 검사로') }}</small></h2>
+    {% set j_opts = [] %}
+    {% for v, label in judgement_options %}{% set _ = j_opts.append((v, label, {'합격': 'ok', '조건부': 'warn', '불합격': 'err'}.get(v, ''))) %}{% endfor %}
+    {{ pui.choice('judgement', j_opts, required=true, cols='c3 big') }}
+    <div class="field" style="margin-top:10px"><label for="insp_note">{{ t('비고') }} <small>{{ t('선택') }}</small></label><input id="insp_note" type="text" name="note" maxlength="200"></div>
+    <div style="margin-top:10px">{{ ui.write_button('판정 저장', user.can('F-MAT-04'), form='judge-form', kind='primary btn-big') }}</div>
+  </section>
+</form>
+{% endmacro %}
+
+{% block pop_body %}
+{% call ui.scan_box(nav.path_of('MAT-02'), name='no', label='원재료 LOT 바코드 스캔', method='get', placeholder=scan_no or 'LM-', button='확인') %}{% endcall %}
+{% if lot %}
+{{ pui.banner(ok=lot.no ~ ' — ' ~ t('항목을 넣고 판정합니다')) }}
+<div class="steps"><div class="step done">1 {{ t('LOT 스캔') }}</div><div class="step on">2 {{ t('검사 항목') }}</div><div class="step">3 {{ t('판정') }}</div></div>
+{{ lot_form() }}
+{% else %}
+{{ pui.banner(error=scan_error, fields=fields if scan_error else []) }}
 {% endif %}
 <section class="panel">
-  <h2>{{ t('원재료 LOT') }} <small>{{ t('미검사 우선') }}</small></h2>
-  {% set rows_ = [] %}
-  {% for r in rows %}{% set _ = rows_.append([r.lot_no, r.item_code ~ ' ' ~ r.item_name, r.partner_name|txt, r.qty|num(3) ~ ' ' ~ r.unit|txt(''), r.insp_status, r.made_at|dt]) %}{% endfor %}
-  {{ ui.grid(['원재료 LOT', '품목', '거래처', '수량', '검사', '입고'], rows_) }}
+  <h2>{{ t('원재료 LOT') }} <small>{{ t('미검사 우선') }} · {{ rows|selectattr('insp_status', 'equalto', '미검사')|list|length }}{{ t('건') }}</small></h2>
+  <table class="list">
+    <thead><tr><th>{{ t('입고') }}</th><th>{{ t('원재료 LOT') }}</th><th>{{ t('품목') }}</th><th>{{ t('수량') }}</th><th>{{ t('검사') }}</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr><td>{{ r.made_at|dt('%m-%d %H:%M') }}</td><td><code>{{ r.lot_no }}</code></td><td>{{ r.item_code }} {{ r.item_name }}</td><td class="num">{{ r.qty|num(3) }} {{ r.unit|txt('') }}</td><td>{{ pui.badge(r.insp_status) }}</td>
+      <td class="act"><a class="btn{% if r.insp_status == '미검사' %} btn-primary{% endif %}" href="{{ nav.path_of('MAT-02') }}?no={{ r.lot_no }}">{{ t('검사') }}</a></td></tr>
+    {% else %}
+    <tr><td colspan="6" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
 </section>
 {% endblock %}
+
+{% block grid %}
+<h2>{{ t('입고검사') }}</h2>
+{% call ui.scan_box(nav.path_of('MAT-02'), name='no', label='원재료 LOT 스캔', method='get', placeholder=scan_no, button='확인') %}{% endcall %}
+{% if scan_error %}<section class="result err" role="alert" id="scan-result"><p class="result-msg">{{ scan_error }}</p></section>{% endif %}
+{% if lot %}{{ lot_form() }}{% endif %}
+{% set rows_ = [] %}
+{% for r in rows %}{% set _ = rows_.append([('<a href="?no=' ~ r.lot_no ~ '">' ~ r.lot_no ~ '</a>')|safe, r.item_code ~ ' ' ~ r.item_name, r.partner_name|txt, r.qty|num(3) ~ ' ' ~ r.unit|txt(''), r.insp_status, r.made_at|dt]) %}{% endfor %}
+{{ ui.grid(['원재료 LOT', '품목', '거래처', '수량', '검사', '입고'], rows_) }}
+{% endblock %}
+{% block actions %}{% endblock %}

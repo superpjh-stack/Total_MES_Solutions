@@ -1,15 +1,40 @@
-/* 공통 UI 동작 — 좌측 메뉴 접기 · 목록 정렬 · 쪽 넘김 · 알림 팝업 · 스캔칸 포커스 · 현황판 자동 새로고침.
-   외부 라이브러리 0. 실패를 조용히 삼키지 않는다(콘솔에 그대로 남긴다). 스크립트는 이 파일 하나다 (CLAUDE.md). */
+/* 공통 UI 동작 — 좌측 메뉴 접기 · 목록 정렬 · 쪽 넘김 · 알림 팝업 · 스캔칸 포커스(POP S-01~S-14) · 현황판 자동 새로고침.
+   외부 라이브러리 0. 실패를 조용히 삼키지 않는다(콘솔에 그대로 남긴다). 스크립트는 이 파일 하나다 (CLAUDE.md).
+   POP 동작 사양 S-01~S-14 는 docs/design/README.md "POP · 모바일" §2 — 번호를 주석에 그대로 적는다. */
 (function () {
   "use strict";
 
-  /* 좌측 메뉴 접기/펼치기 — 메뉴를 누르면 그 화면 목록이 펼쳐지고, 펼쳐져 있던 다른 메뉴는 접힌다 */
+  /* 좌측 메뉴 접기/펼치기 — 메뉴를 누르면 그 화면 목록이 펼쳐지고, 펼쳐져 있던 다른 메뉴는 접힌다 (base.html .mg > button.menu-head[aria-expanded]) */
   document.querySelectorAll(".menu-head").forEach(function (head) {
     head.addEventListener("click", function () {
       var group = head.parentElement, opening = !group.classList.contains("open");
-      group.parentElement.querySelectorAll(".menu-group.open").forEach(function (g) { if (g !== group) g.classList.remove("open"); });
+      group.parentElement.querySelectorAll(".menu-group.open").forEach(function (g) {
+        if (g !== group) { g.classList.remove("open"); var h = g.querySelector(".menu-head"); if (h && !g.classList.contains("on")) h.setAttribute("aria-expanded", "false"); }
+      });
       group.classList.toggle("open", opening);
+      head.setAttribute("aria-expanded", (opening || group.classList.contains("on")) ? "true" : "false");
     });
+  });
+
+  /* 관리자 Web 레이아웃(디자이너1 base.html) — 메뉴 · 계약 패널 접기, 토스트 · 알림 닫기, 인라인 확인 취소. 키보드만으로 끝난다(button) */
+  function toggleBody(btn, cls) {
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      var on = document.body.classList.toggle(cls);
+      btn.setAttribute("aria-expanded", on ? "false" : "true");
+    });
+  }
+  toggleBody(document.getElementById("side-toggle"), "side-collapsed");
+  toggleBody(document.getElementById("desc-toggle"), "desc-closed");
+  document.querySelectorAll("[data-toast-close]").forEach(function (b) {
+    b.addEventListener("click", function () { var tst = b.closest(".toast"); if (tst) tst.remove(); });
+  });
+  document.querySelectorAll(".toast[data-auto]").forEach(function (tst) { setTimeout(function () { if (tst.parentNode) tst.remove(); }, 8000); });   /* 8초 뒤 사라진다(닫기 버튼 있음) */
+  document.querySelectorAll("[data-alert-close]").forEach(function (b) {
+    b.addEventListener("click", function () { var al = b.closest(".alert"); if (al) al.remove(); });
+  });
+  document.querySelectorAll("[data-close-details]").forEach(function (b) {
+    b.addEventListener("click", function () { var d = b.closest("details"); if (d) { d.open = false; var sm = d.querySelector("summary"); if (sm) sm.focus(); } });
   });
 
   /* 목록 머리행 클릭 정렬 */
@@ -65,79 +90,120 @@
   }
   document.querySelectorAll("table.grid:not(.plain)").forEach(function (t) { applyPage(t); });
 
-  /* 스캔칸 · 알림 팝업 (G-C13 · D-10: 스캐너 = 키보드 입력 + Enter)
-     스캔칸(`[data-scan]`)이 있는 화면에서는 스캔칸이 포커스의 주인이다:
-       · 화면이 열리면 포커스를 잡고, 빈 곳을 눌렀다 놓아도 다시 잡는다. 다른 입력칸을 쓰는 동안에는 빼앗지 않는다.
-       · 알림이 떠도 포커스를 「확인」 에 주지 않는다 — 알림이 떠 있는 채로 쏜 바코드의 글자가 스캔칸에 들어가고 Enter 가 보낸다.
-       · 알림을 「확인」 · 바깥 누르기 · Esc · (빈 스캔칸에서) Enter 로 닫으면 포커스가 스캔칸으로 돌아온다. */
-  var scan = document.querySelector("[data-scan]");
+  /* ── 스캔칸 · 알림 팝업 (G-C13 · D-10: 스캐너 = 키보드 입력 + Enter) — S-01 ~ S-12 ──
+     스캔칸(`[data-scan]`)이 있는 화면에서는 스캔칸이 포커스의 주인이다. 스캔칸이 없는 화면(관리자 Web · 모바일)에서는
+     S-02~S-08 · S-10~S-12 가 동작하지 않고 알림의 「확인」이 포커스를 갖는다 (S-01). */
+  var scans = document.querySelectorAll("[data-scan]");
+  if (scans.length > 1) console.error("data-scan 이 " + scans.length + "개 — 화면에 하나여야 한다 (S-01)");   /* S-01 조용히 첫 것을 고르지 않는다 */
+  var scan = scans.length === 1 ? scans[0] : null;
   var layer = document.getElementById("popup-layer");
   function popupOpen() { return !!layer && !layer.hidden; }
+
+  /* S-03 다른 입력칸 · 선택칸 · 버튼 · 링크를 쓰는 중(activeElement 가 그것)에는 빼앗지 않는다 */
   function idle(a) {
-    return !a || a === document.body || a === scan || (!!layer && layer.contains(a)) || !/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(a.tagName);
+    return !a || a === document.body || a === scan || (!!layer && layer.contains(a)) ||
+      !/^(INPUT|SELECT|TEXTAREA|BUTTON|A)$/.test(a.tagName);
   }
+  /* S-12 disabled 스캔칸(503 화면)에는 포커스를 주지 않는다 */
   function focusScan() {
-    if (scan && document.activeElement !== scan && idle(document.activeElement)) scan.focus();
+    if (scan && !scan.disabled && document.activeElement !== scan && idle(document.activeElement)) scan.focus();
   }
   if (scan) {
-    focusScan();
-    document.addEventListener("click", function () { setTimeout(focusScan, 0); });
-    window.addEventListener("focus", focusScan);
+    focusScan();                                                                 /* S-02 열리면 포커스 (autofocus 와 둘 다) */
+    document.addEventListener("click", function () { setTimeout(focusScan, 0); }); /* S-03 빈 곳을 눌렀다 놓으면 복귀 */
+    window.addEventListener("focus", focusScan);                                 /* S-04 창이 다시 활성화되면 복귀 */
+    /* S-05 바코드 1회 = 요청 1회 = 1건. 보내면 스캔칸을 비운다(서버가 다시 그리므로 저절로 빈다) — 여기서는 아무것도 가로채지 않는다 */
   }
 
-  function popup(title, body, kind) {
-    if (!layer) { console.warn("popup layer 없음:", title, body); return; }
-    layer.querySelector(".popup").classList.toggle("warn", kind === "warn");
+  /* 알림 팝업 — 쓰기 결과 · 422 (base.html 의 #popup-layer). 떠 있어도 다음 스캔을 막지 않는다 */
+  function popup(title, body, fields, kind) {
+    if (!layer) { console.warn("popup-layer 없음:", title, body); return; }
+    var box0 = layer.querySelector(".popup");
+    box0.classList.toggle("warn", kind === "warn" || kind === "error");
+    box0.classList.toggle("ok", kind === "ok");
     document.getElementById("popup-title").textContent = title || "알림";
     var box = document.getElementById("popup-body");
     box.innerHTML = "";
     var p = document.createElement("p");
     p.textContent = body || "";
     box.appendChild(p);
+    if (fields && fields.length) {                                               /* S-09 fields[].label — reason 을 줄로 */
+      var ul = document.createElement("ul");
+      ul.className = "fields";
+      fields.forEach(function (f) {
+        var li = document.createElement("li");
+        li.textContent = (f.label || f.name || "입력") + " — " + (f.reason || "");
+        ul.appendChild(li);
+      });
+      box.appendChild(ul);
+    }
     layer.hidden = false;
-    if (scan) { focusScan(); return; }
+    if (scan) { focusScan(); return; }                                           /* S-06 포커스는 「확인」이 아니라 스캔칸에 */
     var ok = layer.querySelector("[data-popup-close]");
     if (ok) ok.focus();
   }
   function closePopup() {
     if (!layer) return;
     layer.hidden = true;
-    focusScan();
+    setTimeout(focusScan, 0);                                                    /* S-08 방금 누른 「확인」이 포커스를 쥐고 있어도 돌려준다 */
   }
   if (layer) {
     layer.querySelectorAll("[data-popup-close]").forEach(function (b) { b.addEventListener("click", closePopup); });
-    layer.addEventListener("click", function (e) { if (e.target === layer) closePopup(); });
+    layer.addEventListener("click", function (e) { if (e.target === layer) closePopup(); });   /* S-08 바깥 누르기 */
     document.addEventListener("keydown", function (e) {
       if (!popupOpen()) return;
-      if (e.key === "Escape") { closePopup(); return; }
+      if (e.key === "Escape") { closePopup(); return; }                           /* S-08 Esc */
       if (!scan) return;
       var a = document.activeElement;
-      if (e.key === "Enter") {
+      if (e.key === "Enter") {                                                   /* S-07 빈 스캔칸 · 본문의 Enter 는 닫기만. 글자가 있으면 전송(기본 동작) */
         if ((a === scan && scan.value === "") || !a || a === document.body) { e.preventDefault(); closePopup(); }
-        return;
+        return;                                                                  /* 「확인」 위 Enter 는 클릭 · 다른 입력칸의 Enter 는 그 폼의 것 */
       }
       if (e.key && e.key.length === 1 && e.key !== " " && !e.ctrlKey && !e.metaKey && !e.altKey && idle(a)) {
-        closePopup();
+        closePopup();                                                            /* S-07 글자 키 = 다음 스캔의 시작 — 알림을 닫고 */
+        if (!scan.disabled && a !== scan) scan.focus();                          /*      그 글자는 스캔칸에 들어간다 */
       }
     }, true);
   }
   window.mesPopup = popup;
 
+  /* S-10 쓰기 성공 배너 — 본문 #scan-result 에 초록 28px 로 1초 보이고 회색으로 가라앉는다.
+     S-11 422 재렌더의 #scan-result.err(role=alert) 는 건드리지 않는다. */
+  function banner(message, kind) {
+    var el = document.getElementById("scan-result");
+    if (!el || el.classList.contains("err")) return false;
+    el.innerHTML = "";
+    var p = document.createElement("p");
+    p.className = "result-msg";
+    p.textContent = message;
+    el.appendChild(p);
+    el.className = "result " + (kind === "ok" ? "ok" : "");
+    el.hidden = false;
+    if (kind === "ok") setTimeout(function () { el.className = "result"; }, 1000);
+    return true;
+  }
+
+  /* S-09 서버가 303 뒤에 실어 보낸 #flash-data(JSON: title message fields[] kind) → 알림. 파싱 실패는 콘솔 경고(화면은 멀쩡히 둔다) */
   var flashEl = document.getElementById("flash-data");
   if (flashEl) {
     try {
       var f = JSON.parse(flashEl.textContent || "{}");
-      var body = f.message || "";
-      if (f.fields && f.fields.length) {
-        body += "\n" + f.fields.map(function (x) { return "· " + (x.label || x.name || "입력") + ": " + (x.reason || ""); }).join("\n");
+      if (f && (f.message || (f.fields && f.fields.length))) {
+        var bannerOnly = false;
+        if (scan && f.kind === "ok") {                                           /* S-10 팝업까지 띄울지는 화면이 정한다 (#scan-result[data-flash-banner]) */
+          var el = document.getElementById("scan-result");
+          bannerOnly = !!el && el.hasAttribute("data-flash-banner");
+          banner(f.message || "", "ok");
+        }
+        if (!bannerOnly) popup(f.title || "알림", f.message || "", f.fields, f.kind);
       }
-      if (body) popup(f.title || "알림", body, f.kind);
     } catch (e) { console.warn("flash 파싱 실패", e); }
   }
+  /* S-13 시각 · 작업자 · 설비는 서버 렌더값 — 시계를 돌리지 않는다. S-14 원형 전용 시연 조각(pop.js)은 템플릿 · 이 파일에 없다. */
 
-  /* 현황판 자동 새로고침 (G-C13) — 조작 없이 다시 그린다. 오류 화면에서도 같은 코드가 돈다.
+  /* 현황판 자동 새로고침 (G-C13) — body.ch-board 의 data-refresh-seconds 가 있을 때만 (디자이너3 board.js 와 겹치지 않게). 조작 없이 다시 그린다.
      주기마다 먼저 서버가 응답하는지(/health — 상태코드는 따지지 않는다) 보고, 응답이 오면 이 주소를 다시 그리고,
-     안 오면 화면에 남아 「연결 끊김」 을 띄운 채 다시 시도한다. 낡은 화면을 새것처럼 보이게 두지 않는다. */
+     안 오면 화면에 남아 「연결 끊김」 을 띄운 채 다시 시도한다. 낡은 화면을 새것처럼 보이게 두지 않는다. POP 은 자동 새로고침하지 않는다(S-12). */
   var refreshSeconds = parseInt(document.body.dataset.refreshSeconds || "0", 10) || 0;
   var RETRY_MS = 5000;
   function showStale() {
@@ -160,5 +226,5 @@
         setTimeout(refreshTick, RETRY_MS);
       });
   }
-  if (refreshSeconds > 0) setTimeout(refreshTick, refreshSeconds * 1000);
+  if (refreshSeconds > 0 && document.body.classList.contains("ch-board")) setTimeout(refreshTick, refreshSeconds * 1000);
 })();

@@ -1,6 +1,38 @@
-{# MAT-04 재고 — F-MAT-08 조회 · F-MAT-09 조정 (모바일 390px: 품목 요약 줄 + LOT 접힘) #}
-{% extends "base.html" %}
+{# MAT-04 재고 — F-MAT-08 조회 · F-MAT-09 조정(관리자 Web 만).
+   모바일(body.ch-mobile): docs/design/mobile/mat_stock_m.html — 390px 가로 넘침 0 · 표 없음 · 품목 요약 줄(details) → LOT 접힘 · 첫 품목(또는 고른 품목)만 open · 쓰기 0.
+   ctx: rows[{item_code item_name item_type qty unit trx_sum lots[]}] · item_options · item_id #}
+{% extends "pop/_layout.html" %}
 {% import "home/_macros.html" as ui %}
+{% import "pop/_ui.html" as pui %}
+
+{% block mobile_body %}
+<form class="m-filter" method="get" id="screen-search">
+  {{ ui.select('품목', 'item_id', item_options, item_id, blank='전부') }}
+  <button type="submit">{{ t('조회') }}</button>
+</form>
+{% set lot_count = rows|map(attribute='lots')|map('length')|sum %}
+{{ pui.stat_grid([('품목', rows|length, t('종')), ('원재료 LOT', lot_count, t('건'))]) }}
+<section class="m-sec">
+  <h2>{{ t('품목별 현재고') }} <small>{{ now }} {{ t('기준') }}</small></h2>
+  {% for r in rows %}
+  <details class="fold"{% if loop.first or (item_id and r.item_id == item_id) %} open{% endif %}>
+    <summary><span class="grow">{{ r.item_name }} <small>{{ r.item_code }}{% if r.item_type %} · {{ r.item_type }}{% endif %}</small></span><b class="num">{{ r.qty|num(3) }} {{ r.unit|txt('') }}</b>{% if r.qty != r.trx_sum %}{{ pui.badge('이탈') }}{% endif %}</summary>
+    <div class="body">
+      <dl class="kv" style="margin-top:6px"><dt>{{ t('거래 합') }}</dt><dd class="num">{{ r.trx_sum|num(3) }} {{ r.unit|txt('') }}</dd><dt>{{ t('원재료 LOT') }}</dt><dd>{{ r.lots|length }}{{ t('건') }}</dd></dl>
+      {% for l in r.lots %}
+      {% call pui.mcard(l.lot_no, l.state, [('잔량', (l.remain_qty|num(3)) ~ ' / ' ~ (l.qty|num(3)) ~ ' ' ~ (l.unit|txt(''))), ('검사', pui.badge(l.insp_status)), ('입고', l.made_at|dt('%m-%d %H:%M'))]) %}{% endcall %}
+      {% else %}
+      <p class="empty">{{ NOT_COLLECTED }}</p>
+      {% endfor %}
+    </div>
+  </details>
+  {% else %}
+  <p class="empty">{{ NOT_COLLECTED }}</p>
+  {% endfor %}
+  <ul class="notes"><li>{{ t('재고 조정은 관리자 Web 에서. 현재고가 거래 합과 다르면 「이탈」 배지.') }}</li></ul>
+</section>
+{% endblock %}
+
 {% block search %}
 {{ ui.select('품목', 'item_id', item_options, item_id) }}
 {% endblock %}

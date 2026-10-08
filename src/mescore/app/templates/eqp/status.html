@@ -1,22 +1,58 @@
-{# EQP-01 가동 현황 — F-EQP-01 조회 · F-EQP-02 가동 상태 기록 (제어가 아니다). 수집 설비는 collect.latest · 없으면 미수집 #}
-{% extends "base.html" %}
+{# EQP-01 가동 현황 — F-EQP-01 조회 · F-EQP-02 가동 상태 기록 (기록이지 제어가 아니다). 수집 설비는 collect.latest · 없으면 미수집.
+   POP: docs/design/pop/eqp_status_pop.html — 설비 카드 + 상태 4버튼(기록) · 점검 · 고장 화면으로 링크. 스캔 진입(?equip_code=)은 라우터에 없어 스캔칸을 두지 않는다(README 이식 요청).
+   ctx: rows[{id equip_code equip_name process_name state state_since state_source collect_yn latest last_received_at}] · states · state_options · equipment_options · now #}
+{% extends "pop/_layout.html" %}
 {% import "home/_macros.html" as ui %}
-{% block body %}
+{% import "pop/_ui.html" as pui %}
+
+{% block pop_body %}
+{{ pui.banner() }}
+<div class="notice">{{ t('여기 버튼은 상태 기록이다 — 설비를 켜거나 끄지 않는다. 사람이 본 상태를 적는 것이고, 수집 설비의 값은 따로 보인다.') }}</div>
 <section class="panel">
-  <h1>{{ t('설비') }} {{ t('가동 현황') }} <small>EQP-01 · {{ now|dt }}</small></h1>
-  <table class="grid">
-    <thead><tr><th>{{ t('설비') }}</th><th>{{ t('공정') }}</th><th>{{ t('상태') }}</th><th>{{ t('시작') }}</th><th>{{ t('출처') }}</th><th>{{ t('수집값') }}</th><th>{{ t('마지막 수신') }}</th></tr></thead>
-    <tbody>
+  <h2>{{ t('설비') }} <small>{{ rows|length }}{{ t('대') }} · {{ now|dt('%H:%M') }}</small></h2>
+  <div class="cards">
     {% for e in rows %}
-    <tr data-state="{{ e.state|txt('') }}"><td><b>{{ e.equip_code }}</b> {{ e.equip_name }}</td><td>{{ e.process_name|txt }}</td><td>{{ e.state|txt(NOT_COLLECTED) }}</td><td>{{ e.state_since|dt }}</td><td>{{ e.state_source|txt }}</td>
-        <td>{% if e.collect_yn != 'Y' %}-{% elif e.latest %}{% for tag, v in e.latest.tags.items() %}<code>{{ tag }}</code> {{ v.value }}{% if not loop.last %} · {% endif %}{% endfor %}{% else %}{{ NOT_COLLECTED }}{% endif %}</td>
-        <td>{{ e.last_received_at|dt(blank=NOT_COLLECTED if e.collect_yn == 'Y' else '-') }}</td></tr>
+    <article class="card">
+      <h3>{{ e.equip_code }} {{ e.equip_name }} {{ pui.badge(e.state) }}</h3>
+      <dl class="kv">
+        <dt>{{ t('공정') }}</dt><dd>{{ e.process_name|txt }}</dd>
+        <dt>{{ t('부터') }}</dt><dd>{{ e.state_since|dt('%m-%d %H:%M') }}{% if e.state_source %} · {{ e.state_source }}{% endif %}</dd>
+        <dt>{{ t('수집') }}</dt><dd>{% if e.collect_yn != 'Y' %}-{% elif e.latest %}{{ t('마지막 수신') }} {{ e.last_received_at|dt('%H:%M') }} · {% for tag, v in e.latest.tags.items() %}<code>{{ tag }}</code> {{ v.value }}{% if not loop.last %} · {% endif %}{% endfor %}{% else %}{{ pui.badge('미수집') }}{% endif %}</dd>
+      </dl>
+      <form method="post" action="{{ nav.path_of('EQP-01') }}" id="state-{{ e.id }}">
+        <input type="hidden" name="equipment_id" value="{{ e.id }}">
+        {% set st_opts = [] %}
+        {% for v, label in state_options %}{% set _ = st_opts.append((v, label, {'가동': 'ok', '정지': 'warn', '고장': 'err'}.get(v, ''))) %}{% endfor %}
+        {{ pui.choice('state', st_opts, e.state or '', required=true, cols='c4') }}
+        <div style="margin-top:8px">{{ ui.write_button('상태 기록', user.can('F-EQP-02'), form='state-' ~ e.id, kind='primary') }}</div>
+      </form>
+      <div class="actions">
+        {% if nav.channel_allowed('EQP-02', device) %}<a class="btn" href="{{ nav.path_of('EQP-02') }}?equipment_id={{ e.id }}">{{ t('점검 등록') }}</a>{% endif %}
+        {% if nav.channel_allowed('EQP-03', device) %}<a class="btn" href="{{ nav.path_of('EQP-03') }}?equipment_id={{ e.id }}">{{ t('고장 등록') }}</a>{% endif %}
+      </div>
+    </article>
     {% else %}
-    <tr><td colspan="7" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    <p class="empty">{{ NOT_COLLECTED }}</p>
     {% endfor %}
-    </tbody>
-  </table>
+  </div>
+  <ul class="notes"><li>{{ t('상태 기록 = 가동 로그 1행(이전 구간을 닫는다). 수집이 없는 설비는 「미수집」 — 값을 지어내지 않는다.') }}</li></ul>
 </section>
+{% endblock %}
+
+{% block grid %}
+<h1>{{ t('설비') }} {{ t('가동 현황') }} <small>EQP-01 · {{ now|dt }}</small></h1>
+<table class="grid">
+  <thead><tr><th>{{ t('설비') }}</th><th>{{ t('공정') }}</th><th>{{ t('상태') }}</th><th>{{ t('시작') }}</th><th>{{ t('출처') }}</th><th>{{ t('수집값') }}</th><th>{{ t('마지막 수신') }}</th></tr></thead>
+  <tbody>
+  {% for e in rows %}
+  <tr data-state="{{ e.state|txt('') }}"><td><b>{{ e.equip_code }}</b> {{ e.equip_name }}</td><td>{{ e.process_name|txt }}</td><td>{{ pui.badge(e.state) }}</td><td>{{ e.state_since|dt }}</td><td>{{ e.state_source|txt }}</td>
+      <td>{% if e.collect_yn != 'Y' %}-{% elif e.latest %}{% for tag, v in e.latest.tags.items() %}<code>{{ tag }}</code> {{ v.value }}{% if not loop.last %} · {% endif %}{% endfor %}{% else %}{{ NOT_COLLECTED }}{% endif %}</td>
+      <td>{{ e.last_received_at|dt(blank=NOT_COLLECTED if e.collect_yn == 'Y' else '-') }}</td></tr>
+  {% else %}
+  <tr><td colspan="7" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
 <section class="panel">
   <h2>{{ t('가동 상태 기록') }} <small>F-EQP-02 — {{ t('기록이지 제어가 아니다') }}</small></h2>
   <form method="post" action="{{ nav.path_of('EQP-01') }}" id="state-form" class="form-grid">
@@ -24,7 +60,9 @@
     {{ ui.select('상태', 'state', state_options, '', required=true) }}
     {{ ui.field('시각', 'at', '', type='datetime-local') }}
     {{ ui.field('비고', 'note') }}
-    {{ ui.write_button('상태 기록', user.can('F-EQP-02'), form='state-form') }}
   </form>
 </section>
+{% endblock %}
+{% block actions %}
+{{ ui.write_button('상태 기록', user.can('F-EQP-02'), form='state-form') }}
 {% endblock %}

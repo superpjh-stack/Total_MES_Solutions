@@ -1,5 +1,5 @@
 {# EQP-02 점검 — F-EQP-03 등록 · F-EQP-04 조회 #}
-{% extends "base.html" %}
+{% extends "pop/_layout.html" %}
 {% import "home/_macros.html" as ui %}
 {% block search %}
 {{ ui.select('설비', 'equipment_id', equipment_options, equipment_id) }}

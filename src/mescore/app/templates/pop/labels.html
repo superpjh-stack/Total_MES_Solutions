@@ -1,26 +1,42 @@
-{# POP-04 LOT 라벨 — F-POP-08. ?lot= 이면 print/label_lot 로 간다. 여기는 고르는 화면 (?no= 스캔 → 없는 번호 422 재렌더) #}
-{% extends "base.html" %}
+{# POP-04 LOT 라벨 — F-POP-08. ?lot= 이면 print/label_lot(디자이너3) 로 간다. 여기는 고르는 화면 (?no= 스캔 → 없는 번호 422 재렌더 · S-11) · data-scan 하나.
+   디자인: docs/design/pop/pop_labels.html (디자이너2). ctx: rows · size · scan_no · scan_error #}
+{% extends "pop/_layout.html" %}
 {% import "home/_macros.html" as ui %}
-{% block body %}
+{% import "pop/_ui.html" as pui %}
+
+{% block pop_body %}
+{% call ui.scan_box(nav.path_of('POP-04'), name='no', label='LOT 번호 스캔 → 그 LOT 라벨', method='get', placeholder=scan_no or 'LP-', button='확인') %}
+  <input type="hidden" name="size" value="{{ size }}">
+{% endcall %}
+{{ pui.banner(error=scan_error, fields=fields if scan_error else []) }}
+
 <section class="panel">
-  <h1>{{ t('생산 LOT') }} {{ t('라벨') }} <small>POP-04</small></h1>
-  {% call ui.scan_box(nav.path_of('POP-04'), name='no', label='LOT 번호 스캔', method='get', placeholder=scan_no, button='라벨') %}
-    <input type="hidden" name="size" value="{{ size }}">
-  {% endcall %}
-  {% if scan_error %}<section class="result err" role="alert" id="scan-result"><p class="result-msg">{{ scan_error }} — {{ scan_no }}</p></section>{% endif %}
-</section>
-<section class="panel">
-  <h2>{{ t('최근') }} {{ t('생산 LOT') }}</h2>
-  <table class="grid">
-    <thead><tr><th>{{ t('생산 LOT') }}</th><th>{{ t('품목') }}</th><th>{{ t('작업지시') }}</th><th>{{ t('수량') }}</th><th>{{ t('상태') }}</th><th>{{ t('시각') }}</th><th>{{ t('라벨') }}</th></tr></thead>
-    <tbody>
+  <h2>{{ t('최근') }} {{ t('생산 LOT') }} <small>{{ rows|length }}{{ t('건') }}</small></h2>
+  <div class="cards">
     {% for r in rows %}
-    <tr><td>{{ r.lot_no }}</td><td>{{ r.item_code|txt }} {{ r.item_name|txt('') }}</td><td>{{ r.work_order_no|txt }}</td><td>{{ r.qty|num(3) }} {{ r.unit|txt('') }}</td><td>{{ r.state }}</td><td>{{ r.made_at|dt }}</td>
-        <td><a class="btn btn-sm" href="{{ nav.path_of('POP-04') }}?lot={{ r.id }}" target="_blank">100×50</a> <a class="btn btn-sm" href="{{ nav.path_of('POP-04') }}?lot={{ r.id }}&size=50x30" target="_blank">50×30</a></td></tr>
+    <article class="card{% if loop.first %} sel{% endif %}">
+      <h3><code>{{ r.lot_no }}</code> {{ pui.badge(r.state) }}</h3>
+      <dl class="kv">
+        <dt>{{ t('품목') }}</dt><dd>{{ r.item_code|txt }} {{ r.item_name|txt('') }}</dd>
+        <dt>{{ t('수량') }}</dt><dd class="num">{{ r.qty|num(3) }} {{ r.unit|txt('') }}</dd>
+        <dt>{{ t('작업지시') }}</dt><dd>{{ r.work_order_no|txt }} · {{ r.made_at|dt('%m-%d %H:%M') }}</dd>
+      </dl>
+      <div class="actions">
+        <a class="btn btn-primary" href="{{ nav.path_of('POP-04') }}?lot={{ r.id }}" target="_blank">{{ t('라벨 출력') }} <span class="sub">100×50</span></a>
+        <a class="btn" href="{{ nav.path_of('POP-04') }}?lot={{ r.id }}&size=50x30" target="_blank">50×30</a>
+      </div>
+    </article>
     {% else %}
-    <tr><td colspan="7" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    <p class="empty">{{ NOT_COLLECTED }}</p>
     {% endfor %}
-    </tbody>
-  </table>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>{{ t('출력 안내') }}</h2>
+  <ul class="notes">
+    <li>{{ t('「라벨 출력」은 인쇄용 화면을 새 창으로 열고 브라우저 인쇄를 부른다. 바코드 = LOT 번호.') }}</li>
+    <li>{{ t('라벨을 스캔칸에 쏘면 그 LOT 라벨이 바로 열린다. 없는 번호는 이 화면이 422 로 다시 그려진다.') }}</li>
+  </ul>
 </section>
 {% endblock %}

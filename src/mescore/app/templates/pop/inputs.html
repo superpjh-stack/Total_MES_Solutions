@@ -1,41 +1,69 @@
-{# POP-03 투입 스캔 — F-POP-06 스캔(한 번 = 한 건) · F-POP-07 취소. ?no= 미리 보기 — 없는 번호는 이 화면 422 재렌더 · data-scan 하나 #}
-{% extends "base.html" %}
+{# POP-03 투입 스캔 — F-POP-06 스캔(한 번 = 한 건 · S-05) · F-POP-07 취소. ?no= 미리 보기 — 없는 번호는 이 화면 422 재렌더(S-11) · data-scan 하나.
+   폼 POST 의 422(불합격 · 미검사 · 소진 · 없는 번호 · 투입량)는 303 + 알림(S-09) · 성공은 배너만(S-10 · data-flash-banner).
+   디자인: docs/design/pop/pop_inputs.html (디자이너2). ctx: result · rows · lot · open_results · scan_no · scan_error #}
+{% extends "pop/_layout.html" %}
 {% import "home/_macros.html" as ui %}
-{% block body %}
-<section class="panel">
-  <h1>{{ t('투입') }} <small>POP-03{% if result %} · {{ t('실적') }} #{{ result.id }} · {{ result.work_order_no }} · {{ result.item_name }}{% endif %}</small></h1>
-  {% if result and not result.ended_at %}
-  {% call ui.scan_box(nav.path_of('POP-03'), name='barcode', label='원재료 LOT 스캔', hidden={'work_result_id': result.id}, placeholder=scan_no, button='투입') %}
-    {{ ui.field('투입량', 'qty', '', type='number', step='any') }}
-  {% endcall %}
-  {% elif result %}
-  <p class="empty">{{ t('종료된 실적입니다') }}</p>
-  {% else %}
-  {% call ui.scan_box(nav.path_of('POP-03'), name='no', label='원재료 LOT 스캔 (미리 보기)', method='get', placeholder=scan_no, button='확인') %}{% endcall %}
-  {% endif %}
-  {% if scan_error %}<section class="result err" role="alert" id="scan-result"><p class="result-msg">{{ scan_error }} — {{ scan_no }}</p></section>{% endif %}
-  {% if lot %}<section class="result ok" id="scan-result"><p class="result-msg">{{ lot.no }} · {{ lot.item|txt }} · {{ lot.remain_qty|num(3) }} {{ lot.unit|txt('') }} · {{ lot.insp_status }} · {{ lot.state }}</p></section>{% endif %}
-</section>
+{% import "pop/_ui.html" as pui %}
+{% set who_equip = (result.equip_code ~ ' ' ~ (result.equip_name or '')) if result and result.equip_code else '' %}
+
+{% block pop_body %}
+{% if result and not result.ended_at %}
+{% call ui.scan_box(nav.path_of('POP-03'), name='barcode', label='원재료 LOT 바코드 스캔 → 투입량 → Enter', hidden={'work_result_id': result.id}, placeholder=scan_no or 'LM-', button='확인') %}
+  <label>{{ t('투입량') }} <small>{{ rows[0].unit|txt('') if rows else '' }}</small>
+    <input type="number" name="qty" inputmode="decimal" step="any" min="0" value="{{ rows[0].qty if rows and rows[0].qty is not none else '' }}"></label>
+{% endcall %}
+{% elif result %}
+<section class="panel"><h2>{{ t('종료된 실적입니다') }} <small>{{ t('투입은 종료 전만') }}</small></h2></section>
+{% else %}
+{% call ui.scan_box(nav.path_of('POP-03'), name='no', label='원재료 LOT 바코드 스캔 (미리 보기)', method='get', placeholder=scan_no or 'LM-', button='확인') %}{% endcall %}
+{% endif %}
+{% if lot %}
+{{ pui.banner(ok=lot.no ~ ' · ' ~ (lot.item|txt) ~ ' · ' ~ (lot.remain_qty|num(3)) ~ ' ' ~ (lot.unit|txt('')) ~ ' · ' ~ lot.insp_status ~ ' · ' ~ lot.state, banner_only=true) }}
+{% else %}
+{{ pui.banner(error=scan_error, fields=fields if scan_error else [], banner_only=true) }}
+{% endif %}
+
 {% if result %}
 <section class="panel">
-  <h2>{{ t('투입') }} {{ rows|length }}</h2>
-  <table class="grid">
-    <thead><tr><th>#</th><th>{{ t('원재료 LOT') }}</th><th>{{ t('품목') }}</th><th>{{ t('투입량') }}</th><th>{{ t('시각') }}</th><th>{{ t('검사') }}</th><th></th></tr></thead>
+  <h2>{{ t('실적') }} #{{ result.id }} <small><code>{{ result.work_order_no }}</code> · {{ result.item_code }} {{ result.item_name }} · {{ result.process_name }} · {% if result.ended_at %}{{ t('작업 종료') }} {{ result.ended_at|dt('%H:%M') }}{% else %}{{ t('진행') }} · {{ t('작업 시작') }} {{ result.started_at|dt('%H:%M') }}{% endif %}</small></h2>
+  <ul class="notes">
+    <li>{{ t('한 번 스캔 = 한 건. 같은 LOT 을 또 쏘면 또 한 건이다 — 투입량이 다르면 그게 맞다.') }}</li>
+    <li>{{ t('투입량 칸은 직전 값을 유지한다. 바꾸려면 투입량을 먼저 누르고 숫자를 친 뒤 스캔한다.') }}</li>
+  </ul>
+</section>
+
+<section class="panel">
+  <h2>{{ t('스캔 이력') }} <small>{{ t('이 실적') }} · {{ rows|length }}{{ t('건') }} ({{ t('취소') }} {{ rows|selectattr('canceled_yn', 'equalto', 'Y')|list|length }})</small></h2>
+  <table class="list">
+    <thead><tr><th>{{ t('시각') }}</th><th>{{ t('원재료 LOT') }}</th><th>{{ t('품목') }}</th><th>{{ t('투입량') }}</th><th>{{ t('검사') }}</th><th></th></tr></thead>
     <tbody>
     {% for r in rows %}
-    <tr{% if r.canceled_yn == 'Y' %} class="canceled"{% endif %}><td>{{ r.id }}</td><td>{{ r.lot_no }}</td><td>{{ r.item_code|txt }} {{ r.item_name|txt('') }}</td><td>{{ r.qty|num(3) }} {{ r.unit|txt('') }}</td><td>{{ r.scanned_at|dt }}</td><td>{{ r.insp_status }}</td>
-        <td>{% if r.canceled_yn == 'N' and not result.ended_at %}<form method="post" action="{{ nav.path_of('POP-03') }}/{{ r.id }}/cancel" class="inline">{{ ui.write_button('취소', user.can('F-POP-07'), kind='ghost') }}</form>{% elif r.canceled_yn == 'Y' %}{{ t('취소') }}{% endif %}</td></tr>
+    <tr{% if r.canceled_yn == 'Y' %} class="canceled"{% endif %}>
+      <td>{{ r.scanned_at|dt('%H:%M') }}</td><td><code>{{ r.lot_no }}</code></td><td>{{ r.item_code|txt }} {{ r.item_name|txt('') }}</td>
+      <td class="num">{{ r.qty|num(3) }} {{ r.unit|txt('') }}</td><td>{{ pui.badge(r.insp_status) }}</td>
+      <td class="act">{% if r.canceled_yn == 'N' and not result.ended_at %}<form method="post" action="{{ nav.path_of('POP-03') }}/{{ r.id }}/cancel" class="inline">{{ ui.write_button('취소', user.can('F-POP-07'), kind='ghost') }}</form>{% elif r.canceled_yn == 'Y' %}{{ pui.badge('취소됨') }}{% endif %}</td>
+    </tr>
     {% else %}
-    <tr><td colspan="7" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    <tr><td colspan="6" class="empty">{{ NOT_COLLECTED }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
-  <a class="btn" href="{{ nav.path_of('POP-02') }}?id={{ result.id }}">{{ t('실적') }}</a>
+  <ul class="notes"><li>{{ t('취소는 실적 종료 전만. 종료 후 누르면 422.') }}</li></ul>
+  <div class="actions"><a class="btn" href="{{ nav.path_of('POP-02') }}?id={{ result.id }}">{{ t('실적') }} #{{ result.id }}</a><a class="btn" href="{{ nav.path_of('POP-01') }}">{{ t('작업 목록') }}</a></div>
 </section>
 {% else %}
 <section class="panel">
-  <h2>{{ t('작업 중') }} {{ t('실적') }}</h2>
-  <ul>{% for r in open_results %}<li><a href="{{ nav.path_of('POP-03') }}?result={{ r.id }}">#{{ r.id }} {{ r.work_order_no }} · {{ r.item_name }} · {{ r.started_at|dt }}</a></li>{% else %}<li class="empty">{{ NOT_COLLECTED }}</li>{% endfor %}</ul>
+  <h2>{{ t('작업 중') }} {{ t('실적') }} <small>{{ t('하나를 고르면 그 실적에 투입한다') }}</small></h2>
+  <div class="cards">
+    {% for r in open_results %}
+    <a class="card" href="{{ nav.path_of('POP-03') }}?result={{ r.id }}">
+      <h3><code>{{ r.work_order_no }}</code> {{ pui.badge('진행') }}</h3>
+      <dl class="kv"><dt>{{ t('실적') }}</dt><dd>#{{ r.id }}</dd><dt>{{ t('품목') }}</dt><dd>{{ r.item_name }}</dd><dt>{{ t('작업 시작') }}</dt><dd>{{ r.started_at|dt }}</dd></dl>
+    </a>
+    {% else %}
+    <p class="empty">{{ NOT_COLLECTED }} — {{ t('작업 중인 실적이 없습니다') }}</p>
+    {% endfor %}
+  </div>
 </section>
 {% endif %}
 {% endblock %}

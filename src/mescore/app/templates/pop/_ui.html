@@ -1,0 +1,50 @@
+{# POP · 모바일 조각 매크로 (디자이너2). {% import "pop/_ui.html" as pui %}
+   상태 배지 — 색만으로 말하지 않는다(글자 + 색). 뜻은 docs/design/README.md §3 상태색 고정표.
+   결과 배너 — 스캔 진입 422 재렌더(S-11 · role=alert · .err) · 성공(S-10 · app.js 가 #flash-data 로 채운다). #}
+
+{% macro badge(text) %}
+{% set k = {'합격': 'b-ok', '진행': 'b-ok', '가동': 'b-ok', '재고': 'b-ok', '승인': 'b-ok', '양호': 'b-ok', '복구': 'b-ok',
+            '불합격': 'b-err', '고장': 'b-err', '지연': 'b-err', '필수': 'b-err', '발생': 'b-err',
+            '조건부': 'b-warn', '정지': 'b-warn', '이탈': 'b-warn', '조치': 'b-warn', '점검': 'b-warn',
+            '대기': 'b-wait', '등록': 'b-wait', '미검사': 'b-wait', '계획': 'b-wait',
+            '완료': 'b-off', '소진': 'b-off', '출하': 'b-off', '취소': 'b-off', '마감': 'b-off', '종결': 'b-off', '취소됨': 'b-off'}.get(text|string, 'b-off') %}
+<span class="badge {{ k }}">{{ t(text|string) if text is not none and text != '' else NOT_COLLECTED }}</span>
+{% endmacro %}
+
+{# 결과 배너 — err: 스캔 진입 422 (message + fields) · ok: 서버가 그린 성공 문장 · 둘 다 없으면 hidden (app.js S-10 이 채운다) #}
+{% macro banner(error='', fields=[], ok='', banner_only=false) %}
+{% if error %}
+<section class="result err alert-422" role="alert" id="scan-result"{% if banner_only %} data-flash-banner{% endif %}>
+  <p class="result-msg">{{ error }}</p>
+  {% if fields %}<ul class="result-fields">{% for f in fields %}<li>{{ f.label or f.name }} — {{ f.reason }}</li>{% endfor %}</ul>{% endif %}
+</section>
+{% elif ok %}
+<section class="result ok" role="status" id="scan-result"{% if banner_only %} data-flash-banner{% endif %}><p class="result-msg">{{ ok }}</p></section>
+{% else %}
+<section class="result" role="status" id="scan-result"{% if banner_only %} data-flash-banner{% endif %} hidden><p class="result-msg"></p></section>
+{% endif %}
+{% endmacro %}
+
+{# 라디오를 큰 버튼으로 — options = [(값, 표시, 종류)] 종류 = '' | ok | warn | err #}
+{% macro choice(name, options, value='', required=false, cols='') %}
+<div class="choice{% if cols %} {{ cols }}{% endif %}" role="radiogroup">
+  {% for v, label, kind in options %}
+  <label{% if kind %} class="{{ kind }}"{% endif %}><input type="radio" name="{{ name }}" value="{{ v }}"{% if required and loop.first %} required{% endif %}{% if v|string == value|string and value|string != '' %} checked{% endif %}><span>{{ label }}</span></label>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{# 모바일 카드 — title(번호) · status · kv [(라벨, 값)] #}
+{% macro mcard(title, status='', kv=[]) %}
+<div class="m-card">
+  <h3><code>{{ title }}</code>{% if status %}{{ badge(status) }}{% endif %}</h3>
+  {% if kv %}<dl class="kv">{% for l, v in kv %}<dt>{{ t(l) }}</dt><dd>{{ v if v is not none and v != '' else NOT_COLLECTED }}</dd>{% endfor %}</dl>{% endif %}
+  {% if caller %}{{ caller() }}{% endif %}
+</div>
+{% endmacro %}
+
+{% macro stat_grid(items) %}
+<div class="stat-grid">
+  {% for l, v, u in items %}<div class="stat"><small>{{ t(l) }}</small><b>{% if v is none %}{{ NOT_COLLECTED }}{% else %}{{ v }}{% if u %}<span class="u">{{ u }}</span>{% endif %}{% endif %}</b></div>{% endfor %}
+</div>
+{% endmacro %}

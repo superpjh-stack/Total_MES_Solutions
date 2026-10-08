@@ -1,9 +1,11 @@
-{# 측정값 자동 폼 (개발2 · G-C24 · 디자이너2 상태 표 11) — `bas_process_param` 한 행 = 칸 하나. 칸을 손으로 만들지 않는다.
+{# 측정값 자동 폼 (개발2 · G-C24 · 디자이너2 상태 표 11 — docs/design/README.md "POP · 모바일" §3) — `bas_process_param` 한 행 = 칸 하나. 칸을 손으로 만들지 않는다.
    {% import "home/_measure.html" as mf %}  →  {{ mf.measure_fields(params, values) }}
    params = measure.params_for(process_id)  (라우터가 넘긴다 — 매크로는 DB 를 읽지 않는다)
    values = measure.values_of(work_result_id)  (재렌더 · 조회 때 param_key → pop_measure 행 · 없으면 빈 dict)
    latest = {param_key: {"value", "ts"}}  (collect 칸의 최근 수신 — 선택)
-   폼 이름은 p.field (m_<param_key>). 검사 항목(qua_insp_plan)은 measure.plan_fields(rows) 로 같은 모양(i_<item_key>)이 된다. #}
+   폼 이름은 p.field (m_<param_key>). 검사 항목(qua_insp_plan)은 measure.plan_fields(rows) 로 같은 모양(i_<item_key>)이 된다.
+   모양(디자이너2 · docs/design/pop/pop_result_end.html): .measure > .m-field(.deviated .collect) > .lbl(라벨 · 단위 · 배지) + .range(기준) + 칸.
+   bool = 2버튼(radio 예/아니오 · 체크박스가 아니다) · select ≤5 = 버튼 · 6+ = <select> · collect = 읽기 전용(최근 수신 / 미수집) · 이탈 = 주의색 + 「이탈」. #}
 
 {% macro measure_fields(params, values={}, latest={}) %}
 {% if not params %}
@@ -17,45 +19,46 @@
   <div class="lbl">{{ t(p.label) }}{% if p.unit %} <span class="unit">{{ p.unit }}</span>{% endif %}
     {% if p.is_collect %}<span class="badge b-info">{{ t('수집값 자동') }}</span>{% elif p.required %}<span class="badge b-err">{{ t('필수') }}</span>{% endif %}
     {% if dev %}<span class="badge b-warn">{{ t('이탈') }}</span>{% endif %}
+    {% if p.is_collect and not (row and (row.value_num is not none or row.value_text)) and not (latest and latest.get(p.param_key)) %}<span class="badge b-off">{{ t('미수집') }}</span>{% endif %}
   </div>
-  {% if p.range_text %}<div class="range">{{ t('기준') }} {{ p.range_text }}{% if p.is_collect %} · {{ p.agg }}{% endif %}</div>{% endif %}
+  {% if p.range_text %}<div class="range">{{ t('기준') }} {{ p.range_text }}{% if p.is_collect and p.agg %} · {{ p.agg }}{% endif %}</div>{% endif %}
   {% if p.is_collect %}
     {% set lv = latest.get(p.param_key) if latest else none %}
     <div class="readonly" aria-readonly="true">
-      {% if row and (row.value_num is not none or row.value_text) %}{{ row.value_num if row.value_num is not none else row.value_text }}
-      {% elif lv %}{{ t('최근 수신') }} {{ lv.value }} · {{ lv.ts|dt }}
-      {% else %}<span class="badge">{{ t('미수집') }}</span>{% endif %}
+      {% if row and (row.value_num is not none or row.value_text) %}{{ row.value_num if row.value_num is not none else row.value_text }}{% if p.unit %} {{ p.unit }}{% endif %}
+      {% elif lv %}{{ t('최근 수신') }} {{ lv.value }}{% if p.unit %} {{ p.unit }}{% endif %} · {{ lv.ts|dt('%H:%M') }}
+      {% else %}{{ t('미수집') }}{% endif %}
     </div>
   {% elif p.value_type == 'number' %}
     <input type="number" name="{{ p.field }}" inputmode="decimal" step="any"{% if p.required %} required{% endif %}
-           value="{{ row.value_num if row and row.value_num is not none else '' }}" placeholder="{{ t('비워도 된다') if not p.required else '' }}">
+           value="{{ row.value_num if row and row.value_num is not none else '' }}" placeholder="{{ t('비워도 된다') if not p.required else t('숫자') }}" aria-label="{{ t(p.label) }}">
   {% elif p.value_type == 'bool' %}
     {% set cur = row.value_num if row else none %}
-    <div class="radio-row" role="radiogroup">
-      <label class="radio"><input type="radio" name="{{ p.field }}" value="1"{% if p.required %} required{% endif %}{% if cur is not none and cur|int == 1 %} checked{% endif %}> {{ t('예') }}</label>
-      <label class="radio"><input type="radio" name="{{ p.field }}" value="0"{% if cur is not none and cur|int == 0 %} checked{% endif %}> {{ t('아니오') }}</label>
+    <div class="choice c2" role="radiogroup" aria-label="{{ t(p.label) }}">
+      <label class="ok"><input type="radio" name="{{ p.field }}" value="1"{% if p.required %} required{% endif %}{% if cur is not none and cur|int == 1 %} checked{% endif %}><span>{{ t('예') }}</span></label>
+      <label class="err"><input type="radio" name="{{ p.field }}" value="0"{% if cur is not none and cur|int == 0 %} checked{% endif %}><span>{{ t('아니오') }}</span></label>
     </div>
   {% elif p.value_type == 'select' %}
     {% set cur = row.value_text if row else '' %}
     {% if p.choices|length <= 5 %}
-    <div class="radio-row" role="radiogroup">
-      {% for c in p.choices %}<label class="radio"><input type="radio" name="{{ p.field }}" value="{{ c }}"{% if p.required %} required{% endif %}{% if cur == c|string %} checked{% endif %}> {{ c }}</label>{% endfor %}
+    <div class="choice{% if p.choices|length == 2 %} c2{% elif p.choices|length == 3 %} c3{% endif %}" role="radiogroup" aria-label="{{ t(p.label) }}">
+      {% for c in p.choices %}<label><input type="radio" name="{{ p.field }}" value="{{ c }}"{% if p.required and loop.first %} required{% endif %}{% if cur == c|string %} checked{% endif %}><span>{{ c }}</span></label>{% endfor %}
     </div>
     {% else %}
-    <select name="{{ p.field }}"{% if p.required %} required{% endif %}>
+    <select name="{{ p.field }}"{% if p.required %} required{% endif %} aria-label="{{ t(p.label) }}">
       <option value="">{{ t('선택') }}</option>
       {% for c in p.choices %}<option value="{{ c }}"{% if cur == c|string %} selected{% endif %}>{{ c }}</option>{% endfor %}
     </select>
     {% endif %}
   {% else %}
-    <input type="text" name="{{ p.field }}" maxlength="200"{% if p.required %} required{% endif %} value="{{ row.value_text if row and row.value_text else '' }}">
+    <input type="text" name="{{ p.field }}" maxlength="200"{% if p.required %} required{% endif %} value="{{ row.value_text if row and row.value_text else '' }}" placeholder="{{ t('글자') }}" aria-label="{{ t(p.label) }}">
   {% endif %}
 </div>
 {% endfor %}
 </div>
 {% endmacro %}
 
-{# 기록된 측정값 읽기 전용 표 — 조회 화면 · 라벨 · 성적서 #}
+{# 기록된 측정값 읽기 전용 표 — 조회 화면 · 라벨 · 성적서 (이탈은 ▲ + 글자 — 색만으로 말하지 않는다) #}
 {% macro measure_table(params, values={}) %}
 <table class="grid plain">
   <thead><tr><th>{{ t('측정값') }}</th><th>{{ t('값') }}</th><th>{{ t('기준') }}</th><th>{{ t('출처') }}</th><th>{{ t('이탈') }}</th></tr></thead>
@@ -64,7 +67,7 @@
   {% set row = values.get(p.param_key) if values else none %}
   <tr{% if row and row.deviated %} class="deviated"{% endif %}>
     <td>{{ t(p.label) }}{% if p.unit %} <small>{{ p.unit }}</small>{% endif %}</td>
-    <td>{% if row and row.value_num is not none %}{{ row.value_num }}{% elif row and row.value_text %}{{ row.value_text }}{% else %}{{ t('미수집') }}{% endif %}</td>
+    <td class="num">{% if row and row.value_num is not none %}{{ row.value_num }}{% elif row and row.value_text %}{{ row.value_text }}{% else %}{{ t('미수집') }}{% endif %}</td>
     <td>{{ p.range_text or '-' }}</td>
     <td>{{ t('수집값 자동') if p.is_collect else t('수동') }}</td>
     <td>{% if row and row.deviated %}▲ <b>{{ t('이탈') }}</b>{% else %}-{% endif %}</td>

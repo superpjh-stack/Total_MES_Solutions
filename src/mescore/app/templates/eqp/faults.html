@@ -1,5 +1,5 @@
 {# EQP-03 고장 — F-EQP-05 등록 · F-EQP-06 조치 · F-EQP-07 조회 (MTTR 은 stats.equipment) #}
-{% extends "base.html" %}
+{% extends "pop/_layout.html" %}
 {% import "home/_macros.html" as ui %}
 {% block search %}
 {{ ui.select('설비', 'equipment_id', equipment_options, equipment_id) }}

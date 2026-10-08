@@ -1,8 +1,42 @@
-{# SHP-03 출하 현황 — F-SHP-08. 오늘 · 이번 주 출하 · 납기 대비(stats.delivery). 모바일 390px: 표 대신 카드 · LOT 3건 초과 접힘(디자이너2 §4). #}
-{% extends "base.html" %}
+{# SHP-03 출하 현황 — F-SHP-08. 오늘 · 이번 주 출하 · 납기 대비(stats.delivery). 쓰기 0.
+   모바일(body.ch-mobile): docs/design/mobile/shp_status_m.html — 390px 가로 넘침 0 · 표 대신 카드 · stat 타일 2×2 · LOT 3건 초과면 접힘 · 납기 대비 배지.
+   개발3 라우터 ctx 키 그대로: rows[{shipment_no partner_name ship_date order_no due_date status lot_count total_qty lots[]}] · stat · delivery_total · frm · to · today #}
+{% extends "pop/_layout.html" %}
 {% import "home/_macros.html" as ui %}
+{% import "pop/_ui.html" as pui %}
 {% import "trc/_cards.html" as cards %}
-{% block head %}{{ cards.styles() }}{% endblock %}
+{% block head_extra %}{% if device not in ['pop', 'mobile'] %}{{ cards.styles() }}{% endif %}{% endblock %}
+
+{% macro due_badge(r) %}
+{% if r.due_date and r.ship_date %}
+{% set d = (r.ship_date - r.due_date).days %}
+{% if d > 0 %}<span class="badge b-warn">{{ d }}{{ t('일 지남') }}</span>{% elif d == 0 %}<span class="badge b-ok">{{ t('당일') }}</span>{% else %}<span class="badge b-ok">{{ -d }}{{ t('일 앞') }}</span>{% endif %}
+{% else %}-{% endif %}
+{% endmacro %}
+
+{% block mobile_body %}
+<form class="m-filter" method="get" id="screen-search">
+  {{ ui.field('출하일 시작', 'frm', frm|dt('%Y-%m-%d'), type='date') }}
+  {{ ui.field('출하일 끝', 'to', to|dt('%Y-%m-%d'), type='date') }}
+  <button type="submit">{{ t('조회') }}</button>
+</form>
+{{ pui.stat_grid([('오늘 출하', stat.today_count, t('건')), ('오늘 승인', stat.today_approved, t('건')), ('기간 출하', stat.week_count, t('건')), ('납기 준수', (delivery_total.on_time_rate|round|int ~ '') if delivery_total and delivery_total.on_time_rate is not none else none, '%')]) }}
+<section class="m-sec">
+  <h2>{{ t('출하') }} <small>{{ frm|dt('%m-%d') }} ~ {{ to|dt('%m-%d') }} · {{ rows|length }}{{ t('건') }}</small></h2>
+  {% for r in rows %}
+  {% call pui.mcard(r.shipment_no, r.status, [('거래처', r.partner_name), ('출하일', r.ship_date|dt('%m-%d')), ('수주', (r.order_no ~ ' · ' ~ t('납기') ~ ' ' ~ (r.due_date|dt('%m-%d'))) if r.order_no else none), ('LOT', (r.lot_count ~ t('건') ~ ' · ' ~ (r.total_qty|num(3)))), ('납기 대비', due_badge(r))]) %}
+    {% if r.lots %}
+    <details class="fold" style="margin-top:8px"{% if r.lots|length <= 3 %} open{% endif %}><summary><span class="grow">{{ t('실은 LOT') }} {{ r.lots|length }}{{ t('건') }}</span></summary>
+      <div class="body"><dl class="kv" style="margin-top:6px">{% for l in r.lots %}<dt><code>{{ l.lot_no }}</code></dt><dd>{{ l.qty|num(3) }} {{ l.unit|txt('') }} · {{ pui.badge(l.inspection.judgement if l.inspection else l.insp_status) }}</dd>{% endfor %}</dl></div>
+    </details>
+    {% endif %}
+  {% endcall %}
+  {% else %}
+  <p class="empty">{{ NOT_COLLECTED }}</p>
+  {% endfor %}
+  <ul class="notes"><li>{{ t('납기 대비 = 출하일 − 수주 납기. 수주 없는 출하는 「-」. LOT 3건 초과면 접힘.') }}</li></ul>
+</section>
+{% endblock %}
 
 {% block search %}
 {{ ui.field('출하일 시작', 'frm', frm|dt, type='date') }}
@@ -14,32 +48,15 @@
 {% if delivery_total %}
 <p class="muted">{{ t('납기 대비') }} ({{ frm|dt }} ~ {{ to|dt }}) — {{ t('납기') }} {{ delivery_total.due_count }} · {{ t('출하 완료') }} {{ delivery_total.shipped_count }} · {{ t('지연') }} {{ delivery_total.late }} · {{ t('준수율') }} {{ cards.pct(delivery_total.on_time_rate) }}</p>
 {% else %}<p class="muted">{{ t('납기 대비') }} — {{ NOT_COLLECTED }}</p>{% endif %}
-
 <table class="grid">
   <thead><tr><th>{{ t('출하 번호') }}</th><th>{{ t('거래처') }}</th><th>{{ t('출하일') }}</th><th>{{ t('수주') }}</th><th>{{ t('납기') }}</th><th>{{ t('상태') }}</th><th>{{ t('LOT 수') }}</th><th>{{ t('수량') }}</th></tr></thead>
   <tbody>
   {% for r in rows %}
     <tr><td><a href="{{ nav.path_of('SHP-02') }}?no={{ r.shipment_no }}"><code>{{ r.shipment_no }}</code></a></td><td>{{ r.partner_name }}</td><td>{{ r.ship_date|dt }}</td>
-      <td>{{ r.order_no|txt }}</td><td>{{ r.due_date|dt }}</td><td>{{ cards.badge(r.status) }}</td><td class="num">{{ r.lot_count }}</td><td class="num">{{ r.total_qty|num(3) }}</td></tr>
+      <td>{{ r.order_no|txt }}</td><td>{{ r.due_date|dt }}</td><td>{{ pui.badge(r.status) }}</td><td class="num">{{ r.lot_count }}</td><td class="num">{{ r.total_qty|num(3) }}</td></tr>
   {% else %}
     <tr><td colspan="8" class="empty">{{ NOT_COLLECTED }}</td></tr>
   {% endfor %}
   </tbody>
 </table>
-
-{% if device == 'mobile' %}
-<div class="m-sec">
-  {% for r in rows %}
-  {% call cards.card(r.shipment_no, r.status, [('거래처', r.partner_name), ('출하일', r.ship_date|dt), ('수주', r.order_no|txt), ('납기', r.due_date|dt), ('LOT 수', r.lot_count), ('수량', r.total_qty|num(3))]) %}
-    {% if r.lots %}
-    <details class="fold"{% if r.lots|length <= 3 %} open{% endif %}><summary><span class="grow">{{ t('담긴 LOT') }} {{ r.lots|length }}</span></summary>
-      {% for l in r.lots %}<div class="week-day"><code>{{ l.lot_no }}</code><span>{{ l.qty|num(3) }} {{ l.unit|txt('') }}</span>{{ cards.badge(l.insp_status) }}</div>{% endfor %}
-    </details>
-    {% endif %}
-  {% endcall %}
-  {% else %}
-  <p class="empty">{{ NOT_COLLECTED }}</p>
-  {% endfor %}
-</div>
-{% endif %}
 {% endblock %}

@@ -1,54 +1,102 @@
-{# QUA-02 검사 결과 — F-QUA-04 등록(LOT 스캔 ?no= · 없는 번호 422 재렌더) · F-QUA-05 판정 · F-QUA-06 조회. data-scan 하나 #}
-{% extends "base.html" %}
+{# QUA-02 검사 결과 — F-QUA-04 등록(LOT 스캔 ?no= · 없는 번호 422 재렌더 · S-11) · F-QUA-05 판정(불합격이면 불량코드 · 수량) · F-QUA-06 조회. data-scan 하나.
+   POP: docs/design/pop/qua_inspections_pop.html — LOT 스캔 → 항목 값(측정값 폼과 같은 모양 · 이탈 표시) → 항목 저장 → 판정 3버튼(검사 #) → 불합격 불량 줄.
+   ctx: rows · lot · fields · pending · history · insp_type · type_options · judgement_options · defect_options · frm · to · judgement · lot_filter · scan_no · scan_error #}
+{% extends "pop/_layout.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "home/_measure.html" as mf %}
-{% block body %}
+{% import "pop/_ui.html" as pui %}
+
+{% macro lot_forms() %}
 <section class="panel">
-  <h1>{{ t('검사') }} <small>QUA-02</small></h1>
-  {% call ui.scan_box(nav.path_of('QUA-02'), name='no', label='LOT 스캔', method='get', hidden={'insp_type': insp_type}, placeholder=scan_no, button='확인') %}{% endcall %}
-  {% if scan_error %}<section class="result err" role="alert" id="scan-result"><p class="result-msg">{{ scan_error }} — {{ scan_no }}</p></section>{% endif %}
+  <h2>{{ t('LOT') }} <small><code>{{ lot.no }}</code> · {{ lot.kind_label }} · {{ pui.badge(lot.insp_status) }} · {{ pui.badge(lot.state) }}</small></h2>
+  <dl class="kv">
+    <dt>{{ t('품목') }}</dt><dd>{{ lot.item_code|txt('') }} {{ lot.item|txt }}</dd>
+    <dt>{{ t('수량') }}</dt><dd class="num">{{ lot.qty|num(3) }} {{ lot.unit|txt('') }}</dd>
+  </dl>
 </section>
-{% if lot %}
-<section class="panel">
-  <h2>{{ lot.no }} <small>{{ lot.kind_label }} · {{ lot.item|txt }} · {{ lot.qty|num(3) }} {{ lot.unit|txt('') }} · {{ t('검사') }} {{ lot.insp_status }} · {{ lot.state }}</small></h2>
-  <form method="post" action="{{ nav.path_of('QUA-02') }}" id="insp-form">
-    <input type="hidden" name="lot_id" value="{{ lot.id }}">
-    {{ ui.select('검사 유형', 'insp_type', type_options, insp_type, required=true) }}
+<form method="post" action="{{ nav.path_of('QUA-02') }}" id="insp-form">
+  <input type="hidden" name="lot_id" value="{{ lot.id }}">
+  <section class="panel">
+    <h2>{{ t('검사 항목') }} <small>{{ t('검사 계획 항목에서 자동 · 기준 이탈은 저장 + 표시') }}</small></h2>
+    <div class="form-grid" style="margin-bottom:10px">{{ ui.select('검사 유형', 'insp_type', type_options, insp_type, required=true) }}{{ ui.field('비고', 'note') }}</div>
     {{ mf.measure_fields(fields) }}
-    {{ ui.field('비고', 'note') }}
-    <div class="actions">{{ ui.write_button('검사 결과 등록', user.can('F-QUA-04'), form='insp-form') }}</div>
-  </form>
-  {% for p in pending %}
-  <form method="post" action="{{ nav.path_of('QUA-02') }}/{{ p.id }}/judge" class="form-grid judge">
-    <b>{{ t('검사') }} #{{ p.id }} · {{ p.insp_type }} · {{ p.inspected_at|dt }} · {{ t('판정') }} {{ t('대기') }}</b>
-    {{ ui.select('판정', 'judgement', judgement_options, '', required=true) }}
-    {{ ui.select('불량', 'defect_code_id', defect_options) }}{{ ui.field('불량 수량', 'defect_qty', '', type='number', step='any') }}
-    {{ ui.field('비고', 'note') }}
-    {{ ui.write_button('판정', user.can('F-QUA-05')) }}
-  </form>
-  {% endfor %}
-  {% set hrows = [] %}{% for h in history %}{% set _ = hrows.append([h.id, h.insp_type, h.inspected_at|dt, h.inspector|txt, h.judgement|txt, h.judged_at|dt]) %}{% endfor %}
-  {{ ui.grid(['#', '검사 유형', '검사 일시', '검사자', '판정', '판정 시각'], hrows) }}
+    <div style="margin-top:10px">{{ ui.write_button('항목 저장 (판정은 아직)', user.can('F-QUA-04'), form='insp-form', kind='primary btn-big') }}</div>
+  </section>
+</form>
+{% for p in pending %}
+<form method="post" action="{{ nav.path_of('QUA-02') }}/{{ p.id }}/judge" id="judge-{{ p.id }}">
+  <section class="panel">
+    <h2>{{ t('판정') }} <small>{{ t('검사') }} #{{ p.id }} · {{ p.insp_type }} · {{ p.inspected_at|dt }} · {{ pui.badge('대기') }}</small></h2>
+    {% set j_opts = [] %}
+    {% for v, label in judgement_options %}{% set _ = j_opts.append((v, label, {'합격': 'ok', '조건부': 'warn', '불합격': 'err'}.get(v, ''))) %}{% endfor %}
+    {{ pui.choice('judgement', j_opts, required=true, cols='c3 big') }}
+    <fieldset style="margin-top:10px"><legend>{{ t('불합격이면 — 불량코드 · 수량') }}</legend>
+      <div class="form-grid">{{ ui.select('불량코드', 'defect_code_id', defect_options) }}{{ ui.field('불량 수량', 'defect_qty', '', type='number', step='any') }}{{ ui.field('비고', 'note') }}</div>
+    </fieldset>
+    <div style="margin-top:10px">{{ ui.write_button('판정 저장', user.can('F-QUA-05'), form='judge-' ~ p.id, kind='primary btn-big') }}</div>
+    <ul class="notes"><li>{{ t('판정 뒤 수정은 새 검사로. 「조건부」도 투입 · 출하 가능.') }}</li></ul>
+  </section>
+</form>
+{% endfor %}
+{% if history %}
+<section class="panel">
+  <h2>{{ t('이 LOT 의 검사') }} <small>{{ history|length }}{{ t('건') }}</small></h2>
+  <table class="list">
+    <thead><tr><th>#</th><th>{{ t('검사 유형') }}</th><th>{{ t('검사 일시') }}</th><th>{{ t('검사자') }}</th><th>{{ t('판정') }}</th><th>{{ t('판정 시각') }}</th></tr></thead>
+    <tbody>{% for h in history %}<tr><td>{{ h.id }}</td><td>{{ h.insp_type }}</td><td>{{ h.inspected_at|dt }}</td><td>{{ h.inspector|txt }}</td><td>{{ pui.badge(h.judgement) if h.judgement else pui.badge('대기') }}</td><td>{{ h.judged_at|dt }}</td></tr>{% endfor %}</tbody>
+  </table>
 </section>
 {% endif %}
+{% endmacro %}
+
+{% block pop_body %}
+{% call ui.scan_box(nav.path_of('QUA-02'), name='no', label='LOT 바코드 스캔 (생산 LOT · 원재료 LOT)', method='get', hidden={'insp_type': insp_type}, placeholder=scan_no or 'LP-', button='확인') %}{% endcall %}
+{% if lot %}
+{{ pui.banner(ok=lot.no ~ ' — ' ~ t('검사 유형') ~ ' ' ~ insp_type) }}
+<div class="steps"><div class="step done">1 {{ t('LOT 스캔') }}</div><div class="step on">2 {{ t('항목 값') }}</div><div class="step{% if pending %} on{% endif %}">3 {{ t('판정') }}</div></div>
+{{ lot_forms() }}
+{% else %}
+{{ pui.banner(error=scan_error, fields=fields if scan_error else []) }}
+{% endif %}
 <section class="panel">
-  <h2>{{ t('검사 결과') }} <small>{{ frm }} ~ {{ to }}</small></h2>
-  <form class="search-form" method="get" id="screen-search">
-    {{ ui.field('기간 시작', 'frm', frm, type='date') }}{{ ui.field('기간 끝', 'to', to, type='date') }}
-    {{ ui.select('검사 유형', 'insp_type', type_options, '') }}{{ ui.select('판정', 'judgement', judgement_options, judgement) }}{{ ui.field('LOT', 'lot', lot_filter) }}
-    <button type="submit" class="btn">{{ t('조회') }}</button>
-  </form>
-  <table class="grid">
-    <thead><tr><th>#</th><th>LOT</th><th>{{ t('품목') }}</th><th>{{ t('검사 유형') }}</th><th>{{ t('검사 일시') }}</th><th>{{ t('검사자') }}</th><th>{{ t('항목') }}</th><th>{{ t('이탈') }}</th><th>{{ t('판정') }}</th></tr></thead>
+  <h2>{{ t('검사 결과') }} <small>{{ frm|dt('%Y-%m-%d') }} ~ {{ to|dt('%Y-%m-%d') }} · {{ rows|length }}{{ t('건') }}</small></h2>
+  <table class="list">
+    <thead><tr><th>#</th><th>LOT</th><th>{{ t('품목') }}</th><th>{{ t('검사 유형') }}</th><th>{{ t('검사 일시') }}</th><th>{{ t('이탈') }}</th><th>{{ t('판정') }}</th><th></th></tr></thead>
     <tbody>
     {% for r in rows %}
-    <tr{% if r.deviated_count %} class="deviated"{% endif %}><td>{{ r.id }}</td><td><a href="{{ nav.path_of('QUA-02') }}?no={{ r.lot_no }}">{{ r.lot_no }}</a></td><td>{{ r.item_code|txt }} {{ r.item_name|txt('') }}</td><td>{{ r.insp_type }}</td><td>{{ r.inspected_at|dt }}</td><td>{{ r.inspector|txt }}</td>
-        <td>{% for it in r['items'] %}{{ it.item_key }}={{ it.value_num if it.value_num is not none else it.value_text|txt }}{% if it.deviated %} ▲{% endif %}{% if not loop.last %} · {% endif %}{% else %}-{% endfor %}</td>
-        <td>{% if r.deviated_count %}▲ <b>{{ r.deviated_count }}</b>{% else %}-{% endif %}</td><td>{{ r.judgement|txt(t('대기')) }}</td></tr>
+    <tr><td>{{ r.id }}</td><td><code>{{ r.lot_no }}</code></td><td>{{ r.item_code|txt }} {{ r.item_name|txt('') }}</td><td>{{ r.insp_type }}</td><td>{{ r.inspected_at|dt('%m-%d %H:%M') }}</td>
+      <td>{% if r.deviated_count %}{{ pui.badge('이탈') }} {{ r.deviated_count }}{% else %}-{% endif %}</td><td>{{ pui.badge(r.judgement) if r.judgement else pui.badge('대기') }}</td>
+      <td class="act"><a class="btn btn-sm" href="{{ nav.path_of('QUA-02') }}?no={{ r.lot_no }}">{{ t('열기') }}</a></td></tr>
     {% else %}
-    <tr><td colspan="9" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    <tr><td colspan="8" class="empty">{{ NOT_COLLECTED }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
 </section>
 {% endblock %}
+
+{% block grid %}
+<h2>{{ t('검사') }}</h2>
+{% call ui.scan_box(nav.path_of('QUA-02'), name='no', label='LOT 스캔', method='get', hidden={'insp_type': insp_type}, placeholder=scan_no, button='확인') %}{% endcall %}
+{% if scan_error %}<section class="result err" role="alert" id="scan-result"><p class="result-msg">{{ scan_error }}</p></section>{% endif %}
+{% if lot %}{{ lot_forms() }}{% endif %}
+<h3>{{ t('검사 결과') }} <small>{{ frm }} ~ {{ to }}</small></h3>
+<form class="search-form" method="get" id="screen-search">
+  {{ ui.field('기간 시작', 'frm', frm, type='date') }}{{ ui.field('기간 끝', 'to', to, type='date') }}
+  {{ ui.select('검사 유형', 'insp_type', type_options, '') }}{{ ui.select('판정', 'judgement', judgement_options, judgement) }}{{ ui.field('LOT', 'lot', lot_filter) }}
+  <button type="submit" class="btn">{{ t('조회') }}</button>
+</form>
+<table class="grid">
+  <thead><tr><th>#</th><th>LOT</th><th>{{ t('품목') }}</th><th>{{ t('검사 유형') }}</th><th>{{ t('검사 일시') }}</th><th>{{ t('검사자') }}</th><th>{{ t('항목') }}</th><th>{{ t('이탈') }}</th><th>{{ t('판정') }}</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr{% if r.deviated_count %} class="deviated"{% endif %}><td>{{ r.id }}</td><td><a href="{{ nav.path_of('QUA-02') }}?no={{ r.lot_no }}">{{ r.lot_no }}</a></td><td>{{ r.item_code|txt }} {{ r.item_name|txt('') }}</td><td>{{ r.insp_type }}</td><td>{{ r.inspected_at|dt }}</td><td>{{ r.inspector|txt }}</td>
+      <td>{% for it in r['items'] %}{{ it.item_key }}={{ it.value_num if it.value_num is not none else it.value_text|txt }}{% if it.deviated %} ▲{% endif %}{% if not loop.last %} · {% endif %}{% else %}-{% endfor %}</td>
+      <td>{% if r.deviated_count %}▲ <b>{{ r.deviated_count }}</b>{% else %}-{% endif %}</td><td>{{ r.judgement|txt(t('대기')) }}</td></tr>
+  {% else %}
+  <tr><td colspan="9" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+{% block actions %}{% endblock %}

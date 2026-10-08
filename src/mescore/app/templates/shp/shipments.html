@@ -1,8 +1,8 @@
 {# SHP-01 출하 등록 — 조회(F-SHP-04) · 등록(F-SHP-01) · 수정(F-SHP-02 승인 전만) · 취소(F-SHP-03 인라인 확인 · 스캔된 LOT 은 전부 재고로). LOT 은 SHP-02 에서 스캔한다. #}
-{% extends "base.html" %}
+{% extends "pop/_layout.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "trc/_cards.html" as cards %}
-{% block head %}{{ cards.styles() }}{% endblock %}
+{% block head_extra %}{% if device not in ["pop", "mobile"] %}{{ cards.styles() }}{% endif %}{% endblock %}
 
 {% block search %}
 {% set st = [] %}{% for s in statuses %}{% set _ = st.append((s, t(s))) %}{% endfor %}

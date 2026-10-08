@@ -1,24 +1,42 @@
-{# POP-01 작업 목록 (스캔) — F-POP-01. 지시 번호 스캔 ?no= → POP-02. 없는 번호는 이 화면 422 재렌더 · data-scan 하나 (G-C13) #}
-{% extends "base.html" %}
+{# POP-01 작업 목록 (스캔) — F-POP-01. 지시 번호 스캔 ?no= → 303 POP-02 · 없는 번호 · 마감/취소 지시는 이 화면 422 재렌더(S-11) · data-scan 하나 (G-C13 · S-01).
+   디자인: docs/design/pop/pop_work.html (디자이너2). ctx: rows · scan_no · scan_error · today #}
+{% extends "pop/_layout.html" %}
 {% import "home/_macros.html" as ui %}
-{% block body %}
+{% import "pop/_ui.html" as pui %}
+
+{% block pop_body %}
+{% call ui.scan_box(nav.path_of('POP-01'), name='no', label='작업지시 번호 스캔 (작업지시서 바코드)', method='get', placeholder=scan_no or 'WO-', button='확인') %}{% endcall %}
+{{ pui.banner(error=scan_error, fields=fields if scan_error else []) }}
+
 <section class="panel">
-  <h1>{{ t('작업 목록') }} <small>POP-01 · {{ today|dt }}</small></h1>
-  {% call ui.scan_box(nav.path_of('POP-01'), name='no', label='작업지시 번호 스캔', method='get', placeholder=scan_no, button='열기') %}{% endcall %}
-  {% if scan_error %}<section class="result err" role="alert" id="scan-result"><p class="result-msg">{{ scan_error }} — {{ scan_no }}</p></section>{% endif %}
-</section>
-<section class="panel">
-  <h2>{{ t('오늘 지시') }} <small>{{ t('대기') }} · {{ t('진행') }}</small></h2>
-  <table class="grid">
-    <thead><tr><th>{{ t('작업지시') }}</th><th>{{ t('품목') }}</th><th>{{ t('공정') }}</th><th>{{ t('설비') }}</th><th>{{ t('계획 수량') }}</th><th>{{ t('계획일') }}</th><th>{{ t('상태') }}</th><th>{{ t('실적') }}</th><th></th></tr></thead>
-    <tbody>
+  <h2>{{ t('오늘 지시') }} <small>{{ today|dt('%Y-%m-%d') }} · {{ t('대기') }} {{ rows|selectattr('status', 'equalto', '대기')|list|length }} · {{ t('진행') }} {{ rows|selectattr('status', 'equalto', '진행')|list|length }}</small></h2>
+  <div class="cards">
     {% for r in rows %}
-    <tr{% if r.is_today %} class="today"{% endif %}><td>{{ r.work_order_no }}</td><td>{{ r.item_code }} {{ r.item_name }}</td><td>{{ r.process_name }}</td><td>{{ r.equip_code|txt }}</td><td>{{ r.plan_qty|num(3) }} {{ r.unit|txt('') }}</td><td>{{ r.plan_date|dt }}</td><td>{{ r.status }}{% if r.open_count %} · {{ t('작업 중') }}{% endif %}</td><td>{{ r.result_count }} · {{ t('양품') }} {{ r.good_qty|num(3) }}</td>
-        <td><a class="btn btn-sm" href="{{ nav.path_of('POP-02') }}?wo={{ r.id }}">{{ t('열기') }}</a></td></tr>
+    <article class="card{% if r.open_count %} sel{% endif %}">
+      <h3><code>{{ r.work_order_no }}</code> {{ pui.badge('진행' if r.open_count else r.status) }}</h3>
+      <dl class="kv">
+        <dt>{{ t('품목') }}</dt><dd>{{ r.item_code }} {{ r.item_name }}</dd>
+        <dt>{{ t('공정') }}</dt><dd>{{ r.process_name }}{% if r.equip_code %} · {{ r.equip_code }}{% endif %}</dd>
+        <dt>{{ t('지시 수량') }}</dt><dd class="num">{{ r.plan_qty|num(3) }} {{ r.unit|txt('') }}</dd>
+        {% if r.result_count %}<dt>{{ t('실적') }}</dt><dd class="num">{{ r.result_count }}{{ t('건') }} · {{ t('양품') }} {{ r.good_qty|num(3) }}</dd>
+        {% else %}<dt>{{ t('계획일') }}</dt><dd>{{ r.plan_date|dt('%Y-%m-%d') }}</dd>{% endif %}
+      </dl>
+      <div class="actions">
+        {% if r.open_count %}
+        <a class="btn btn-primary" href="{{ nav.path_of('POP-02') }}?wo={{ r.id }}">{{ t('작업 종료') }} · {{ t('측정값') }}</a>
+        <a class="btn" href="{{ nav.path_of('POP-02') }}?wo={{ r.id }}">{{ t('투입') }} · {{ t('정지') }}</a>
+        {% else %}
+        <a class="btn btn-primary" href="{{ nav.path_of('POP-02') }}?wo={{ r.id }}">{{ t('작업 시작') }}</a>
+        {% endif %}
+      </div>
+    </article>
     {% else %}
-    <tr><td colspan="9" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    <p class="empty">{{ NOT_COLLECTED }} — {{ t('대기 · 진행 지시가 없습니다') }}</p>
     {% endfor %}
-    </tbody>
-  </table>
+  </div>
+  <ul class="notes">
+    <li>{{ t('카드의 「작업 시작」은 스캔과 같은 길이다 — 터치로도 스캔으로도 같은 화면으로 간다.') }}</li>
+    <li>{{ t('마감 · 취소된 지시는 목록에 없다. 스캔하면 422 「대기 · 진행 지시가 아닙니다」.') }}</li>
+  </ul>
 </section>
 {% endblock %}
