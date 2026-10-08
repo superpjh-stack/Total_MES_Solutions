@@ -1,0 +1,55 @@
+{# SHP-02 LOT 스캔 · 승인 — ?no= 출하 번호(바코드)로 연다(없으면 이 화면 422 재렌더 · 스캔칸 유지). 스캔 F-SHP-05 · 스캔 취소 F-SHP-06 · 승인 F-SHP-07(관리자) · 라벨(D-601).
+   화면에 data-scan 은 하나 — 출하가 열리기 전에는 출하 번호 스캔칸, 열린 뒤에는 생산 LOT 스캔칸. POP 채널은 app.js 가 포커스를 지킨다. #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% import "trc/_cards.html" as cards %}
+{% block head %}{{ cards.styles() }}{% endblock %}
+
+{% block body %}
+<section class="panel">
+  {{ cards.scan_alert(scan_error) }}
+  {% if not opened %}
+  <h2>{{ t('출하 번호 스캔') }}</h2>
+  {{ ui.scan_box(nav.path_of('SHP-02'), name='no', label='출하 번호', method='get', button='열기') }}
+  <h3>{{ t('승인 대기 출하') }} <small>{{ waiting|length }}</small></h3>
+  {% set wrows = [] %}
+  {% for w in waiting %}{% set _ = wrows.append([('<a href="?no=' ~ w.shipment_no ~ '"><code>' ~ w.shipment_no ~ '</code></a>')|safe, w.partner_name, w.ship_date|dt, w.lot_count, w.total_qty|num(3)]) %}{% endfor %}
+  {{ ui.grid(['출하 번호', '거래처', '출하일', 'LOT 수', '수량'], wrows) }}
+  {% else %}
+  <h2>{{ t('출하') }} <code>{{ opened.shipment_no }}</code> {{ cards.badge(opened.status) }}
+    <small class="muted">{{ opened.partner_name }} · {{ opened.ship_date|dt }}{% if opened.order_no %} · {{ t('수주') }} {{ opened.order_no }}{% endif %}</small></h2>
+  {% if opened.status == '등록' %}
+  {% call ui.scan_box(nav.path_of('SHP-02'), name='barcode', label='생산 LOT 바코드', hidden={'shipment_no': opened.shipment_no}, button='담기') %}{% endcall %}
+  {% else %}
+  <p class="muted">{{ t('승인되거나 취소된 출하에는 LOT 을 담을 수 없습니다') }}</p>
+  {% endif %}
+  {{ cards.stat_grid([('LOT 수', summary.lot_count, ''), ('합격', summary.passed, ''), ('불합격', summary.failed, ''), ('미수집', summary.uninspected, '')]) }}
+  <table class="grid">
+    <thead><tr><th>#</th><th>{{ t('생산 LOT') }}</th><th>{{ t('품목') }}</th><th>{{ t('수량') }}</th><th>{{ t('검사 상태') }}</th><th>{{ t('최신 검사') }}</th><th>{{ t('스캔') }}</th><th></th></tr></thead>
+    <tbody>
+    {% for l in lots %}
+      <tr><td>{{ loop.index }}</td><td><code>{{ l.lot_no }}</code></td><td>{{ l.item_code }} {{ l.item_name|txt('') }}</td><td class="num">{{ l.qty|num(3) }} {{ l.unit|txt('') }}</td>
+        <td>{{ cards.badge(l.insp_status) }}</td><td>{% if l.inspection %}{{ cards.badge(l.inspection.judgement) }} {{ l.inspection.inspected_at|dt }}{% else %}<span class="is-empty">{{ NOT_COLLECTED }}</span>{% endif %}</td>
+        <td>{{ l.scanned_at|dt('%H:%M:%S') }} {{ l.scanned_by|txt('') }}</td>
+        <td>{% if opened.status == '등록' and can_scan %}<form method="post" action="{{ nav.path_of('SHP-02') }}/cancel" class="inline">
+          <input type="hidden" name="shipment_no" value="{{ opened.shipment_no }}"><input type="hidden" name="barcode" value="{{ l.lot_no }}">
+          <button class="btn btn-sm">{{ t('빼기') }}</button></form>{% endif %}</td></tr>
+    {% else %}
+      <tr><td colspan="8" class="empty">{{ NOT_COLLECTED }} — {{ t('담긴 LOT 이 없습니다') }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="actions">
+    {% if opened.status == '등록' %}
+    <details class="confirm"><summary class="btn btn-primary"{% if not can_approve %} title="{{ t('이 역할은 승인 권한이 없다') }}"{% endif %}>{{ t('출하 승인') }}</summary>
+      <form method="post" action="{{ nav.path_of('SHP-01') }}/{{ opened.id }}/approve" class="inline" id="approve">
+        {{ ui.write_button('승인합니다 — 승인 뒤에는 스캔 · 취소가 되지 않습니다', can_approve) }}</form>
+    </details>
+    {% endif %}
+    <a class="btn" href="{{ nav.path_of('SHP-01') }}/{{ opened.id }}/label" target="_blank">{{ t('출하 라벨') }}</a>
+    {% if opened.status == '승인' %}<a class="btn" href="{{ nav.path_of('SHP-04') }}?no={{ opened.shipment_no }}">{{ t('성적서') }}</a>{% endif %}
+    <a class="btn btn-ghost" href="{{ nav.path_of('SHP-02') }}">{{ t('다른 출하') }}</a>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

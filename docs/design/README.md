@@ -157,7 +157,9 @@
 전부 `../tokens.css`(디자이너1)만 읽는다 — 색상값 직접 지정 0(바코드 `fill:#000` 만 예외, `barcode_spec.md` §2). 외부 CDN · 웹폰트 · 차트 라이브러리 0. 더미는 `(예시)`.
 개발자는 각 파일 맨 위 주석의 "데이터(가설)" 를 보고 Jinja 로 옮긴다. 키 이름이 코드와 달라지면 **코드가 맞다** — 이 절을 고친다.
 
-### 1. 현황판 — `stats.board()` 키 ↔ `data-key` (가설 · 개발3 확정)
+### 1. 현황판 — `stats.board()` 키 ↔ `data-key` (**확정** · 개발3 2026-10-09 — D-602)
+
+> 개발3 확정: 아래 표의 키 · 형 · 목록 상한이 `app/stats.py: board()` 그대로다(`tests/test_kpi_api.py` 가 키 집합을 고정한다). 덧붙인 해석 — `production.actual_qty` = good + defect · `by_hour` 는 실적이 있는 첫 시간부터 23시까지 · `top_defects.share` = 1위 수량 대비 % · `equipment.items[].last_received_at` 은 `eqp_collect.max(ts)` 의 `HH:MM:SS` · `indicators[]` 는 `visible_yn=Y` 순서(seq) 6개 · 조건부는 합격에 세지 않는다(D-302). JSON 폴링(`Accept: application/json`)은 접근 로그를 남기지 않는다. 템플릿 `templates/kpi/board.html`(base.html 없이 · `body.ch-board`).
 
 `GET /kpi/board?device=board` 첫 렌더는 서버가 채우고, 5초마다 같은 경로를 `Accept: application/json` 으로 받아 `[data-key]` 글자만 바꾼다(`board.html` 아래 스크립트 — `static/board.js` 로 떼어도 된다). 응답은 `stats.board()` 그대로. `kpi_snapshot` 이 있으면 그것, 없으면 실시간(`source` 로 알린다).
 

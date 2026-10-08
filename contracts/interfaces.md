@@ -188,28 +188,36 @@ collect.aggregate(equip_id, tag, frm, to, agg) -> float | None   # on_result_clo
 - `equip_code` ↔ `bas_equipment` 1:1 검증. 태그 이름은 `bas_process_param.param_key`(source=collect) 와 같게 두면 실적 측정값으로 이어진다.
 - 제어 명령은 없다. 쓰기 방향 엔드포인트를 만들지 않는다.
 
-## 7. 집계 · ERP · 이관 (개발3)
+## 7. 집계 · ERP · 이관 (개발3) — 코드가 원본 (`progress-dev3.md` §1 공표 · 2026-10-09)
 
 ```python
-# app.stats — 집계 SQL 의 유일한 자리
+# app.stats — 집계 SQL 의 유일한 자리. 비율은 퍼센트 float · 분모 0 → None · 행 없음 → [] / None
 stats.production(frm, to, *, by="day|item|process|equipment") -> list[dict]
-stats.quality(frm, to, *, by="day|item|defect") -> list[dict]
-stats.delivery(frm, to) -> list[dict]            # 납기 준수
-stats.equipment(frm, to) -> list[dict]           # 가동률 · 고장
-stats.measure_series(param_key, frm, to, *, by="day|work_order|equipment", agg="avg") -> list[dict]
-stats.board() -> dict                            # KPI-01 현황판 한 화면 분. kpi_snapshot 이 있으면 그것, 없으면 실시간
-stats.indicators() -> list[dict]                 # kpi_indicator + hook("kpi_extra") 병합
-stats.snapshot(cur, date) -> int                 # 배치만 쓴다 (make kpi-snapshot). 화면은 안 부른다
+stats.quality(frm, to, *, by="day|item|defect") -> list[dict]     # 조건부는 합격에 세지 않는다 (D-302)
+stats.delivery(frm, to, *, by="day|partner", today=None) -> list[dict]   # 승인된 출하의 가장 이른 ship_date 로 판정
+stats.equipment(frm, to) -> list[dict]           # 가동률 · 정지 · 고장 · MTTR · current_state
+stats.measure_series(param_key, frm, to, *, by="day|work_order|equipment", agg="avg|min|max|sum|count|last") -> list[dict]
+stats.totals(kind, rows) -> dict | None          # 합계 줄
+stats.core_metrics(frm, to, *, today=None) -> dict   # CORE_METRIC_KEYS 5 — kpi_indicator.calc_kind = core:<키>
+stats.kpi_extra(frm, to, by=None) -> list[dict]  # 팩 훅 kpi_extra(frm, to[, by]) → [{key, label, value, unit}] (D-508)
+stats.indicators(frm=None, to=None, *, values=None, today=None) -> list[dict]   # kpi_indicator + 현재값 + status (D-602)
+stats.board(today=None) -> dict                  # KPI-01 — 키는 docs/design/README.md 디자이너3 §1(확정). kpi_snapshot 이 있으면 지표 값은 그것
+stats.snapshot(cur, day) -> int                  # 배치만 (`python -m mescore.app.stats snapshot [날짜]`). 화면은 안 부른다
+stats.dashboard(today=None) -> dict              # CMN-04
+stats.summary(kind, frm, to, *, by=None, today=None) -> dict   # KPI-02 한 탭 분
 
-# app.erp — 어댑터. 기본은 전부 501
+# app.erp — 어댑터. 기본은 전부 501 (D-02)
 class ErpAdapter:
-    def push(self, kind: str, payload: dict) -> ErpResult      # 기본: raise http.undecided("D-02", "ERP 연계")
+    def push(self, kind: str, payload: dict) -> ErpResult(ok, message, ref)   # 기본: raise http.undecided("D-02", "ERP 연계")
     def pull(self, kind: str, since: datetime) -> list[dict]
-erp.enqueue(cur, kind, payload) -> int           # ifc_outbox 에 넣는다 (after_commit_* 훅이 쓴다)
-erp.flush(limit=100) -> dict                     # make erp-flush. 어댑터가 501 이면 그대로 남긴다 — 조용한 폴백 0
+erp.adapter() -> ErpAdapter                      # pack.yaml: adapters.erp 모듈의 class Adapter / def adapter()
+erp.enqueue(cur, kind, payload, *, by=None) -> int   # ifc_outbox `대기` (after_commit_* 훅이 쓴다)
+erp.flush(limit=100) -> dict                     # 어댑터가 501 이면 그 행은 `미확정` 으로 남긴다 + ifc_erp_link — 조용한 폴백 0
+erp.retry(outbox_id) -> dict                     # F-IFC-04 — 501 이면 행을 적은 뒤 501 그대로
 
 # mescore.migrate
-migrate.run(command, dir, *, dry_run=False) -> MigrateReport   # basics | orders | lots | history
+migrate.COMMANDS -> {basics, orders, lots, history}
+migrate.run(command, dir, *, dry_run=False, run_by=None) -> MigrateReport   # .ok .exit_code .files[] .text() .as_dict()
 ```
 
 ## 8. HTTP 헬퍼 — `app.util.http`

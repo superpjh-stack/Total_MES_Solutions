@@ -1,0 +1,14 @@
+{# CMN-04 대시보드 — 역할별 판 하나: 공통 숫자 4 + 역할별 강조 1 + 바로가기(권한 칸 조회 이상만). 읽기만 — stats.dashboard(). 디자이너3 home/dashboard.html 의 데이터. #}
+{% extends "base.html" %}
+{% import "trc/_cards.html" as cards %}
+{% block head %}{{ cards.styles() }}{% endblock %}
+
+{% block body %}
+<section class="panel">
+  <h2>{{ t('대시보드') }} <small class="muted">{{ t(board) }} · {{ today.date }}</small></h2>
+  {{ cards.stat_grid([('오늘 작업지시', today.work_orders, t('건')), ('오늘 실적', today.results, t('건')), ('검사 대기', today.inspections_pending, t('건')), ('출하 대기', today.shipments_pending, t('건'))]) }}
+  {{ cards.tiles([(extra.label, extra.value, t('건'), 'warn' if extra.value else '')]) }}
+  <h3>{{ t('바로가기') }}</h3>
+  <div class="chips">{% for s in shortcuts %}<a class="chip" href="{{ s.path }}">{{ t(s.name) }}</a>{% else %}<span class="muted">{{ t('열 수 있는 화면이 없습니다') }}</span>{% endfor %}</div>
+</section>
+{% endblock %}

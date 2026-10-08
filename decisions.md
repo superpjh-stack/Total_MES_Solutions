@@ -203,3 +203,18 @@
 
 ## D-205 측정값 매크로 서명 `mf.measure_fields(params, values, latest)` · 상태: 가설
 - 매크로는 DB 를 읽을 수 없어 `process_id` 대신 라우터가 `measure.params_for(process_id)` 로 넘긴 `params` 를 받는다. 파이썬 쪽은 `app/measure.py`(params_for · parse_form · record · fill_collect · values_of · plan_fields). 검사 항목(`qua_insp_plan`)도 `measure.plan_fields` 로 같은 칸 모양.
+
+---
+
+## 개발3 (R1 · R2 · 2026-10-09)
+
+## D-301 이관 `lots` 가 SHIPMENT LOT 의 출하 헤더를 `34_shipments.csv` 에서 먼저 적재한다 · 상태: 가설
+- `migration-files.md` §4 는 `21_lots.csv` 에 SHIPMENT 종류 LOT 을 두고 §5 `34_shipments.csv` 의 `ship_lot_no` 가 "21 에 있어야 한다" 고 했다. 그런데 `lot_shipment_chk`(kind_base = SHIPMENT ⇔ shipment_id not null)
+  때문에 출하 헤더 없이는 SHIPMENT LOT 행을 넣을 수 없다 — 계약 순서(21 → 34)가 스키마와 맞지 않는다.
+- **기본값**: `migrate lots` 가 SHIPMENT 종류 행을 만날 때 같은 폴더 `34_shipments.csv` 에서 `ship_lot_no` 가 그 LOT 인 헤더를 찾아 `shp_shipment` 를 먼저 upsert 하고 `lot.shipment_id` 를 채운다.
+  헤더가 없으면 그 줄 오류. `migrate history` 의 34 는 같은 헤더를 다시 upsert(멱등) 하고 `lot.shipment_id` 를 맞춘다. 그래서 B-MIG-03 의 쓰는 테이블에 `shp_shipment` 가 더 들어간다(`function-list.md` 수정 요청 — progress-dev3.md §3).
+- 바뀌면 고칠 곳: `src/mescore/migrate/importer.py: load_lots · _shipment_header_rows`.
+
+## D-302 품질 집계의 `조건부` 는 합격에 세지 않는다 · 상태: 가설
+- 디자이너3 절 "조건부는 합격에 세지 않는다(미확정 — D-nn)" 의 번호. `stats.quality.pass_rate = 합격 / 전체 × 100`, 조건부는 `cond_count` 로 따로 센다. 성적서 종합 판정은 불합격 1건이면 불합격 · 미수집(검사 없음)이 있으면 `미확정` · 조건부가 있으면 조건부 · 아니면 합격.
+- 바뀌면 고칠 곳: `app/stats.py: quality` · `routers/shp.py: _summary`.

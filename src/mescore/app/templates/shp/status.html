@@ -1,0 +1,45 @@
+{# SHP-03 출하 현황 — F-SHP-08. 오늘 · 이번 주 출하 · 납기 대비(stats.delivery). 모바일 390px: 표 대신 카드 · LOT 3건 초과 접힘(디자이너2 §4). #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% import "trc/_cards.html" as cards %}
+{% block head %}{{ cards.styles() }}{% endblock %}
+
+{% block search %}
+{{ ui.field('출하일 시작', 'frm', frm|dt, type='date') }}
+{{ ui.field('출하일 끝', 'to', to|dt, type='date') }}
+{% endblock %}
+
+{% block grid %}
+{{ cards.stat_grid([('오늘 출하', stat.today_count, t('건')), ('오늘 승인', stat.today_approved, t('건')), ('기간 출하', stat.week_count, t('건')), ('기간 LOT', stat.week_lots, '')]) }}
+{% if delivery_total %}
+<p class="muted">{{ t('납기 대비') }} ({{ frm|dt }} ~ {{ to|dt }}) — {{ t('납기') }} {{ delivery_total.due_count }} · {{ t('출하 완료') }} {{ delivery_total.shipped_count }} · {{ t('지연') }} {{ delivery_total.late }} · {{ t('준수율') }} {{ cards.pct(delivery_total.on_time_rate) }}</p>
+{% else %}<p class="muted">{{ t('납기 대비') }} — {{ NOT_COLLECTED }}</p>{% endif %}
+
+<table class="grid">
+  <thead><tr><th>{{ t('출하 번호') }}</th><th>{{ t('거래처') }}</th><th>{{ t('출하일') }}</th><th>{{ t('수주') }}</th><th>{{ t('납기') }}</th><th>{{ t('상태') }}</th><th>{{ t('LOT 수') }}</th><th>{{ t('수량') }}</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr><td><a href="{{ nav.path_of('SHP-02') }}?no={{ r.shipment_no }}"><code>{{ r.shipment_no }}</code></a></td><td>{{ r.partner_name }}</td><td>{{ r.ship_date|dt }}</td>
+      <td>{{ r.order_no|txt }}</td><td>{{ r.due_date|dt }}</td><td>{{ cards.badge(r.status) }}</td><td class="num">{{ r.lot_count }}</td><td class="num">{{ r.total_qty|num(3) }}</td></tr>
+  {% else %}
+    <tr><td colspan="8" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% if device == 'mobile' %}
+<div class="m-sec">
+  {% for r in rows %}
+  {% call cards.card(r.shipment_no, r.status, [('거래처', r.partner_name), ('출하일', r.ship_date|dt), ('수주', r.order_no|txt), ('납기', r.due_date|dt), ('LOT 수', r.lot_count), ('수량', r.total_qty|num(3))]) %}
+    {% if r.lots %}
+    <details class="fold"{% if r.lots|length <= 3 %} open{% endif %}><summary><span class="grow">{{ t('담긴 LOT') }} {{ r.lots|length }}</span></summary>
+      {% for l in r.lots %}<div class="week-day"><code>{{ l.lot_no }}</code><span>{{ l.qty|num(3) }} {{ l.unit|txt('') }}</span>{{ cards.badge(l.insp_status) }}</div>{% endfor %}
+    </details>
+    {% endif %}
+  {% endcall %}
+  {% else %}
+  <p class="empty">{{ NOT_COLLECTED }}</p>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

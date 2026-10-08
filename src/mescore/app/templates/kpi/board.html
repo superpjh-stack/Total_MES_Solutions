@@ -1,0 +1,172 @@
+{# KPI-01 현황판 — 디자이너3 board/board.html 구조(2×3 패널 · data-key 자리 · 인라인 SVG 막대 · 폴링 스크립트)를 최소 스타일로. 조작 요소 0.
+   첫 렌더는 서버가 stats.board() 로 채우고 5초마다 같은 경로를 Accept: application/json 으로 받아 [data-key] 글자만 바꾼다(전체 새로고침 없음).
+   폴링 실패(503 · 네트워크)에도 마지막 값을 유지하고 머리글에 실패 시각을 붙인 채 폴링을 계속한다(api-contract.md §2 · D-602). 벽걸이 전용이라 base.html 을 쓰지 않는다. #}
+<!DOCTYPE html>
+<html lang="ko" data-theme="light" data-state="ok">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920">
+<title>{{ t('현황판') }} · {{ system_name }}</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:#f3f4f6;color:#111;font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;display:grid;grid-template-rows:72px 1fr;min-height:100vh;user-select:none;cursor:none}
+.head{display:flex;align-items:center;justify-content:space-between;padding:0 28px;background:#fff;border-bottom:1px solid #d8dde3}
+.head h1{margin:0;font-size:30px}.head h1 small{font-size:20px;font-weight:400;color:#555;margin-left:12px}
+.stamp{display:flex;align-items:center;gap:16px;font-size:20px;color:#555}.stamp b{color:#111;font-variant-numeric:tabular-nums}.stamp .src{font-size:15px;color:#888}
+.alert{display:none;align-items:center;gap:10px;padding:6px 16px;border-radius:999px;background:#c62828;color:#fff;font-size:18px;font-weight:700}
+:root[data-state="stale"] .alert{display:flex}:root[data-state="stale"] .stamp .live{display:none}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:16px;padding:16px;min-height:0}
+.panel{background:#fff;border:1px solid #d8dde3;border-radius:8px;padding:14px 20px;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}
+.panel h2{margin:0 0 8px;font-size:22px;font-weight:600;color:#444;display:flex;justify-content:space-between;align-items:baseline}.panel h2 small{font-size:15px;font-weight:400;color:#888}
+.hero{display:flex;align-items:baseline;gap:10px;line-height:1}.hero .v{font-size:72px;font-weight:700;letter-spacing:-.02em}.hero .of{font-size:30px;color:#888}.hero .u{font-size:22px;color:#555}
+[data-status="good"]>.v,[data-status="good"]>b,.hero[data-status="good"] .v{color:#1b7f3b}[data-status="warn"]>.v,.hero[data-status="warn"] .v{color:#b36b00}[data-status="critical"]>.v,.hero[data-status="critical"] .v{color:#c62828}
+.meter{height:12px;background:#e9ecef;border-radius:6px;overflow:hidden;margin:8px 0}.meter i{display:block;height:100%;background:#2b5797}
+.sub{display:flex;gap:28px;margin-top:8px}.sub .k{display:flex;flex-direction:column;gap:2px}.sub .l{font-size:14px;color:#777}.sub b{font-size:26px}.sub .u{font-size:14px;color:#777;font-style:normal}.target{font-size:13px;color:#888}
+table{width:100%;border-collapse:collapse;font-size:17px}th,td{padding:5px 8px;border-bottom:1px solid #eee;text-align:left}th{color:#777;font-weight:500;font-size:14px}td.num{text-align:right;font-variant-numeric:tabular-nums}
+tr[data-state="고장"] td,tr[data-state="정지"] td{color:#c62828}
+.states{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}.state{border:1px solid #d8dde3;border-radius:6px;padding:8px;text-align:center}.state span{display:block;font-size:14px;color:#777}.state b{font-size:32px}
+.bars{list-style:none;margin:0;padding:0}.bars li{display:grid;grid-template-columns:160px 1fr 50px;align-items:center;gap:8px;font-size:16px;margin:4px 0}.bars i{display:block;height:14px;background:#2b5797;border-radius:3px}.bars b{text-align:right}
+.inds{list-style:none;margin:0;padding:0}.inds li{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #eee;font-size:17px}.inds li b{font-size:22px}.inds li small{color:#888;margin-left:6px}
+.is-empty{color:#888;font-weight:400}.chart{margin-top:auto}.chart svg{width:100%;height:150px}.chart rect{fill:#9db4d8}.chart rect.now{fill:#2b5797}.chart text{font-size:12px;fill:#777}.chart line{stroke:#ccc}
+.cap{font-size:14px;color:#888}
+</style>
+</head>
+<body class="ch-board" data-device="board" data-refresh-seconds="{{ board_refresh_seconds }}">
+<header class="head">
+  <h1>{{ t('현황판') }} <small data-key="today">{{ board.today }}</small></h1>
+  <div class="stamp">
+    <span class="alert"><span>{{ t('갱신 실패') }} <b data-key="_failed_at">-</b>, {{ t('재시도 중') }}</span></span>
+    <span class="live">{{ t('마지막 갱신') }} <b data-key="_as_of" id="refreshed-at">{{ now }}</b></span>
+    <span class="src">{{ board_refresh_seconds }}{{ t('초마다 자동 갱신') }} · <span data-key="source">{{ board.source }}</span></span>
+  </div>
+</header>
+{% set p = board.production %}{% set q = board.quality %}{% set d = board.delivery %}{% set e = board.equipment %}{% set m = board.measure %}
+{% macro n(v, digits=0) %}{% if v is none %}<span class="is-empty">{{ NOT_COLLECTED }}</span>{% else %}{{ v|num(digits) }}{% endif %}{% endmacro %}
+<main class="grid">
+  <section class="panel">
+    <h2>{{ t('오늘 생산') }} <small>{{ t('계획 대비 실적') }}</small></h2>
+    <div class="hero" data-status-key="production.achieve_rate" data-good="95" data-warn="80">
+      <span class="v" data-key="production.actual_qty" data-digits="0">{{ n(p.actual_qty) }}</span>
+      <span class="of">/ <span data-key="production.plan_qty" data-digits="0">{{ n(p.plan_qty) }}</span></span>
+      <span class="u" data-key="production.unit">{{ p.unit|txt('') }}</span>
+    </div>
+    <div class="meter" data-width-key="production.achieve_rate"><i style="width:{{ [p.achieve_rate or 0, 100]|min }}%"></i></div>
+    <div class="sub">
+      <div class="k"><span class="l">{{ t('달성률') }}</span><b><span data-key="production.achieve_rate" data-digits="1">{{ n(p.achieve_rate, 1) }}</span><em class="u">%</em></b></div>
+      <div class="k" data-status-key="production.good_rate" data-target-key="production.good_rate_target"><span class="l">{{ t('양품률') }}</span><b><span data-key="production.good_rate" data-digits="1">{{ n(p.good_rate, 1) }}</span><em class="u">%</em></b>
+        <span class="target">{{ t('목표') }} <span data-key="production.good_rate_target" data-digits="1" data-empty="{{ t('미확정') }}">{% if p.good_rate_target is none %}<span class="is-empty">{{ t('미확정') }}</span>{% else %}{{ p.good_rate_target|num(1) }}{% endif %}</span><em class="u">%</em></span></div>
+      <div class="k"><span class="l">{{ t('불량') }}</span><b><span data-key="production.defect_qty" data-digits="0">{{ n(p.defect_qty) }}</span></b></div>
+    </div>
+    <div class="chart"><div class="cap">{{ t('시간대별 실적') }}</div>
+      <svg viewBox="0 0 560 150" data-bars="production.by_hour" aria-label="{{ t('시간대별 실적') }}"><line x1="0" y1="126" x2="560" y2="126"/><g class="b"></g><g class="t"></g></svg></div>
+  </section>
+  <section class="panel">
+    <h2>{{ t('품질') }} <small>{{ t('오늘 검사') }}</small></h2>
+    <div class="hero" data-status-key="quality.pass_rate" data-target-key="quality.pass_rate_target"><span class="v"><span data-key="quality.pass_rate" data-digits="1">{{ n(q.pass_rate, 1) }}</span><em class="u">%</em></span><span class="u">{{ t('합격률') }}</span></div>
+    <div class="sub">
+      <div class="k"><span class="l">{{ t('검사') }}</span><b><span data-key="quality.inspection_count" data-digits="0">{{ n(q.inspection_count) }}</span></b></div>
+      <div class="k" data-status-key="quality.fail_count" data-zero-good><span class="l">{{ t('불합격') }}</span><b><span data-key="quality.fail_count" data-digits="0">{{ n(q.fail_count) }}</span></b></div>
+      <div class="k"><span class="l">{{ t('목표') }}</span><b><span data-key="quality.pass_rate_target" data-digits="1" data-empty="{{ t('미확정') }}">{% if q.pass_rate_target is none %}<span class="is-empty">{{ t('미확정') }}</span>{% else %}{{ q.pass_rate_target|num(1) }}{% endif %}</span><em class="u">%</em></b></div>
+    </div>
+    <h2 style="margin-top:12px;font-size:17px">{{ t('불량 상위') }} <small>{{ t('수량') }}</small></h2>
+    <ul class="bars" data-list="quality.top_defects" data-max="3">
+      <template><li><span data-key="defect_name"></span><i data-width-key="share"></i><b data-key="qty" data-digits="0"></b></li></template>
+      {% for x in q.top_defects %}<li data-row><span>{{ x.defect_name }}</span><i style="width:{{ x.share or 0 }}%"></i><b>{{ n(x.qty) }}</b></li>{% else %}<li data-row class="is-empty">{{ NOT_COLLECTED }}</li>{% endfor %}
+    </ul>
+  </section>
+  <section class="panel">
+    <h2>{{ t('납기') }} <small>{{ t('오늘 출하') }}</small></h2>
+    <div class="hero"><span class="v" data-key="delivery.shipped_count" data-digits="0">{{ n(d.shipped_count) }}</span><span class="of">/ <span data-key="delivery.due_count" data-digits="0">{{ n(d.due_count) }}</span></span><span class="u">{{ t('건 출하') }}</span></div>
+    <div class="meter" data-width-key="delivery.on_time_rate"><i style="width:{{ [d.on_time_rate or 0, 100]|min }}%"></i></div>
+    <div class="sub">
+      <div class="k" data-status-key="delivery.late_count" data-zero-good><span class="l">{{ t('지연') }}</span><b><span data-key="delivery.late_count" data-digits="0">{{ n(d.late_count) }}</span></b></div>
+      <div class="k"><span class="l">{{ t('미출하') }}</span><b><span data-key="delivery.pending_count" data-digits="0">{{ n(d.pending_count) }}</span></b></div>
+      <div class="k"><span class="l">{{ t('준수율') }}</span><b><span data-key="delivery.on_time_rate" data-digits="1">{{ n(d.on_time_rate, 1) }}</span><em class="u">%</em></b></div>
+    </div>
+    <h2 style="margin-top:12px;font-size:17px">{{ t('지연 수주') }} <small>{{ t('납기 지남 · 미출하') }}</small></h2>
+    <table><thead><tr><th>{{ t('수주 번호') }}</th><th>{{ t('거래처') }}</th><th>{{ t('납기') }}</th></tr></thead>
+      <tbody data-list="delivery.late_orders" data-max="2">
+        <template><tr><td data-key="order_no"></td><td data-key="partner_name"></td><td data-key="due_date"></td></tr></template>
+        {% for o in d.late_orders %}<tr data-row><td>{{ o.order_no }}</td><td>{{ o.partner_name }}</td><td>{{ o.due_date }}</td></tr>{% else %}<tr data-row><td colspan="3" class="is-empty">{{ NOT_COLLECTED }}</td></tr>{% endfor %}
+      </tbody></table>
+  </section>
+  <section class="panel">
+    <h2>{{ t('설비') }} <small>{{ t('현재 상태') }}</small></h2>
+    <div class="states">
+      <div class="state"><span>{{ t('가동') }}</span><b data-key="equipment.run" data-digits="0">{{ n(e.run) }}</b></div>
+      <div class="state"><span>{{ t('정지') }}</span><b data-key="equipment.stop" data-digits="0">{{ n(e.stop) }}</b></div>
+      <div class="state"><span>{{ t('점검') }}</span><b data-key="equipment.check" data-digits="0">{{ n(e.check) }}</b></div>
+      <div class="state"><span>{{ t('고장') }}</span><b data-key="equipment.fault" data-digits="0">{{ n(e.fault) }}</b></div>
+    </div>
+    <table><thead><tr><th>{{ t('설비') }}</th><th>{{ t('상태') }}</th><th>{{ t('마지막 수신') }}</th></tr></thead>
+      <tbody data-list="equipment.items" data-max="5">
+        <template><tr data-state-key="state"><td data-key="equip_name"></td><td data-key="state" data-empty="{{ NOT_COLLECTED }}"></td><td data-key="last_received_at" data-empty="{{ NOT_COLLECTED }}"></td></tr></template>
+        {% for x in e['items'] %}<tr data-row data-state="{{ x.state or '' }}"><td>{{ x.equip_name }}</td><td>{{ x.state or NOT_COLLECTED }}</td><td>{{ x.last_received_at or NOT_COLLECTED }}</td></tr>{% else %}<tr data-row><td colspan="3" class="is-empty">{{ NOT_COLLECTED }}</td></tr>{% endfor %}
+      </tbody></table>
+  </section>
+  <section class="panel">
+    <h2>{{ t('진행 중 작업지시') }} <small><span data-key="work_orders_count" data-digits="0">{{ board.work_orders_count }}</span></small></h2>
+    <table><thead><tr><th>{{ t('지시 번호') }}</th><th>{{ t('품목') }}</th><th class="num">{{ t('실적 / 계획') }}</th></tr></thead>
+      <tbody data-list="work_orders" data-max="7">
+        <template><tr data-state-key="status"><td data-key="work_order_no"></td><td data-key="item_name"></td><td class="num"><span data-key="actual_qty" data-digits="0"></span> / <span data-key="plan_qty" data-digits="0"></span></td></tr></template>
+        {% for w in board.work_orders %}<tr data-row data-state="{{ w.status }}"><td>{{ w.work_order_no }}</td><td>{{ w.item_name }}</td><td class="num">{{ n(w.actual_qty) }} / {{ n(w.plan_qty) }}</td></tr>{% else %}<tr data-row><td colspan="3" class="is-empty">{{ NOT_COLLECTED }}</td></tr>{% endfor %}
+      </tbody></table>
+  </section>
+  <section class="panel">
+    <h2>{{ t('측정값 이탈') }} <small>{{ t('오늘 · 범위 밖 기록') }}</small></h2>
+    <div class="hero" data-status-key="measure.deviated_count" data-zero-good><span class="v" data-key="measure.deviated_count" data-digits="0">{{ n(m.deviated_count) }}</span><span class="of">/ <span data-key="measure.measured_count" data-digits="0">{{ n(m.measured_count) }}</span></span><span class="u">{{ t('건') }}</span></div>
+    <h2 style="margin-top:12px;font-size:17px">{{ t('지표') }} <small>{{ t('목표 대비') }}</small></h2>
+    <ul class="inds" data-list="indicators" data-max="6">
+      <template><li data-status-key="status"><span data-key="name"></span><span><b data-key="value" data-digits="1"></b><small>/ <span data-key="target_value" data-digits="1" data-empty="{{ t('미확정') }}"></span> <span data-key="unit"></span></small></span></li></template>
+      {% for i in board.indicators %}<li data-row{% if i.status %} data-status="{{ i.status }}"{% endif %}><span>{{ i.name }}</span><span><b>{{ n(i.value, 1) }}</b><small>/ {% if i.target_value is none %}<span class="is-empty">{{ t('미확정') }}</span>{% else %}{{ i.target_value|num(1) }}{% endif %} {{ i.unit|txt('') }}</small></span></li>{% else %}<li data-row class="is-empty">{{ NOT_COLLECTED }}</li>{% endfor %}
+    </ul>
+  </section>
+</main>
+<script>
+(function () {
+  var URL = {{ poll_url|tojson }}, INTERVAL = {{ board_refresh_seconds }} * 1000, EMPTY = {{ NOT_COLLECTED|tojson }}, root = document.documentElement;
+  function get(o, p) { return p.split('.').reduce(function (a, k) { return a == null ? undefined : a[k]; }, o); }
+  function hhmm(d, s) { var z = function (n) { return (n < 10 ? '0' : '') + n; }; return z(d.getHours()) + ':' + z(d.getMinutes()) + (s ? ':' + z(d.getSeconds()) : ''); }
+  function fmt(v, el) { if (v == null || v === '') return el.dataset.empty || EMPTY; if (typeof v === 'number') { var d = el.dataset.digits == null ? 1 : +el.dataset.digits; return v.toLocaleString('ko-KR', { minimumFractionDigits: d, maximumFractionDigits: d }); } return String(v); }
+  function status(el, scope) {
+    var v = get(scope, el.dataset.statusKey);
+    if (v == null) { el.removeAttribute('data-status'); return; }
+    if (el.hasAttribute('data-zero-good')) { el.dataset.status = v > 0 ? 'critical' : 'good'; return; }
+    var tgt = el.dataset.targetKey ? get(scope, el.dataset.targetKey) : (el.dataset.good != null ? +el.dataset.good : null);
+    if (tgt == null) { if (typeof v === 'string') el.dataset.status = v; else el.removeAttribute('data-status'); return; }
+    var warn = el.dataset.warn != null ? +el.dataset.warn : tgt * 0.95;
+    el.dataset.status = v >= tgt ? 'good' : v >= warn ? 'warn' : 'critical';
+  }
+  function fill(scope, data) {
+    scope.querySelectorAll('[data-key]').forEach(function (el) { if (el.dataset.key.charAt(0) === '_') return; var v = get(data, el.dataset.key); el.textContent = fmt(v, el); el.classList.toggle('is-empty', v == null); });
+    scope.querySelectorAll('[data-width-key]').forEach(function (el) { var v = get(data, el.dataset.widthKey); var t = el.tagName === 'I' ? el : el.querySelector('i'); if (t) t.style.width = (v == null ? 0 : Math.max(0, Math.min(100, v))) + '%'; });
+    scope.querySelectorAll('[data-status-key]').forEach(function (el) { status(el, data); });
+    scope.querySelectorAll('[data-state-key]').forEach(function (el) { var v = get(data, el.dataset.stateKey); if (v == null) el.removeAttribute('data-state'); else el.dataset.state = v; });
+  }
+  function lists(data) {
+    document.querySelectorAll('[data-list]').forEach(function (box) {
+      var rows = get(data, box.dataset.list) || [], tpl = box.querySelector('template');
+      box.querySelectorAll('[data-row]').forEach(function (r) { r.remove(); });
+      rows.slice(0, +(box.dataset.max || 99)).forEach(function (row) { var n = tpl.content.firstElementChild.cloneNode(true); n.setAttribute('data-row', ''); fill(n, row); box.appendChild(n); });
+      if (!rows.length) { var e = document.createElement(box.tagName === 'UL' ? 'li' : 'tr'); e.setAttribute('data-row', ''); e.className = 'is-empty'; e.innerHTML = box.tagName === 'UL' ? EMPTY : '<td colspan="3">' + EMPTY + '</td>'; box.appendChild(e); }
+    });
+  }
+  function bars(data) {
+    document.querySelectorAll('svg[data-bars]').forEach(function (svg) {
+      var rows = get(data, svg.dataset.bars) || [], g = svg.querySelector('g.b'), t = svg.querySelector('g.t');
+      var W = 560, H = 126, n = Math.max(rows.length, 1), slot = W / n, bw = Math.max(8, slot - 10), max = rows.reduce(function (m, r) { return Math.max(m, r.qty || 0); }, 0) || 1, nowH = new Date().getHours();
+      g.innerHTML = ''; t.innerHTML = '';
+      rows.forEach(function (r, i) { var h = Math.round((r.qty || 0) / max * 100), x = Math.round(i * slot + (slot - bw) / 2);
+        g.insertAdjacentHTML('beforeend', '<rect x="' + x + '" y="' + (H - h) + '" width="' + Math.round(bw) + '" height="' + h + '" rx="4"' + (+r.hour === nowH ? ' class="now"' : '') + '/>');
+        if (i % 4 === 0 || i === rows.length - 1) t.insertAdjacentHTML('beforeend', '<text x="' + Math.round(x + bw / 2) + '" y="148" text-anchor="middle">' + r.hour + '</text>'); });
+    });
+  }
+  function apply(data) { fill(document, data); lists(data); bars(data); root.dataset.state = 'ok'; document.querySelector('[data-key="_as_of"]').textContent = hhmm(new Date(), true); }
+  function fail() { root.dataset.state = 'stale'; document.querySelector('[data-key="_failed_at"]').textContent = hhmm(new Date()); }
+  function tick() { fetch(URL, { headers: { 'Accept': 'application/json' }, cache: 'no-store', credentials: 'same-origin' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(apply).catch(fail).then(function () { setTimeout(tick, INTERVAL); }); }
+  bars({{ {'production': {'by_hour': board.production.by_hour}}|tojson }});
+  setTimeout(tick, INTERVAL);
+})();
+</script>
+</body>
+</html>

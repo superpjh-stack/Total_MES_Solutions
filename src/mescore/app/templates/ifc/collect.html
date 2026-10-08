@@ -1,0 +1,32 @@
+{# IFC-01 수집 수신 현황 — F-IFC-02. 설비별 마지막 수신 · 건수 · 거부 · 모르는 태그 · 거부 메시지. 수신 없으면 미수집. 수신 API 는 POST 같은 경로(토큰). 쓰기 0. #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% import "trc/_cards.html" as cards %}
+{% block head %}{{ cards.styles() }}{% endblock %}
+
+{% block search %}
+{{ ui.field('수신일 시작', 'frm', q.frm, type='date') }}
+{{ ui.field('수신일 끝', 'to', q.to, type='date') }}
+{% endblock %}
+
+{% block grid %}
+{{ cards.tiles([('수신 원문', counts.total, t('건'), ''), ('거부', counts.rejected, t('건'), 'err' if counts.rejected else ''), ('재전송', counts.resent, t('건'), ''), ('마지막 수신', counts.last_at|dt('%Y-%m-%d %H:%M:%S') if counts.last_at else none, '', '')]) }}
+<p class="muted">{{ t('수신 API') }}: <code>POST {{ endpoint }}</code> · <code>X-Collect-Token</code> · {{ t('코어 공용 태그') }} <code>{{ known_tags|join(', ') }}</code></p>
+<table class="grid">
+  <thead><tr><th>{{ t('설비') }}</th><th>{{ t('수집 설비') }}</th><th>{{ t('마지막 수신') }}</th><th>{{ t('수신') }}</th><th>{{ t('거부') }}</th><th>{{ t('태그') }}</th><th>{{ t('모르는 태그') }}</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr><td>{{ r.equip_code }} {{ r.equip_name }}</td><td>{{ r.collect_yn }}</td><td>{% if r.last_received_at %}{{ r.last_received_at|dt('%Y-%m-%d %H:%M:%S') }}{% else %}<span class="is-empty">{{ NOT_COLLECTED }}</span>{% endif %}</td>
+      <td class="num">{{ r.received }}</td><td class="num">{{ r.rejected }}</td><td>{{ (r.tags or [])|join(', ') or '-' }}</td><td>{{ r.unknown_tags|join(', ') or '-' }}</td></tr>
+  {% else %}
+    <tr><td colspan="7" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<h3>{{ t('모르는 설비') }} <small>{{ unknown_equipment|length }}</small></h3>
+{% set ue = [] %}{% for u in unknown_equipment %}{% set _ = ue.append([u.equip_code, u.n, u.last_received_at|dt('%Y-%m-%d %H:%M:%S')]) %}{% endfor %}
+{{ ui.grid(['설비 코드', '건수', '마지막 수신'], ue) }}
+<h3>{{ t('거부 메시지') }} <small>{{ rejected|length }}</small></h3>
+{% set rj = [] %}{% for x in rejected %}{% set _ = rj.append([x.received_at|dt('%Y-%m-%d %H:%M:%S'), x.equip_code, x.ts|dt('%Y-%m-%d %H:%M:%S'), x.source, x.rejected_reason, 'Y' if x.resend else 'N']) %}{% endfor %}
+{{ ui.grid(['수신 시각', '설비 코드', '메시지 시각', '출처', '거부 사유', '재전송'], rj) }}
+{% endblock %}

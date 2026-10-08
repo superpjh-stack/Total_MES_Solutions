@@ -1,0 +1,4 @@
+lot_no,insp_type,inspected_at,inspector,judgement,item_key,item_value,item_judgement
+P-EX-0004,최종,2026-10-02 10:00:00,qa,합격,moisture,12.1,합격
+P-EX-0004,최종,2026-10-02 10:00:00,qa,합격,appearance,양호,합격
+P-EX-0005,최종,2026-10-02 10:05:00,qa,합격,moisture,12.4,합격

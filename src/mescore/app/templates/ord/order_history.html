@@ -1,0 +1,17 @@
+{# ORD-02 수주 이력 — F-ORD-05. ord_order_hist 전후값 · 누가 · 언제. 읽기만. #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+
+{% block search %}
+{{ ui.field('수주 번호', 'order_no', q.order_no) }}
+{{ ui.field('변경일 시작', 'frm', q.frm, type='date') }}
+{{ ui.field('변경일 끝', 'to', q.to, type='date') }}
+{% endblock %}
+
+{% block grid %}
+{% set columns = ['변경 시각', '수주 번호', '거래처', '항목', '전 값', '후 값', '변경자'] %}
+{% set data = [] %}
+{% for h in rows %}{% set _ = data.append([h.changed_at|dt('%Y-%m-%d %H:%M:%S'), h.order_no, h.partner_name, h.field, h.before_value|txt, h.after_value|txt, h.changed_by|txt]) %}{% endfor %}
+{{ ui.grid(columns, data) }}
+{% if rows|length >= limit %}<p class="muted">{{ t('최근') }} {{ limit }}{{ t('건만 보입니다') }}</p>{% endif %}
+{% endblock %}

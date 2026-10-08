@@ -1,0 +1,64 @@
+{# KPI-03 지표 정의 — 조회(F-KPI-08 정의 + 현재값 + 목표 대비) · 등록(F-KPI-06) · 수정(F-KPI-07 목표값 · 표시 여부). 목표 NULL → 미확정(D-602). #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% import "trc/_cards.html" as cards %}
+{% block head %}{{ cards.styles() }}{% endblock %}
+
+{% block search %}
+{{ ui.field('기간 시작', 'frm', frm|dt, type='date') }}
+{{ ui.field('기간 끝', 'to', to|dt, type='date') }}
+{% endblock %}
+
+{% block grid %}
+<table class="grid">
+  <thead><tr><th>{{ t('순서') }}</th><th>{{ t('지표 키') }}</th><th>{{ t('이름') }}</th><th>{{ t('산식') }}</th><th>{{ t('현재값') }}</th><th>{{ t('목표값') }}</th><th>{{ t('상태') }}</th><th>{{ t('표시') }}</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr{% if opened and opened.id == r.id %} class="sel"{% endif %}><td>{{ r.seq }}</td><td><code>{{ r.indicator_key }}</code></td><td>{{ r.name }}</td><td><code>{{ r.calc_kind }}</code>{% if not r.known %} <span class="undecided">{{ t('키 없음') }}</span>{% endif %}</td>
+      <td class="num">{% if r.value is none %}<span class="is-empty">{{ NOT_COLLECTED }}</span>{% else %}{{ r.value|num(1) }} {{ r.unit|txt('') }}{% endif %}</td>
+      <td class="num">{% if r.target_value is none %}{{ ui.undecided('D-602') }}{% else %}{{ r.target_value|num(1) }}{% endif %}</td>
+      <td>{% if r.status %}{{ cards.badge(r.status, {'good': 'b-ok', 'warn': 'b-warn', 'critical': 'b-err'}[r.status]) }}{% else %}-{% endif %}</td>
+      <td>{{ r.visible_yn }}</td><td><a class="btn btn-sm btn-ghost" href="?id={{ r.id }}">{{ t('수정') }}</a></td></tr>
+  {% else %}
+    <tr><td colspan="9" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% if opened %}
+<section class="panel">
+  <h2>{{ t('지표 수정') }} <code>{{ opened.indicator_key }}</code></h2>
+  <form method="post" action="{{ nav.path_of('KPI-03') }}/{{ opened.id }}" id="ind-edit">
+    <div class="form-grid">
+      {{ ui.field('이름', 'name', opened.name) }}
+      {{ ui.field('단위', 'unit', opened.unit or '') }}
+      {{ ui.field('목표값', 'target_value', opened.target_value if opened.target_value is not none else '') }}
+      {{ ui.select('표시', 'visible_yn', [('Y', 'Y'), ('N', 'N')], opened.visible_yn) }}
+      {{ ui.field('순서', 'seq', opened.seq) }}
+    </div>
+  </form>
+</section>
+{% endif %}
+
+<section class="panel">
+  <h2>{{ t('지표 등록') }}</h2>
+  {% set co = [] %}{% for k in core_keys %}{% set _ = co.append(('core:' ~ k, 'core:' ~ k)) %}{% endfor %}{% for k in pack_keys %}{% set _ = co.append(('pack:' ~ k, 'pack:' ~ k)) %}{% endfor %}
+  <form method="post" action="{{ nav.path_of('KPI-03') }}" id="ind-new">
+    <div class="form-grid">
+      {{ ui.field('지표 키', 'indicator_key', '', required=true) }}
+      {{ ui.field('이름', 'name', '', required=true) }}
+      {{ ui.field('단위', 'unit', '%') }}
+      {{ ui.field('목표값', 'target_value') }}
+      {{ ui.select('산식', 'calc_kind', co, required=true) }}
+      {{ ui.select('표시', 'visible_yn', [('Y', 'Y'), ('N', 'N')], 'Y') }}
+      {{ ui.field('순서', 'seq', '0') }}
+    </div>
+  </form>
+</section>
+{% endblock %}
+
+{% block actions %}
+<button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
+{% if opened %}{{ ui.write_button('지표 수정', user.can('F-KPI-07'), form='ind-edit') }}{% endif %}
+{{ ui.write_button('지표 등록', can_write, form='ind-new') }}
+{% endblock %}

@@ -1,0 +1,5 @@
+{# TRC-02 역방향 추적 — F-TRC-02. 출하 LOT → 원재료 LOT 전부. 각 노드에서 지시 · 검사 링크(G-C08). 쓰기 0. #}
+{% extends "base.html" %}
+{% import "trc/_cards.html" as cards %}
+{% block head %}{{ cards.styles() }}{% endblock %}
+{% block body %}{% include "trc/_trace.html" %}{% endblock %}

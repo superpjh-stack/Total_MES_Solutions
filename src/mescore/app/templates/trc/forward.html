@@ -1,0 +1,5 @@
+{# TRC-01 정방향 추적 — F-TRC-01. 원재료 LOT → … → 출하 LOT. 재고 LOT 은 `재고`. 없는 번호 422 재렌더. 쓰기 0. #}
+{% extends "base.html" %}
+{% import "trc/_cards.html" as cards %}
+{% block head %}{{ cards.styles() }}{% endblock %}
+{% block body %}{% include "trc/_trace.html" %}{% endblock %}

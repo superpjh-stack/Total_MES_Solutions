@@ -1,0 +1,2 @@
+shipment_no,partner_code,ship_date,order_no,status,approved_at,approved_by,ship_lot_no
+S-EX-0001,CUST-EX-01,2026-10-02,O-EX-0001,승인,2026-10-02 15:30:00,admin,X-EX-0001

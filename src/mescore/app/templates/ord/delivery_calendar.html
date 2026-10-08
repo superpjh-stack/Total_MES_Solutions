@@ -1,0 +1,43 @@
+{# ORD-03 납기 달력 — F-ORD-06. 월 단위 · 날짜별 납기 건수 · 출하 완료 · 지연. 390px(모바일)에서는 7열 격자 대신 주 단위 details 로 접힘(디자이너2 §4) — 오늘이 든 주만 열림. #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% import "trc/_cards.html" as cards %}
+{% block head %}{{ cards.styles() }}
+<style>.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}.cal .d{border:1px solid #e3e6ea;border-radius:4px;padding:4px 6px;min-height:64px;font-size:12px;min-width:0}
+.cal .d.out{opacity:.45}.cal .d.today{border-color:#2b5797}.cal .d b{display:block}.cal .d .n{font-variant-numeric:tabular-nums}.cal .h{font-size:12px;color:#666;text-align:center}
+body.ch-mobile .cal{display:none}body.ch-web .m-weeks,body.ch-pop .m-weeks,body.ch-board .m-weeks{display:none}</style>{% endblock %}
+
+{% block search %}
+{{ ui.field('월', 'ym', ym, type='month') }}
+<a class="btn btn-ghost" href="?ym={{ prev_ym }}">{{ t('이전 달') }}</a> <a class="btn btn-ghost" href="?ym={{ next_ym }}">{{ t('다음 달') }}</a>
+{% endblock %}
+
+{% block grid %}
+<h2>{{ ym }} <small class="muted">{{ t('납기') }} {{ total.due_count }} · {{ t('출하 완료') }} {{ total.shipped_count }} · {{ t('지연') }} {{ total.late_count }}</small></h2>
+{% if not days or total.due_count == 0 %}<p class="empty">{{ NOT_COLLECTED }} — {{ t('이 달에 납기인 수주가 없습니다') }}</p>{% endif %}
+<div class="cal">
+  {% for w in weekdays %}<div class="h">{{ w }}</div>{% endfor %}
+  {% for wk in weeks %}{% for d in wk.days %}
+  <div class="d{% if not d.in_month %} out{% endif %}{% if d.today %} today{% endif %}">
+    <b>{{ d.date.day }}</b>
+    {% if d.due_count %}<span class="n">{{ t('납기') }} {{ d.due_count }}</span>{% if d.shipped_count %} · {{ cards.badge('출하 완료', 'b-ok') }}{{ d.shipped_count }}{% endif %}{% if d.late_count %} · {{ cards.badge('지연', 'b-err') }}{{ d.late_count }}{% endif %}
+    {% for o in d.orders %}<div><a href="{{ nav.path_of('ORD-01') }}?id={{ o.id }}"><code>{{ o.order_no }}</code></a></div>{% endfor %}{% endif %}
+  </div>
+  {% endfor %}{% endfor %}
+</div>
+
+<div class="m-weeks">
+  {% for wk in weeks %}
+  <details class="fold"{% if wk.open %} open{% endif %}>
+    <summary><span class="grow">{{ wk.start|dt('%m-%d') }} ~ {{ wk.end|dt('%m-%d') }}</span>
+      <span class="cnt">{{ t('납기') }} {{ wk.due_count }}</span>{% if wk.shipped_count %}{{ cards.badge('완료', 'b-ok') }}{{ wk.shipped_count }}{% endif %}{% if wk.late_count %}{{ cards.badge('지연', 'b-err') }}{{ wk.late_count }}{% endif %}</summary>
+    {% for d in wk.days if d.due_count %}
+    <div class="week-day"><span class="d">{{ d.date|dt('%m-%d') }} ({{ d.weekday }})</span><span class="cnt">{{ t('납기') }} {{ d.due_count }}</span>
+      <span>{% if d.shipped_count %}{{ cards.badge('완료', 'b-ok') }} {{ d.shipped_count }}{% endif %} {% if d.late_count %}{{ cards.badge('지연', 'b-err') }} {{ d.late_count }}{% endif %}</span></div>
+    {% else %}
+    <div class="week-day muted">{{ t('납기 없음') }}</div>
+    {% endfor %}
+  </details>
+  {% endfor %}
+</div>
+{% endblock %}

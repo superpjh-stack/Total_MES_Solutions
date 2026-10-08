@@ -1,0 +1,43 @@
+{# SHP-04 성적서 — 발행본 목록 + 발행(F-SHP-09 승인된 출하 → 최신 검사 값 스냅샷) · 출력(F-SHP-10 스냅샷만). 재발행은 새 번호. #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% import "trc/_cards.html" as cards %}
+{% block head %}{{ cards.styles() }}{% endblock %}
+
+{% block search %}
+{{ ui.field('발행 번호 · 출하 번호', 'no', q.no) }}
+{{ ui.field('발행일 시작', 'frm', q.frm, type='date') }}
+{{ ui.field('발행일 끝', 'to', q.to, type='date') }}
+{% endblock %}
+
+{% block grid %}
+<table class="grid">
+  <thead><tr><th>{{ t('발행 번호') }}</th><th>{{ t('종류') }}</th><th>{{ t('출하 번호') }}</th><th>{{ t('거래처') }}</th><th>{{ t('출하일') }}</th><th>{{ t('LOT 수') }}</th><th>{{ t('종합 판정') }}</th><th>{{ t('발행') }}</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr><td><code>{{ r.document_no }}</code></td><td>{{ t(r.doc_type) }}</td><td><code>{{ r.shipment_no }}</code></td><td>{{ r.partner_name }}</td><td>{{ r.ship_date|dt }}</td>
+      <td class="num">{{ r.lot_count|txt }}</td><td>{{ cards.badge(r.judgement) if r.judgement else NOT_COLLECTED }}</td><td>{{ r.issued_at|dt }} {{ r.issued_by|txt('') }}</td>
+      <td><a class="btn btn-sm" href="{{ nav.path_of('SHP-04') }}/{{ r.id }}/print" target="_blank">{{ t('출력') }}</a></td></tr>
+  {% else %}
+    <tr><td colspan="9" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<section class="panel">
+  <h2>{{ t('성적서 발행') }} <small class="muted">{{ t('승인된 출하만') }}</small></h2>
+  {% set so = [] %}{% for s in approved %}{% set _ = so.append((s.id, s.shipment_no ~ ' ' ~ s.partner_name ~ ' ' ~ (s.ship_date|dt) ~ ' · LOT ' ~ s.lot_count ~ (' · ' ~ t('발행') ~ ' ' ~ s.document_count if s.document_count else ''))) %}{% endfor %}
+  {% set dto = [] %}{% for d in doc_types %}{% set _ = dto.append((d, t(d))) %}{% endfor %}
+  <form method="post" action="{{ nav.path_of('SHP-04') }}" id="doc-new">
+    <div class="form-grid">
+      {{ ui.select('출하', 'shipment_id', so, required=true) }}
+      {{ ui.select('종류', 'doc_type', dto, '성적서', required=true) }}
+    </div>
+  </form>
+</section>
+{% endblock %}
+
+{% block actions %}
+<button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
+{{ ui.write_button('성적서 발행', can_issue, form='doc-new') }}
+{% endblock %}

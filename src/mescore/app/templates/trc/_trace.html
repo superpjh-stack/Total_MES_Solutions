@@ -1,0 +1,55 @@
+{# 추적 화면 공통 본문 — TRC-01(정방향) · TRC-02(역방향) 이 include 한다. 쓰기 0. Web: 깊이순 화살표 표 · 모바일: 깊이마다 한 단, 분기는 details 로 접기(JS 0). #}
+{% import "home/_macros.html" as ui %}
+{% import "trc/_cards.html" as cards %}
+<section class="panel">
+  {{ cards.scan_alert(scan_error) }}
+  <div class="chips">
+    <a class="chip{% if mode == forward %} on{% endif %}" href="{{ nav.path_of('TRC-01') }}{% if no %}?no={{ no }}{% endif %}">{{ t('정방향 추적') }}</a>
+    <a class="chip{% if mode == backward %} on{% endif %}" href="{{ nav.path_of('TRC-02') }}{% if no %}?no={{ no }}{% endif %}">{{ t('역방향 추적') }}</a>
+    <a class="chip" href="{{ nav.path_of('TRC-03') }}{% if no %}?q={{ no }}{% endif %}">{{ t('번호 검색') }}</a>
+  </div>
+  {{ ui.scan_box(nav.path_of('TRC-01') if mode == forward else nav.path_of('TRC-02'), name='no', label='추적할 번호', method='get', button='추적', placeholder=no) }}
+
+  {% if trace %}
+  <h2>{{ t('출발') }} <code>{{ start.no }}</code> {{ cards.badge(start.state) }}
+    <small class="muted">{{ t(start.kind_label) }} · {{ start.item|txt }} · {{ t('깊이') }} {{ depth }} · {{ t('노드') }} {{ node_count }} · {{ t('화살표') }} {{ edge_count }}</small></h2>
+  <div class="links">{% for k, href in start_links.items() %}<a href="{{ href }}">{{ t({'lot': 'LOT', 'work_order': '작업지시', 'inspection': '검사', 'shipment': '출하', 'forward': '정방향 추적', 'backward': '역방향 추적'}[k]) }}</a> {% endfor %}</div>
+  {% if not stages %}<p class="empty">{{ t('이 방향으로 이어진 계보가 없습니다') }} — {{ t(start.kind_label) }} {{ cards.badge(start.state) }}</p>{% endif %}
+
+  <table class="grid plain">
+    <thead><tr><th>{{ t('깊이') }}</th><th>{{ t('관계') }}</th><th>{{ t('에서') }}</th><th>{{ t('으로') }}</th><th>{{ t('종류') }}</th><th>{{ t('품목') }}</th><th>{{ t('수량') }}</th><th>{{ t('상태') }}</th><th>{{ t('작업지시') }}</th><th></th></tr></thead>
+    <tbody>
+    {% for st in stages %}{% for e in st.edges %}
+      <tr><td>{{ st.depth }}</td><td>{{ t(e.relation) }}</td><td><code>{{ e['from'].no }}</code></td><td><code>{{ e.to.no }}</code></td><td>{{ t(e.to.kind_label) }}</td>
+        <td>{{ e.to.item|txt }}</td><td class="num">{{ e.qty|num(3) if e.qty is not none else '-' }}</td><td>{{ cards.badge(e.to.state) }}</td>
+        <td>{% if e.to.work_order_no %}<a href="{{ e.links.work_order }}"><code>{{ e.to.work_order_no }}</code></a>{% else %}-{% endif %}</td>
+        <td><a href="{{ e.links.backward }}">{{ t('역방향') }}</a> · <a href="{{ e.links.forward }}">{{ t('정방향') }}</a>{% if e.links.inspection %} · <a href="{{ e.links.inspection }}">{{ t('검사') }}</a>{% endif %}</td></tr>
+    {% endfor %}{% endfor %}
+    </tbody>
+  </table>
+
+  <div class="m-sec trace">
+    {% for st in stages %}
+    <div class="t-node">
+      <div class="depth">{{ t('깊이') }} {{ st.depth }} · {{ st.relations|map('t')|join(' · ') }} · {{ st.edges|length }}</div>
+      <details class="fold"{% if st.open %} open{% endif %}><summary><span class="grow">{{ st.nodes|length }} LOT</span></summary>
+        {% for e in st.edges %}
+        {{ cards.card(e.to.no, e.to.state, [('관계', t(e.relation)), ('종류', t(e.to.kind_label)), ('품목', e.to.item|txt), ('수량', (e.qty|num(3)) ~ ' ' ~ (e.to.unit|txt('')) if e.qty is not none else '-'), ('작업지시', e.to.work_order_no|txt)],
+                       [('역방향', e.links.backward), ('정방향', e.links.forward)] + ([('검사', e.links.inspection)] if e.links.inspection else [])) }}
+        {% endfor %}
+      </details>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if mode == backward and materials %}
+  <h3>{{ t('원재료 LOT 전부') }} <small>{{ materials|length }}</small></h3>
+  <ul>{% for m in materials %}<li><code>{{ m.no }}</code> {{ m.item|txt }} {{ cards.badge(m.state) }} <a href="{{ nav.path_of('TRC-01') }}?no={{ m.no }}">{{ t('정방향') }}</a></li>{% endfor %}</ul>
+  {% endif %}
+  {% if mode == forward %}
+  <h3>{{ t('출하 LOT') }} <small>{{ shipments|length }}</small> · {{ t('재고') }} <small>{{ stock|length }}</small></h3>
+  <ul>{% for x in shipments %}<li><code>{{ x.no }}</code> {{ cards.badge('출하') }}</li>{% endfor %}
+      {% for s in stock %}<li><code>{{ s.no }}</code> {{ s.item|txt }} {{ cards.badge('재고') }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% endif %}
+</section>

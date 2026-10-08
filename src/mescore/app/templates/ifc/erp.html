@@ -1,0 +1,30 @@
+{# IFC-02 ERP 연계 로그 — F-IFC-03 ifc_outbox · ifc_erp_link. 어댑터가 없으면 전부 `대기 — 미확정 (D-02)`. F-IFC-04 재전송(관리자)은 어댑터 501 이면 501 그대로. #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% import "trc/_cards.html" as cards %}
+{% block head %}{{ cards.styles() }}{% endblock %}
+
+{% block search %}
+{% set so = [] %}{% for s in statuses %}{% set _ = so.append((s, t(s))) %}{% endfor %}
+{{ ui.select('상태', 'status', so, q.status) }}
+{% endblock %}
+
+{% block grid %}
+<p>{{ t('어댑터') }}: <code>{{ adapter_name }}</code>{% if adapter_undecided %} — {{ ui.undecided(decision, 'ERP 연계') }}{% endif %}</p>
+{{ cards.tiles([('대기', counts.get('대기', 0), '', ''), ('전송', counts.get('전송', 0), '', ''), ('실패', counts.get('실패', 0), '', 'err' if counts.get('실패') else ''), ('미확정', counts.get('미확정', 0), '', 'warn' if counts.get('미확정') else '')]) }}
+<table class="grid">
+  <thead><tr><th>ID</th><th>{{ t('사건') }}</th><th>{{ t('상태') }}</th><th>{{ t('시도') }}</th><th>{{ t('마지막 오류') }}</th><th>{{ t('생성') }}</th><th>{{ t('전송 시각') }}</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr><td>{{ r.id }}</td><td><code>{{ r.event }}</code></td><td>{{ r.display_status }}</td><td class="num">{{ r.attempts }}</td><td>{{ r.last_error|txt }}</td>
+      <td>{{ r.created_at|dt('%Y-%m-%d %H:%M') }} {{ r.created_by|txt('') }}</td><td>{{ r.sent_at|dt('%Y-%m-%d %H:%M') }}</td>
+      <td>{% if r.status != '전송' %}<form method="post" action="{{ nav.path_of('IFC-02') }}/{{ r.id }}/retry" class="inline">{{ ui.write_button('재전송', can_retry, kind='sm') }}</form>{% endif %}</td></tr>
+  {% else %}
+    <tr><td colspan="8" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<h3>{{ t('연계 기록') }} <small>{{ links|length }}</small></h3>
+{% set lk = [] %}{% for l in links %}{% set _ = lk.append([l.linked_at|dt('%Y-%m-%d %H:%M:%S'), l.kind, l.direction, (l.ref_table|txt('')) ~ ':' ~ (l.ref_id|txt('')), l.status, l.message|txt]) %}{% endfor %}
+{{ ui.grid(['시각', '종류', '방향', '참조', '상태', '메시지'], lk) }}
+{% endblock %}
