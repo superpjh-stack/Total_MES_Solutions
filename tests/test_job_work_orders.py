@@ -1,0 +1,191 @@
+"""job 작업지시 (F-JOB-01~07 · 개발1) — 번호는 numbering 만 · job_lot 은 BOM 소요 줄 · 행 잠금 · 훅 자리 · 출력 404. JSON 으로 판정.
+
+공통 시드 + seed_dev1(PRD-EX-01 의 BOM) 이 들어 있어야 한다(`make db-seed`).
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import date
+
+import pytest
+from fastapi.testclient import TestClient
+
+from mescore.app import numbering
+from mescore.app.main import app
+from mescore.app.settings import get_settings
+from mescore.db import conn
+
+SFX = uuid.uuid4().hex[:6].upper()
+HTML = {"accept": "text/html"}
+
+
+def _client(login_id: str = "admin") -> TestClient:
+    c = TestClient(app, raise_server_exceptions=False)
+    r = c.post("/login", data={"login_id": login_id, "password": get_settings().seed_password})
+    assert r.status_code == 200, f"{login_id} 로그인 실패 — make db-seed"
+    return c
+
+
+@pytest.fixture(scope="module")
+def admin() -> TestClient:
+    return _client("admin")
+
+
+@pytest.fixture(scope="module")
+def qa() -> TestClient:
+    return _client("qa")        # job 칸 = 조회
+
+
+@pytest.fixture(scope="module")
+def base(admin):
+    item = conn.q1("select id, unit from bas_item where item_code = 'PRD-EX-01'")
+    prc = conn.q1("select id from bas_process where process_code = 'PRC-EX-01'")
+    assert item and prc, "공통 시드 (예시) 품목 · 공정이 없다 — make db-seed"
+    bom = conn.q1("select id, (select count(*) from bas_bom_dtl d where d.bom_id = b.id) as n from bas_bom b where item_id = %s and use_yn = 'Y' order by created_at desc limit 1", (item["id"],))
+    return {"item_id": item["id"], "process_id": prc["id"], "bom_id": bom["id"] if bom else None, "bom_lines": int(bom["n"]) if bom else 0}
+
+
+def _cleanup(wo_id: int) -> None:
+    conn.x("delete from pop_work_result where work_order_id = %s", (wo_id,))
+    conn.x("delete from job_lot where work_order_id = %s", (wo_id,))
+    conn.x("delete from job_work_order where id = %s", (wo_id,))
+
+
+@pytest.mark.fn("F-JOB-01")
+def test_create_numbers_and_bom_lines(admin, qa, base):
+    expected_no = numbering.peek("WORK_ORDER")
+    r = admin.post("/job/work-orders", data={"item_id": base["item_id"], "process_id": base["process_id"], "plan_qty": "100", "plan_date": date.today().isoformat(), "note": SFX})
+    assert r.status_code == 200 and r.json()["work_order_no"] == expected_no and r.json()["status"] == "대기"
+    wo = conn.q1("select * from job_work_order where id = %s", (r.json()["id"],))
+    assert wo["status"] == "대기" and wo["bom_id"] == base["bom_id"] and wo["unit"] is not None
+    lots = conn.q("select * from job_lot where work_order_id = %s", (wo["id"],))
+    assert len(lots) == base["bom_lines"] and all(l["lot_id"] is None for l in lots)                      # LOT 은 비움
+    if base["bom_lines"]:
+        d = conn.q1("select qty, loss_rate from bas_bom_dtl where bom_id = %s and component_item_id = %s", (base["bom_id"], lots[0]["item_id"]))
+        assert float(lots[0]["required_qty"]) == pytest.approx(float(d["qty"]) * 100 * (1 + float(d["loss_rate"]) / 100), abs=0.001)
+    assert conn.q1("select count(*) as n from lot where work_order_id = %s", (wo["id"],))["n"] == 0        # LOT 을 미리 만들지 않는다
+    assert admin.post("/job/work-orders", data={"item_id": base["item_id"], "process_id": base["process_id"], "plan_qty": "0"}).status_code == 422
+    assert admin.post("/job/work-orders", data={"item_id": base["item_id"], "plan_qty": "1"}).status_code == 422
+    assert admin.post("/job/work-orders", data={"item_id": "999999999", "process_id": base["process_id"], "plan_qty": "1"}).status_code == 422
+    assert admin.post("/job/work-orders", data={"item_id": base["item_id"], "process_id": base["process_id"], "plan_qty": "1", "plan_date": "2026-13-01"}).status_code == 422
+    assert qa.post("/job/work-orders", data={"item_id": base["item_id"], "process_id": base["process_id"], "plan_qty": "1"}).status_code == 403
+    assert conn.q1("select count(*) as n from sys_access_log where kind = 'change' and fn_id = 'F-JOB-01' and target = %s", (f"job_work_order:{expected_no}",))["n"] == 1
+    assert _client("prod").post("/job/work-orders", data={"item_id": base["item_id"], "process_id": base["process_id"], "plan_qty": "1"}).status_code == 200   # 생산도 등록
+
+
+@pytest.mark.fn("F-JOB-01")
+def test_create_links_order_detail_and_plan(admin, base):
+    partner = conn.q1("select id from bas_partner limit 1")
+    o = conn.q1("insert into ord_order (order_no, partner_id, order_date, created_by) values (%s, %s, current_date, 'test') returning id", (f"T-O-{SFX}", partner["id"]))
+    d = conn.q1("insert into ord_order_dtl (order_id, line_no, item_id, qty, created_by) values (%s, 1, %s, 10, 'test') returning id", (o["id"], base["item_id"]))
+    p = conn.q1("insert into ord_plan (plan_no, order_dtl_id, item_id, plan_date, plan_qty, created_by) values (%s, %s, %s, current_date, 10, 'test') returning id", (f"T-N-{SFX}", d["id"], base["item_id"]))
+    r = admin.post("/job/work-orders", data={"item_id": base["item_id"], "process_id": base["process_id"], "plan_qty": "10", "order_dtl_id": d["id"], "plan_id": p["id"]})
+    assert r.status_code == 200
+    assert conn.q1("select status from ord_order_dtl where id = %s", (d["id"],))["status"] == "지시"
+    assert conn.q1("select status from ord_plan where id = %s", (p["id"],))["status"] == "확정"
+    assert admin.post(f"/job/work-orders/{r.json()['id']}/cancel").status_code == 200
+    assert conn.q1("select status from ord_order_dtl where id = %s", (d["id"],))["status"] == "대기"       # 취소하면 되돌린다
+    _cleanup(r.json()["id"])
+    conn.x("delete from ord_plan where id = %s", (p["id"],))
+    conn.x("delete from ord_order_dtl where id = %s", (d["id"],))
+    conn.x("delete from ord_order where id = %s", (o["id"],))
+
+
+@pytest.mark.fn("F-JOB-02")
+def test_update_locks_and_limits_when_started(admin, qa, base):
+    wo = admin.post("/job/work-orders", data={"item_id": base["item_id"], "process_id": base["process_id"], "plan_qty": "10"}).json()
+    r = admin.post(f"/job/work-orders/{wo['id']}", data={"plan_qty": "12", "plan_date": "2026-10-10", "note": "n"})
+    assert r.status_code == 200 and set(r.json()["changed"]) == {"plan_qty", "plan_date", "note"}
+    assert admin.post(f"/job/work-orders/{wo['id']}", data={"status": "마감"}).status_code == 422
+    assert admin.post(f"/job/work-orders/{wo['id']}", data={}).status_code == 422
+    assert admin.post("/job/work-orders/999999999", data={"plan_qty": "1"}).status_code == 404
+    assert qa.post(f"/job/work-orders/{wo['id']}", data={"plan_qty": "1"}).status_code == 403
+    res = conn.q1("insert into pop_work_result (work_order_id, process_id, created_by) values (%s, %s, 'test') returning id", (wo["id"], base["process_id"]))
+    assert admin.post(f"/job/work-orders/{wo['id']}", data={"plan_qty": "15"}).status_code == 200            # 진행 중 — 수량 · 설비만
+    r = admin.post(f"/job/work-orders/{wo['id']}", data={"plan_date": "2026-10-11"})
+    assert r.status_code == 422 and "수량 · 설비" in r.json()["message"]
+    conn.x("delete from pop_work_result where id = %s", (res["id"],))
+    _cleanup(wo["id"])
+
+
+@pytest.mark.fn("F-JOB-03")
+def test_close_refuses_open_result(admin, qa, base):
+    wo = admin.post("/job/work-orders", data={"item_id": base["item_id"], "process_id": base["process_id"], "plan_qty": "10"}).json()
+    res = conn.q1("insert into pop_work_result (work_order_id, process_id, created_by) values (%s, %s, 'test') returning id", (wo["id"], base["process_id"]))
+    r = admin.post(f"/job/work-orders/{wo['id']}/close")
+    assert r.status_code == 422 and r.json()["fields"][0]["name"] == "open_count"
+    conn.x("update pop_work_result set ended_at = now(), good_qty = 10 where id = %s", (res["id"],))
+    assert qa.post(f"/job/work-orders/{wo['id']}/close").status_code == 403
+    r = admin.post(f"/job/work-orders/{wo['id']}/close")
+    assert r.status_code == 200 and r.json()["status"] == "마감"
+    row = conn.q1("select status, closed_at, closed_by from job_work_order where id = %s", (wo["id"],))
+    assert row["status"] == "마감" and row["closed_at"] is not None and row["closed_by"] == "admin"
+    assert admin.post(f"/job/work-orders/{wo['id']}/close").status_code == 422
+    assert admin.post(f"/job/work-orders/{wo['id']}", data={"plan_qty": "1"}).status_code == 422               # 마감은 수정 불가
+    assert admin.post("/job/work-orders/999999999/close").status_code == 404
+    conn.x("delete from pop_work_result where id = %s", (res["id"],))
+    _cleanup(wo["id"])
+
+
+@pytest.mark.fn("F-JOB-04")
+def test_cancel_refuses_when_result_exists(admin, qa, base):
+    wo = admin.post("/job/work-orders", data={"item_id": base["item_id"], "process_id": base["process_id"], "plan_qty": "10"}).json()
+    res = conn.q1("insert into pop_work_result (work_order_id, process_id, created_by) values (%s, %s, 'test') returning id", (wo["id"], base["process_id"]))
+    assert admin.post(f"/job/work-orders/{wo['id']}/cancel").status_code == 422
+    conn.x("delete from pop_work_result where id = %s", (res["id"],))
+    assert qa.post(f"/job/work-orders/{wo['id']}/cancel").status_code == 403
+    r = admin.post(f"/job/work-orders/{wo['id']}/cancel")
+    assert r.status_code == 200 and r.json()["status"] == "취소"
+    assert admin.post(f"/job/work-orders/{wo['id']}/cancel").status_code == 422
+    assert admin.post("/job/work-orders/999999999/cancel").status_code == 404
+    _cleanup(wo["id"])
+
+
+@pytest.mark.fn("F-JOB-05")
+def test_list_filters_and_progress_is_computed(admin, qa, base):
+    wo = admin.post("/job/work-orders", data={"item_id": base["item_id"], "process_id": base["process_id"], "plan_qty": "10", "plan_date": "2026-01-15"}).json()
+    j = admin.get("/job/work-orders?date_from=2026-01-15&date_to=2026-01-15&status=대기").json()
+    assert j["screen_id"] == "JOB-01" and any(r["id"] == wo["id"] and r["progress"] == "대기" for r in j["rows"])
+    res = conn.q1("insert into pop_work_result (work_order_id, process_id, created_by) values (%s, %s, 'test') returning id", (wo["id"], base["process_id"]))
+    j = admin.get("/job/work-orders?status=진행").json()
+    assert any(r["id"] == wo["id"] and r["progress"] == "진행" and r["status"] == "대기" for r in j["rows"])    # 저장 안 함 — 실적 유무
+    assert not any(r["id"] == wo["id"] for r in admin.get("/job/work-orders?status=대기").json()["rows"])
+    assert admin.get(f"/job/work-orders?item_id={base['item_id']}&process_id={base['process_id']}&no={wo['work_order_no']}").json()["rows"][0]["id"] == wo["id"]
+    assert admin.get("/job/work-orders?date_from=bad").status_code == 422
+    assert admin.get(f"/job/work-orders?edit={wo['id']}", headers=HTML).status_code == 200
+    assert qa.get("/job/work-orders").status_code == 200
+    assert _client("field").get("/job/work-orders").status_code == 200                                      # 현장 = 조회
+    conn.x("delete from pop_work_result where id = %s", (res["id"],))
+    _cleanup(wo["id"])
+
+
+@pytest.mark.fn("F-JOB-06")
+def test_status_board_today_week_and_drilldown(admin, base):
+    wo = admin.post("/job/work-orders", data={"item_id": base["item_id"], "process_id": base["process_id"], "plan_qty": "10", "plan_date": date.today().isoformat()}).json()
+    res = conn.q1("insert into pop_work_result (work_order_id, process_id, ended_at, good_qty, defect_qty, created_by) values (%s, %s, now(), 4, 1, 'test') returning id", (wo["id"], base["process_id"]))
+    j = admin.get("/job/status").json()
+    assert j["screen_id"] == "JOB-02" and j["summary"]["전체"] >= 1
+    row = next(r for r in j["rows"] if r["id"] == wo["id"])
+    assert row["progress"] == "진행" and float(row["good_qty"]) == 4 and row["achieve_pct"] == 40.0
+    j = admin.get(f"/job/status?range=week&wo={wo['id']}").json()
+    assert j["detail"]["id"] == wo["id"] and len(j["results"]) == 1 and float(j["results"][0]["good_qty"]) == 4
+    assert admin.get("/job/status?range=bad").status_code == 422
+    assert admin.get("/job/status?wo=999999999").status_code == 404
+    assert admin.get("/job/status?device=mobile", headers=HTML).status_code == 200                             # 모바일 채널 허용
+    conn.x("delete from pop_work_result where id = %s", (res["id"],))
+    _cleanup(wo["id"])
+
+
+@pytest.mark.fn("F-JOB-07")
+def test_print_work_order(admin, qa, base):
+    wo = admin.post("/job/work-orders", data={"item_id": base["item_id"], "process_id": base["process_id"], "plan_qty": "10"}).json()
+    j = admin.get(f"/job/print?id={wo['id']}").json()
+    assert j["screen_id"] == "JOB-03" and j["work_order"]["work_order_no"] == wo["work_order_no"] and len(j["lots"]) == base["bom_lines"]
+    h = admin.get(f"/job/print?id={wo['id']}", headers=HTML)
+    assert h.status_code == 200 and wo["work_order_no"] in h.text and ("<svg" in h.text or "미확정" in h.text)   # 바코드 또는 미확정 자리
+    assert admin.get("/job/print?id=999999999").status_code == 404
+    assert admin.get("/job/print?id=abc").status_code == 404
+    assert admin.get("/job/print").json()["template"] == "job/print_pick.html"
+    assert qa.get(f"/job/print?id={wo['id']}").status_code == 200
+    _cleanup(wo["id"])

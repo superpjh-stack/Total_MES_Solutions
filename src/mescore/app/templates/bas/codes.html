@@ -1,0 +1,4 @@
+{# BAS-09 공통코드 (F-BAS-33~36) — 코어 예약 그룹(core.yaml: code_groups)의 코어 코드는 삭제 422 #}
+{% extends "bas/_master.html" %}
+{% block extra_head %}<th>{{ t('코어') }}</th>{% endblock %}
+{% block extra_cells scoped %}<td>{% if r.is_core == 'Y' %}<span class="tag">{{ t('코어') }}</span>{% else %}-{% endif %}</td>{% endblock %}

@@ -1,0 +1,45 @@
+{# SYS-06 백업 · 이관 (F-SYS-13~16 · G-C20) — 백업 실행(pg_dump → backups/) · 복구 확인(임시 DB) · 이관 실행(개발3 migrate.run · 폴더는 MES_MIGRATE_DIR) · 이력. #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+
+{% block search %}{% endblock %}
+
+{% block grid %}
+<h2>{{ t('백업 이력') }} <small>{{ backups|length }}{{ t('건') }}</small>
+  {% if can.backup %}<form method="post" action="{{ path }}" class="inline"><button class="btn btn-sm btn-primary">{{ t('백업 실행') }}</button></form>{% endif %}
+</h2>
+<table class="grid">
+  <thead><tr><th>#</th><th>{{ t('시작') }}</th><th>{{ t('끝') }}</th><th>{{ t('덤프') }}</th><th class="num">{{ t('테이블') }}</th><th class="num">{{ t('행') }}</th><th>{{ t('성공') }}</th><th>{{ t('복구 확인') }}</th><th>{{ t('메시지') }}</th><th class="act">{{ t('작업') }}</th></tr></thead>
+  <tbody>
+  {% for b in backups %}
+    <tr><td>{{ b.id }}</td><td>{{ b.started_at|dt('%Y-%m-%d %H:%M:%S') }}</td><td>{{ b.ended_at|dt('%Y-%m-%d %H:%M:%S') }}</td><td><code>{{ b.dump_path|txt }}</code></td>
+      <td class="num">{{ b.row_counts|length if b.row_counts else '-' }}</td><td class="num">{% if b.row_counts %}{{ b.row_counts.values()|sum|num }}{% else %}-{% endif %}</td>
+      <td>{% if b.ok is none %}-{% else %}<span class="badge badge-{{ 'ok' if b.ok else 'err' }}">{{ t('성공') if b.ok else t('실패') }}</span>{% endif %}</td>
+      <td>{% if b.verified_at %}{{ b.verified_at|dt }} <span class="badge badge-{{ 'ok' if b.verify_ok else 'err' }}">{{ t('일치') if b.verify_ok else t('불일치') }}</span>{% else %}-{% endif %}</td>
+      <td class="wrap"><small>{{ (b.message or '')[-160:] }}</small></td>
+      <td class="act">{% if can.verify and b.dump_path %}<form method="post" action="{{ path }}/{{ b.id }}/verify" class="inline"><button class="btn btn-sm">{{ t('복구 확인') }}</button></form>{% endif %}</td></tr>
+  {% else %}
+    <tr><td colspan="10" class="empty"><b>{{ NOT_COLLECTED }}</b></td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<section class="panel">
+  <h2>{{ t('이관 실행') }} <small>{{ t('폴더') }} <code>{{ migrate_dir_label }}</code></small></h2>
+  {% if migrate_note %}<p class="undecided">{{ migrate_note }}</p>{% endif %}
+  <form method="post" action="{{ migrate_path }}" id="migrate-form" class="form-grid cols">
+    {% set cmd_opts = [] %}{% for c in commands %}{% set _ = cmd_opts.append((c, c)) %}{% endfor %}
+    {{ ui.select('명령', 'command', cmd_opts, '', required=true) }}
+    {{ ui.select('시험 실행 (DB 에 쓰지 않음)', 'dry_run', [('Y', 'Y'), ('N', 'N')], 'Y') }}
+    {{ ui.write_button('이관 실행', can.migrate and migrate_available and migrate_dir, form='migrate-form') }}
+  </form>
+  <ul class="notes"><li>{{ t('파일 업로드는 없다 — 서버의 지정 폴더(MES_MIGRATE_DIR)를 읽는다') }} (migration-files.md).</li></ul>
+</section>
+
+<h2>{{ t('이관 로그') }} <small>{{ migrations|length }}{{ t('건') }}</small></h2>
+{% set mig_rows = [] %}
+{% for m in migrations %}{% set _ = mig_rows.append([m.started_at|dt('%Y-%m-%d %H:%M:%S'), m.command, m.file|txt, m.read_count, m.inserted, m.updated, m.skipped, m.errors, 'Y' if m.dry_run else 'N', m.run_by|txt]) %}{% endfor %}
+{{ ui.grid(['시작', '명령', '파일', '읽음', '적재', '갱신', '건너뜀', '오류', '시험', '실행자'], mig_rows) }}
+{% endblock %}
+
+{% block actions %}{% endblock %}

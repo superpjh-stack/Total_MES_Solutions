@@ -1,0 +1,68 @@
+{# BAS-02 BOM (F-BAS-05~08) — 상위 품목별 버전 · 구성품 트리. 등록 = 헤더 + 구성품 N줄 한 트랜잭션. 지시가 참조하는 버전은 새 버전으로만. #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+
+{% block search %}
+  {{ ui.select('상위 품목', 'item_id', options.item_id, f.item_id, blank='전체') }}
+  {{ ui.field('검색 (품목 코드 · 이름)', 'q', f.q) }}
+{% endblock %}
+
+{% block grid %}
+<h2>{{ t('BOM') }} <small>{{ rows|length }}{{ t('건') }}</small></h2>
+{% if trees %}
+<ul class="tree">
+  {% for tr in trees %}
+  <li><details open><summary><span class="node"><b>{{ tr.item_code }}</b> {{ tr.item_name }} <small>{{ t('버전') }} {{ tr.boms|length }}</small></span></summary>
+    <ul>
+    {% for b in tr.boms %}
+      <li><details{% if editing and editing.id == b.id %} open{% endif %}><summary><span class="node">{{ t('버전') }} <b>{{ b.version }}</b> · {{ t('구성품') }} {{ b.line_count }} · {{ t('사용 여부') }} {{ b.use_yn }}{% if b.work_order_count %} · {{ t('작업지시') }} {{ b.work_order_count }}{% endif %}
+        {% if can.update %}<a class="btn btn-sm" href="{{ path }}?edit={{ b.id }}">{{ t('수정') }}</a>{% endif %}
+        {% if can.delete %}<form method="post" action="{{ path }}/{{ b.id }}/delete" class="inline"><button class="btn btn-sm btn-err"{% if b.work_order_count %} disabled title="{{ t('작업지시가 참조한다') }}"{% endif %}>{{ t('삭제') }}</button></form>{% endif %}
+        </span></summary>
+        <table class="grid compact">
+          <thead><tr><th>#</th><th>{{ t('구성품') }}</th><th class="num">{{ t('소요량') }}</th><th>{{ t('단위') }}</th><th class="num">{{ t('손실률') }} %</th></tr></thead>
+          <tbody>{% for d in b.lines %}<tr><td>{{ d.seq }}</td><td>{{ d.item_code }} {{ d.item_name }}</td><td class="num">{{ d.qty|num(3) }}</td><td>{{ d.unit|txt }}</td><td class="num">{{ d.loss_rate|num(3) }}</td></tr>
+          {% else %}<tr><td colspan="5" class="empty">{{ NOT_COLLECTED }}</td></tr>{% endfor %}</tbody>
+        </table>
+      </details></li>
+    {% endfor %}
+    </ul>
+  </details></li>
+  {% endfor %}
+</ul>
+{% else %}
+<table class="grid"><tbody><tr><td class="empty"><b>{{ NOT_COLLECTED }}</b></td></tr></tbody></table>
+{% endif %}
+
+<section class="panel form-panel">
+  <h2>{% if editing %}{{ t('수정') }} — {{ editing.item_code }} {{ t('버전') }} {{ editing.version }}{% else %}{{ t('등록') }}{% endif %}</h2>
+  <form method="post" action="{{ path }}{% if editing %}/{{ editing.id }}{% endif %}" id="bom-form" class="form-grid cols" autocomplete="off">
+    {{ ui.select('상위 품목', 'item_id', options.item_id, editing.item_id if editing else '', required=true) }}
+    {{ ui.field('버전', 'version', editing.version if editing else '1', required=true) }}
+    {{ ui.select('사용 여부', 'use_yn', [('Y', t('사용')), ('N', t('미사용'))], editing.use_yn if editing else 'Y') }}
+    {% if attrs_specs %}<fieldset class="attrs"><legend>{{ t('업종 속성') }}</legend>{{ ui.attrs_fields(attrs_specs, (editing.attrs if editing else {}) or {}) }}</fieldset>{% endif %}
+    <table class="grid compact bom-lines">
+      <thead><tr><th>{{ t('구성품') }}</th><th>{{ t('소요량') }}</th><th>{{ t('단위') }}</th><th>{{ t('손실률') }} %</th></tr></thead>
+      <tbody>
+      {% set lines = (editing.lines if editing else []) or [] %}
+      {% for i in range(lines|length + 3) %}
+        {% set d = lines[i] if i < lines|length else none %}
+        <tr>
+          <td><select name="component_item_id"><option value="">{{ t('선택') }}</option>{% for v, label in options.item_id %}<option value="{{ v }}"{% if d and d.component_item_id|string == v %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></td>
+          <td><input type="number" step="any" name="qty" value="{{ d.qty if d else '' }}"></td>
+          <td><input type="text" name="unit" value="{{ d.unit or '' if d else '' }}"></td>
+          <td><input type="number" step="any" name="loss_rate" value="{{ d.loss_rate if d else '' }}"></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="hint">{{ t('구성품 줄은 비워 두면 저장하지 않는다. 수정 때 구성품 줄을 보내면 전체를 다시 쓴다') }}.</p>
+  </form>
+</section>
+{% endblock %}
+
+{% block actions %}
+  <button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
+  {{ ui.write_button('저장', (can.update if editing else can.create), form='bom-form') }}
+  {% if editing %}<a class="btn" href="{{ path }}">{{ t('새로 등록') }}</a>{% endif %}
+{% endblock %}

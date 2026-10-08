@@ -1,0 +1,20 @@
+{# SYS-04 접근 로그 (F-SYS-10 · G-C18) — 기간 · 사용자 · 종류(login_ok · login_fail · view · change · error) · 화면 · 기능 · 대상. 비밀번호 · 세션 ID 는 없다. #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+
+{% block search %}
+  {{ ui.field('시작일', 'date_from', f.date_from, type='date') }}
+  {{ ui.field('종료일', 'date_to', f.date_to, type='date') }}
+  {{ ui.field('로그인 ID', 'login_id', f.login_id) }}
+  {{ ui.select('종류', 'kind', kind_options, f.kind, blank='전체') }}
+  {{ ui.field('화면 ID', 'screen_id', f.screen_id) }}
+  {{ ui.field('기능 ID', 'fn_id', f.fn_id) }}
+  {{ ui.field('대상', 'target', f.target) }}
+{% endblock %}
+
+{% block grid %}
+<h2>{{ t('접근 로그') }} <small>{{ total }}{{ t('건') }}{% if total > limit %} ({{ t('최근') }} {{ limit }}{{ t('건만') }}){% endif %} — {% for k, n in by_kind.items() %}{{ k }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}</small></h2>
+{% set log_rows = [] %}
+{% for r in rows %}{% set _ = log_rows.append([r.logged_at|dt('%Y-%m-%d %H:%M:%S'), r.kind, r.login_id|txt, r.screen_id|txt, r.fn_id|txt, r.target|txt, (r.detail.name if r.detail and r.detail.name else (r.detail.text if r.detail and r.detail.text else ''))|txt, r.device|txt, r.ip|txt]) %}{% endfor %}
+{{ ui.grid(['시각', '종류', '로그인 ID', '화면', '기능', '대상', '상세', '채널', 'IP'], log_rows) }}
+{% endblock %}

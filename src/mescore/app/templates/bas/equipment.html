@@ -1,0 +1,4 @@
+{# BAS-05 설비 (F-BAS-17~20) — 수집 설비는 마지막 수신 시각. 수집 코드는 collect 의 equip_code 와 1:1 #}
+{% extends "bas/_master.html" %}
+{% block extra_head %}<th>{{ t('마지막 수신') }}</th>{% endblock %}
+{% block extra_cells scoped %}<td>{% if r.collect_yn == 'Y' %}{{ r.last_collect_at|dt(blank=NOT_COLLECTED) }}{% else %}-{% endif %}</td>{% endblock %}

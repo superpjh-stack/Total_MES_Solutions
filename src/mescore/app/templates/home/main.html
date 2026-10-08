@@ -1,33 +1,33 @@
-{# 메인 = IA 화면 (CMN-02) — Phase 0 아키텍트판 (D-21). 개발1 이 routers/home.py 에 `/` 를 등록하면 이 화면은 빠진다.
-   모듈 카드를 일하는 순서(core.yaml: order · 팩 menus.order)로. 권한 `없음` · 팩 숨김 모듈은 카드도 링크도 없다 (G-C17).
-   수는 계약(contracts) · core.yaml · 병합본에서 센다 — 지어낸 숫자는 없다. 문구는 t(). #}
+{# 메인 = IA 화면 (CMN-02 · 개발1 · routers/home.py). 디자이너3 docs/design/home/home.html 의 규칙을 최소로 옮겼다 — 이식은 웨이브 A′.
+   모듈 카드를 일하는 순서(core.yaml: order · 팩 menus.order = nav.MENUS)로. 현재 역할의 칸이 `없음` 이면 카드는 흐리게(data-level="없음") + 링크 없음 (G-C17).
+   수는 계약 · core.yaml · 병합본에서 센다. "오늘 건수" 는 stats(개발3)가 생기면 — 지금은 미수집. 문구는 t(). #}
 {% extends "base.html" %}
 {% block body %}
-<section class="panel ia-top">
+<section class="panel ia-top intro">
   <h2>{{ user.user_name }} <small>{{ user.role_name }} · {{ channel }}</small></h2>
   <dl class="kv">
-    <dt>{{ t('열 수 있는 메뉴') }}</dt><dd>{{ cards|length }} / {{ n_menus }} <small>— {{ t('권한 표') }}({{ t('시스템') }} &gt; {{ t('권한 표') }})의 지금 값</small></dd>
+    <dt>{{ t('열 수 있는 메뉴') }}</dt><dd>{{ n_allowed }} / {{ n_menus }} <small>— {{ t('권한 표') }}({{ t('시스템') }} &gt; {{ t('권한 표') }})의 지금 값</small></dd>
     <dt>{{ t('이 시스템') }}</dt><dd>{{ system_name }} — {{ t('코어') }} {{ core_version }}{% if pack.name %} + {{ t('팩') }} <b>{{ pack.display_name }}</b> ({{ pack.name }}){% else %} ({{ t('코어 단독') }}){% endif %}. {{ t('모듈') }} {{ n_menus }} · {{ t('화면') }} {{ n_screens }} · {{ t('기능') }} {{ n_functions }} + {{ t('이관 배치') }} {{ n_batch }}.</dd>
-    <dt>{{ t('중심') }}</dt><dd><b>{{ t('원재료 LOT') }} → {{ t('생산 LOT') }} → {{ t('출하 LOT') }} {{ t('계보') }}</b> ({{ t('관계') }}: {% for r in lineage.relations %}{{ r.name }}{% if not loop.last %} · {% endif %}{% endfor %}) 와 <b>{{ t('공정 측정값') }}</b> ({{ t('선언') }} → {{ t('자동 폼') }} → {{ t('기록') }} → {{ t('집계') }}).</dd>
+    <dt>{{ t('중심') }}</dt><dd><b>{{ t('원재료 LOT') }} → {{ t('생산 LOT') }} → {{ t('출하 LOT') }} {{ t('계보') }}</b> ({{ t('관계') }}: {% for r in lineage.relations %}{{ r.name }}{% if not loop.last %} · {% endif %}{% endfor %}) 와 <b>{{ t('측정값') }}</b> ({{ t('선언') }} → {{ t('자동 폼') }} → {{ t('기록') }} → {{ t('집계') }}).</dd>
     <dt>{{ t('번호') }}</dt><dd>{% for kind, rule in numbering.items() %}<code>{{ kind }}</code> {{ rule.prefix }}{{ rule.date }}{{ '0' * (rule.digits - 1) }}1{% if not loop.last %} · {% endif %}{% endfor %} <small>— {{ t('형식은 채번 규칙(SYS-05) 행') }}</small></dd>
   </dl>
-  {% if not cards %}
-  <p class="empty">{{ t('열 수 있는 메뉴가 없다 — 권한 표를 확인한다') }}.</p>
-  {% endif %}
+  {% if not n_allowed %}<p class="empty">{{ t('열 수 있는 메뉴가 없다 — 권한 표를 확인한다') }}.</p>{% endif %}
 </section>
 
-{% if cards %}
 <section class="panel" id="ia-menus">
-  <h2>{{ t('메뉴') }} <small>{{ t('일하는 순서 — 좌측 메뉴와 같다. 카드의 기능명은 계약(function-list.md) 그대로') }}</small></h2>
+  <h2>{{ t('메뉴') }} <small>{{ t('일하는 순서 — 좌측 메뉴와 같다. 권한이 없음인 모듈은 흐리게 보이고 열리지 않는다') }}</small></h2>
   <div class="cards">
     {% for c in cards %}
-    <div class="card{% if c.menu.is_pack %} card-ext{% endif %}" data-menu="{{ c.menu.code }}">
-      <h3><span><span class="step">{{ loop.index }}</span> {% if c.menu.screens %}<a href="{{ c.menu.screens[0].path }}">{{ t(c.menu.name) }}</a>{% else %}{{ t(c.menu.name) }}{% endif %}</span> <small>{{ c.level }}</small></h3>
-      <ul>{% for s in c.screens %}<li><a href="{{ s.screen.path }}">{{ t(s.screen.name) }}</a>{% if s.functions %} <small>— {% for n in s.functions %}{{ t(n) }}{% if not loop.last %} · {% endif %}{% endfor %}</small>{% endif %}</li>{% else %}<li class="empty">{{ t('화면 없음') }}</li>{% endfor %}</ul>
-      <p class="card-foot">{{ t('기능') }} {{ c.fn_count }} · {{ c.menu.channels|join(', ') }} · {{ t('담당') }} {{ c.menu.owner }}{% if c.menu.is_pack %} · <b>{{ t('팩') }}</b>{% endif %}</p>
+    <div class="card{% if c.menu.is_pack %} card-ext{% endif %}{% if not c.allowed %} dim{% endif %}" data-menu="{{ c.menu.code }}" data-level="{{ c.level }}"{% if not c.allowed %} style="opacity:.45" aria-disabled="true"{% endif %}>
+      <h3><span><span class="step">{{ c.seq }}</span> {% if c.allowed and c.menu.screens %}<a class="go" href="{{ c.menu.screens[0].path }}">{{ t(c.menu.name) }}</a>{% else %}{{ t(c.menu.name) }}{% endif %}</span> <small class="level" data-level="{{ c.level }}">{{ c.level }}</small></h3>
+      <ul>
+        {% for s in c.screens %}
+        <li>{% if c.allowed %}<a href="{{ s.screen.path }}">{{ t(s.screen.name) }}</a>{% else %}<span class="no">{{ t(s.screen.name) }}</span>{% endif %}{% if s.functions %} <small>— {% for n in s.functions %}{{ t(n) }}{% if not loop.last %} · {% endif %}{% endfor %}</small>{% endif %}</li>
+        {% else %}<li class="empty">{{ t('화면 없음') }}</li>{% endfor %}
+      </ul>
+      <p class="card-foot">{{ t('기능') }} {{ c.fn_count }} · {{ t('화면') }} {{ c.menu.screens|length }} · {{ t('입력') }}: {{ c.write_roles|join(' · ') if c.write_roles else t('없음') }} · {{ t('오늘') }} {{ c.today if c.today is not none else NOT_COLLECTED }}{% if c.menu.is_pack %} · <b>{{ t('팩') }}</b>{% endif %}</p>
     </div>
     {% endfor %}
   </div>
 </section>
-{% endif %}
 {% endblock %}

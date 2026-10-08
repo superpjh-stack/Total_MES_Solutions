@@ -1,0 +1,27 @@
+{# JOB-03 작업지시서 (F-JOB-07) — 개발2 `printing` 모듈이 아직 없을 때의 출력. 번호는 글자로, 바코드 자리는 `미확정`.
+   printing 이 생기면 routers/job.py 가 printing.render_print("work_order") 로 바꿔 부른다(templates/print/work_order.html · 개발2). #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block body %}
+<section class="panel print-sheet">
+  <h2>{{ t('작업지시서') }} <small>{{ printed_at|dt }} · {{ printed_by }}</small> {{ ui.print_button() }}</h2>
+  <p class="barcode-area"><b class="bc-text">{{ work_order.work_order_no }}</b>
+    {% if barcode_svg %}<span class="barcode">{{ barcode_svg|safe }}</span>{% else %}{{ ui.undecided('개발2 printing', '바코드') }} <small>{{ barcode_note }}</small>{% endif %}</p>
+  <dl class="kv">
+    <dt>{{ t('작업지시') }} {{ t('번호') }}</dt><dd><code>{{ work_order.work_order_no }}</code></dd>
+    <dt>{{ t('품목') }}</dt><dd>{{ work_order.item_code }} {{ work_order.item_name }} {{ work_order.item_spec|txt('') }}</dd>
+    <dt>{{ t('공정') }}</dt><dd>{{ work_order.process_code }} {{ work_order.process_name }}</dd>
+    <dt>{{ t('설비') }}</dt><dd>{{ work_order.equip_name|txt }}</dd>
+    <dt>{{ t('계획 수량') }}</dt><dd>{{ work_order.plan_qty|num(3) }} {{ work_order.unit|txt('') }}</dd>
+    <dt>{{ t('계획일') }}</dt><dd>{{ work_order.plan_date|dt }}</dd>
+    <dt>{{ t('수주') }}</dt><dd>{{ work_order.order_no|txt }}{% if work_order.order_line_no %} #{{ work_order.order_line_no }}{% endif %} {{ work_order.partner_name|txt('') }}</dd>
+    <dt>{{ t('생산계획') }}</dt><dd>{{ work_order.plan_no|txt }}</dd>
+    <dt>{{ t('상태') }}</dt><dd>{{ t(work_order.status) }}</dd>
+    <dt>{{ t('비고') }}</dt><dd>{{ work_order.note|txt }}</dd>
+  </dl>
+  <h3>{{ t('소요 원재료') }} <small>{{ t('BOM') }} {{ work_order.bom_version|txt }}</small></h3>
+  {% set lot_rows = [] %}
+  {% for l in lots %}{% set _ = lot_rows.append([l.item_code ~ ' ' ~ l.item_name, l.required_qty|num(3), l.unit|txt, l.lot_no|txt]) %}{% endfor %}
+  {{ ui.grid(['품목', '소요량', '단위', '지정 LOT'], lot_rows) }}
+</section>
+{% endblock %}

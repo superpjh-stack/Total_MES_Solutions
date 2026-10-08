@@ -1,0 +1,38 @@
+{# JOB-02 지시 현황 (F-JOB-06) — 오늘 · 이번 주 지시별 계획 대비 실적 · 상태. 390px 에서는 표가 가로로 넘긴다(grid-panel). `?wo=` 는 실적 드릴다운 (D-604). #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+
+{% block search %}
+  {{ ui.select('기간', 'range', [('today', t('오늘')), ('week', t('이번 주'))], range, blank='오늘') }}
+{% endblock %}
+
+{% block grid %}
+<h2>{{ t('지시 현황') }} <small>{{ frm }} ~ {{ to }}</small></h2>
+<div class="tiles">
+  {% for k, v in summary.items() %}<div class="tile"><span class="l">{{ t(k) }}</span><span class="v">{{ v }}</span></div>{% endfor %}
+</div>
+<table class="grid">
+  <thead><tr><th>{{ t('작업지시') }}</th><th>{{ t('품목') }}</th><th>{{ t('공정') }}</th><th class="num">{{ t('계획') }}</th><th class="num">{{ t('양품') }}</th><th class="num">{{ t('불량') }}</th><th class="num">{{ t('달성') }} %</th><th>{{ t('상태') }}</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr{% if detail and detail.id == r.id %} class="sel"{% endif %}>
+      <td><a href="{{ path }}?range={{ range }}&wo={{ r.id }}"><code>{{ r.work_order_no }}</code></a></td>
+      <td>{{ r.item_code }} {{ r.item_name }}</td><td>{{ r.process_name }}</td>
+      <td class="num">{{ r.plan_qty|num(3) }}</td><td class="num">{{ r.good_qty|num(3) }}</td><td class="num">{{ r.defect_qty|num(3) }}</td>
+      <td class="num">{{ r.achieve_pct|txt }}</td>
+      <td><span class="badge badge-{{ {'대기': 'neutral', '진행': 'run', '마감': 'ok', '취소': 'none'}[r.progress] }}">{{ t(r.progress) }}</span></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="8" class="empty"><b>{{ NOT_COLLECTED }}</b></td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if detail %}
+<section class="panel">
+  <h2>{{ t('실적') }} — <code>{{ detail.work_order_no }}</code> <a class="btn btn-sm" href="{{ print_path }}?id={{ detail.id }}">{{ t('작업지시서') }}</a></h2>
+  {% set res_rows = [] %}
+  {% for x in results %}{% set _ = res_rows.append([x.started_at|dt, x.ended_at|dt, x.good_qty|num(3), x.defect_qty|num(3), x.equip_name|txt, x.worker_name|txt, x.lot_no|txt]) %}{% endfor %}
+  {{ ui.grid(['시작', '종료', '양품', '불량', '설비', '작업자', '생산 LOT'], res_rows) }}
+</section>
+{% endif %}
+{% endblock %}

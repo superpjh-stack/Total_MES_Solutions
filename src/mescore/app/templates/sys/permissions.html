@@ -1,0 +1,46 @@
+{# SYS-03 권한 표 (F-SYS-08 · 09) — 메뉴 × 역할 전 칸. 저장 즉시 rbac.invalidate() → 다음 요청부터 반영 (G-C17).
+   ADMIN 의 sys 칸은 `입력` 고정. 빈 칸(시드 누락)은 `미확정` 로 표시한다. 칸 이름은 level__<역할>__<메뉴> · scopes__<역할>__<메뉴>. #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+
+{% block search %}{% endblock %}
+
+{% block grid %}
+<h2>{{ t('권한 표') }} <small>{{ t('입력') }} {{ counts['입력'] }} · {{ t('조회') }} {{ counts['조회'] }} · {{ t('없음') }} {{ counts['없음'] }} / {{ counts['전체'] }}{% if missing %} · <span class="undecided">{{ t('빈 칸') }} {{ missing }}</span>{% endif %}</small></h2>
+<form method="post" action="{{ path }}" id="perm-form">
+<table class="grid compact perm">
+  <thead><tr><th>{{ t('메뉴') }}</th>{% for r in roles %}<th>{{ r.role_code }}<br><small>{{ r.role_name }}</small></th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for row in rows %}
+    <tr{% if row.hidden %} class="dim"{% endif %}>
+      <td><b>{{ t(row.menu_name) }}</b> <code>{{ row.menu_code }}</code>{% if row.is_pack %} <span class="tag">{{ t('팩') }}</span>{% endif %}</td>
+      {% for c in row.cells %}
+      <td{% if c.role_code == guarded.role and row.menu_code == guarded.menu %} class="locked" title="{{ t('입력 고정') }}"{% endif %}>
+        {% if can_write and not (c.role_code == guarded.role and row.menu_code == guarded.menu) %}
+        <select name="level__{{ c.role_code }}__{{ row.menu_code }}">
+          {% for lv in levels %}<option value="{{ lv }}"{% if c.level == lv %} selected{% endif %}>{{ t(lv) }}</option>{% endfor %}
+        </select>
+        {% set ms = menu_scopes.get(row.menu_code, []) %}
+        {% if ms|length > 1 or (ms and ms[0] != scope_general) %}
+        <span class="scopes">{% for sc in ms %}<label class="radio"><input type="checkbox" name="scopes__{{ c.role_code }}__{{ row.menu_code }}" value="{{ sc }}"{% if sc in c.scopes %} checked{% endif %}> {{ t(sc) }}</label>{% endfor %}</span>
+        {% endif %}
+        {% else %}
+        <span class="badge badge-{{ 'ok' if c.level == '입력' else ('info' if c.level == '조회' else 'none') }}">{{ c.label }}</span>
+        {% endif %}
+        {% if c.updated_at %}<small class="muted">{{ c.updated_at|dt }} {{ c.updated_by|txt('') }}</small>{% endif %}
+      </td>
+      {% endfor %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</form>
+<ul class="notes">
+  <li>{{ t('괄호 조건은 그 범위 기능만 입력할 수 있다 — 일반 기능은 못 한다') }} (D-13).</li>
+  <li>{{ t('저장하면 다음 요청부터 반영된다') }}. {{ t('ADMIN 의 시스템 칸은 잠그지 못한다') }}.</li>
+</ul>
+{% endblock %}
+
+{% block actions %}
+  {{ ui.write_button('저장', can_write, form='perm-form') }}
+{% endblock %}

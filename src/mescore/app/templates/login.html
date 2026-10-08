@@ -28,6 +28,15 @@
         <button class="btn btn-primary" type="submit">{{ t('로그인') }}</button>
       </div>
     </div>
+    {% if settings and settings.env == 'dev' %}
+    {# D-605 — 개발용 역할 바로 로그인 (MES_ENV=dev 에서만 · 운영 빌드에는 없다). 시드 계정으로 POST /login/as (routers/home.py). 비밀번호 값은 없다. #}
+    <fieldset class="login-dev">
+      <legend>{{ t('개발용 — 역할로 바로 로그인') }} <small>MES_ENV=dev</small></legend>
+      {% for code, label in [('ADMIN', t('관리자')), ('PROD', t('생산')), ('QA', t('품질')), ('FIELD', t('현장'))] %}
+      <button class="btn btn-sm" type="submit" formaction="/login/as" name="role" value="{{ code }}">{{ label }}</button>
+      {% endfor %}
+    </fieldset>
+    {% endif %}
     <ul class="notes">
       <li>{{ t('로그인 성공 · 실패는 접근 로그에 남는다') }} ({{ t('시스템') }} &gt; {{ t('접근 로그') }}).</li>
       <li>{{ t('비밀번호 초기화는 관리자가 시스템 > 사용자에서 한다') }}.</li>

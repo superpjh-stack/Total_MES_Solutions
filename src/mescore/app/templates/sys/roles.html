@@ -1,0 +1,36 @@
+{# SYS-02 역할 (F-SYS-05~07) — 역할별 사용자 수. 등록하면 모든 메뉴 칸이 `없음`. ADMIN 은 중지 불가. #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+
+{% block search %}{% endblock %}
+
+{% block grid %}
+<h2>{{ t('역할') }} <small>{{ rows|length }}{{ t('건') }}</small></h2>
+<table class="grid">
+  <thead><tr><th>{{ t('역할 코드') }}</th><th>{{ t('역할 이름') }}</th><th>{{ t('사용 여부') }}</th><th class="num">{{ t('사용자') }}</th><th class="num">{{ t('권한 칸') }}</th><th class="act">{{ t('작업') }}</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr{% if editing and editing.id == r.id %} class="sel"{% endif %}>
+      <td><code>{{ r.role_code }}</code>{% if r.role_code == guarded %} <span class="tag">{{ t('고정') }}</span>{% endif %}</td><td>{{ r.role_name }}</td><td>{{ r.use_yn }}</td>
+      <td class="num">{{ r.user_count }} ({{ t('사용') }} {{ r.active_user_count }})</td><td class="num">{{ r.cell_count }} / {{ n_menus }}</td>
+      <td class="act">{% if can.update %}<a class="btn btn-sm" href="{{ path }}?edit={{ r.id }}">{{ t('수정') }}</a>{% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="empty"><b>{{ NOT_COLLECTED }}</b></td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<section class="panel form-panel">
+  <h2>{% if editing %}{{ t('수정') }} — <code>{{ editing.role_code }}</code>{% else %}{{ t('등록') }} <small>{{ t('메뉴') }} {{ n_menus }}{{ t('칸이') }} {{ t('없음') }}{{ t('으로 만들어진다') }}</small>{% endif %}</h2>
+  <form method="post" action="{{ path }}{% if editing %}/{{ editing.id }}{% endif %}" id="role-form" class="form-grid cols" autocomplete="off">
+    {{ ui.field('역할 코드', 'role_code', editing.role_code if editing else '', required=(not editing), readonly=(editing is not none)) }}
+    {{ ui.field('역할 이름', 'role_name', editing.role_name if editing else '', required=true) }}
+    {% if editing %}{{ ui.select('사용 여부', 'use_yn', [('Y', t('사용')), ('N', t('미사용'))], editing.use_yn) }}{% endif %}
+  </form>
+</section>
+{% endblock %}
+
+{% block actions %}
+  {{ ui.write_button('저장', (can.update if editing else can.create), form='role-form') }}
+  {% if editing %}<a class="btn" href="{{ path }}">{{ t('새로 등록') }}</a>{% endif %}
+{% endblock %}
