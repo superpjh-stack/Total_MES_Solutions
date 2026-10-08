@@ -1,0 +1,14 @@
+{# QUA-03 불량 집계 — F-QUA-07 · stats.quality(by=defect) (개발3 집계 SQL) #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.field('기간 시작', 'frm', frm, type='date') }}
+{{ ui.field('기간 끝', 'to', to, type='date') }}
+{% endblock %}
+{% block grid %}
+<h2>{{ t('불량') }} {{ t('집계') }} <small>{{ frm }} ~ {{ to }}</small></h2>
+{% set rows_ = [] %}
+{% for r in rows %}{% set _ = rows_.append([r.code|txt, r.name|txt, r.defect_count|txt('0'), r.defect_qty|num(3), r.inspection_count|txt('0')]) %}{% endfor %}
+{{ ui.grid(['불량코드', '불량', '건수', '수량', '검사 수'], rows_) }}
+{% if total %}<p>{{ t('합계') }} — {% for k, v in total.items() %}{{ k }} {{ v|txt }}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+{% endblock %}

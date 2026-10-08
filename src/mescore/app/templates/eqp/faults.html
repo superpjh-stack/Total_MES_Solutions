@@ -1,0 +1,35 @@
+{# EQP-03 고장 — F-EQP-05 등록 · F-EQP-06 조치 · F-EQP-07 조회 (MTTR 은 stats.equipment) #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.select('설비', 'equipment_id', equipment_options, equipment_id) }}
+{{ ui.field('기간 시작', 'frm', frm, type='date') }}
+{{ ui.field('기간 끝', 'to', to, type='date') }}
+{{ ui.select('복구 여부', 'fixed', [('Y', t('복구')), ('N', t('미복구'))], fixed) }}
+{% endblock %}
+{% block grid %}
+<h2>{{ t('고장') }}</h2>
+<table class="grid">
+  <thead><tr><th>{{ t('설비') }}</th><th>{{ t('발생 시각') }}</th><th>{{ t('증상') }}</th><th>{{ t('복구 시각') }}</th><th>{{ t('조치 내용') }}</th><th>{{ t('조치자') }}</th><th>{{ t('시간') }}</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr{% if not r.fixed_at %} class="warn"{% endif %}><td>{{ r.equip_code }} {{ r.equip_name }}</td><td>{{ r.occurred_at|dt }}</td><td>{{ r.symptom }}</td><td>{{ r.fixed_at|dt }}</td><td>{{ r.fix_action|txt }}</td><td>{{ r.fixed_by|txt }}</td><td>{{ r.hours|num(1) }}</td>
+      <td>{% if not r.fixed_at %}<form method="post" action="{{ nav.path_of('EQP-03') }}/{{ r.id }}/fix" class="inline"><input type="text" name="fix_action" placeholder="{{ t('조치 내용') }}" required>{{ ui.write_button('조치', user.can('F-EQP-06'), kind='ghost') }}</form>{% endif %}</td></tr>
+  {% else %}
+  <tr><td colspan="8" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<section class="panel">
+  <h2>{{ t('고장') }} {{ t('등록') }} <small>F-EQP-05</small></h2>
+  <form method="post" action="{{ nav.path_of('EQP-03') }}" id="fault-form" class="form-grid">
+    {{ ui.select('설비', 'equipment_id', equipment_options, '', required=true) }}
+    {{ ui.field('발생 시각', 'occurred_at', '', type='datetime-local') }}
+    {{ ui.field('증상', 'symptom', '', required=true) }}
+  </form>
+</section>
+{% endblock %}
+{% block actions %}
+<button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
+{{ ui.write_button('고장 등록', user.can('F-EQP-05'), form='fault-form') }}
+{% endblock %}

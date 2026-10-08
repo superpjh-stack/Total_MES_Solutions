@@ -1,0 +1,85 @@
+{# LOT 라벨 — F-MAT-07 · F-POP-08 (개발2). printing.render_print("label_lot", {"labels": [printing.label_for(id)], "size": ...}).
+   100×50mm 기본 · 50×30mm. 한 요청은 한 크기. 바코드 값 = lot_no 글자 그대로 — POP 스캔칸에 넣으면 그 LOT 이 열린다 (G-C14).
+   디자이너3 원형 docs/design/print/label_lot.html 의 필드 · 치수. 스타일은 최소. #}
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ t('LOT 라벨') }} · {{ system_name }}</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f4f4f4;color:#000;font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+.toolbar{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;font-size:13px}
+.btn{font:inherit;font-size:14px;padding:8px 18px;border:1px solid #333;background:#333;color:#fff;border-radius:6px;cursor:pointer}
+.sheet{display:flex;flex-wrap:wrap;gap:16px;padding:8px 16px 32px}
+.label{background:#fff;color:#000;overflow:hidden;box-shadow:0 0 0 1px #bbb;page-break-after:always;display:grid}
+.barcode{display:block;width:100%}
+.lotno{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600;letter-spacing:.06em;text-align:center;white-space:nowrap}
+.kind{display:inline-block;border:1px solid #000;padding:0 1.2mm;font-weight:600;white-space:nowrap}
+.ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+.attrs div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.25}
+.label[data-size="100x50"]{width:100mm;height:50mm;padding:3mm 4mm;grid-template-rows:auto auto 13mm auto 1fr;row-gap:1mm;font-size:9pt}
+.label[data-size="100x50"] .row1{display:flex;justify-content:space-between;align-items:baseline;font-size:8.5pt}
+.label[data-size="100x50"] .item{font-size:14pt;font-weight:700;line-height:1.15}
+.label[data-size="100x50"] .barcode{height:13mm;width:80mm;margin:0 auto}
+.label[data-size="100x50"] .lotno{font-size:12pt}
+.label[data-size="100x50"] .row5{display:grid;grid-template-columns:30mm 1fr;align-items:end;column-gap:3mm}
+.label[data-size="100x50"] .qty{font-size:16pt;font-weight:700;line-height:1}
+.label[data-size="100x50"] .qty small{font-size:9pt;font-weight:400;margin-left:1mm}
+.label[data-size="100x50"] .attrs{font-size:8pt}
+.label[data-size="50x30"]{width:50mm;height:30mm;padding:2mm 2.5mm;grid-template-rows:auto 8mm auto auto 1fr;row-gap:.6mm;font-size:6.5pt}
+.label[data-size="50x30"] .row1{display:flex;justify-content:space-between;align-items:baseline;gap:1mm}
+.label[data-size="50x30"] .row1 .item{font-weight:700;font-size:7.5pt}
+.label[data-size="50x30"] .barcode{height:8mm;width:42mm;margin:0 auto}
+.label[data-size="50x30"] .lotno{font-size:8pt;letter-spacing:.04em}
+.label[data-size="50x30"] .row4{display:flex;justify-content:space-between}
+.label[data-size="50x30"] .qty{font-weight:700;font-size:8pt}
+.label[data-size="50x30"] .attrs{font-size:6pt}
+@media print{
+  @page{size:{{ '50mm 30mm' if size == '50x30' else '100mm 50mm' }};margin:0}
+  body{background:#fff}.no-print{display:none !important}.sheet{display:block;padding:0}.label{box-shadow:none}
+}
+</style>
+</head>
+<body data-size="{{ size }}">
+<div class="toolbar no-print">
+  <span>{{ t('LOT 라벨') }} · {{ size }} · {{ t('바코드 값 = LOT 번호') }} · {{ t('인쇄') }} {{ printed_at|dt }} {{ printed_by }}</span>
+  <button class="btn" type="button" onclick="window.print()">{{ t('인쇄') }}</button>
+</div>
+<div class="sheet">
+{% for l in labels %}
+<section class="label" data-size="{{ size }}" data-lot="{{ l.lot_no }}" data-kind="{{ l.kind }}">
+  {% if size == '50x30' %}
+  <div class="row1"><span class="item ell">{{ l.item_name|txt }}</span><span class="kind">{{ t(l.kind_label) }}</span></div>
+  {{ barcode_svg(l.lot_no, height=30) }}
+  <div class="lotno">{{ l.lot_no }}</div>
+  <div class="row4"><span class="qty">{{ l.qty|num(3) if l.qty is not none else '-' }} {{ l.unit|txt('') }}</span><span>{{ l.made_at|dt }}</span></div>
+  <div class="attrs">
+    <div>{% if l.work_order_no %}<b>{{ t('작업지시') }}</b> {{ l.work_order_no }}{% elif l.partner_name %}<b>{{ t('거래처') }}</b> {{ l.partner_name }}{% endif %}</div>
+    {% for a in l.attrs[:1] %}<div><b>{{ a.label }}</b> {{ a.value }}</div>{% endfor %}
+  </div>
+  {% else %}
+  <div class="row1">
+    <span><span class="kind">{{ t(l.kind_label) }}</span>&nbsp; {{ l.insp_status|txt }}</span>
+    <span>{{ l.made_at|dt }}</span>
+  </div>
+  <div class="item ell"><span class="mono" style="font-weight:500;font-size:10pt;margin-right:2mm">{{ l.item_code|txt }}</span>{{ l.item_name|txt }}</div>
+  {{ barcode_svg(l.lot_no, height=49) }}
+  <div class="lotno">{{ l.lot_no }}</div>
+  <div class="row5">
+    <div class="qty">{{ l.qty|num(3) if l.qty is not none else '-' }}<small>{{ l.unit|txt('') }}</small></div>
+    <div class="attrs">
+      <div>{% if l.work_order_no %}<b>{{ t('작업지시') }}</b> {{ l.work_order_no }}{% endif %}{% if l.partner_name %}{% if l.work_order_no %} · {% endif %}<b>{{ t('거래처') }}</b> {{ l.partner_name }}{% endif %}{% if l.spec %} · {{ l.spec }}{% endif %}</div>
+      <div>{% for a in l.attrs[:2] %}<b>{{ a.label }}</b> {{ a.value }}{% if not loop.last %} · {% endif %}{% endfor %}</div>
+    </div>
+  </div>
+  {% endif %}
+</section>
+{% else %}
+<p class="empty">{{ t('미수집') }}</p>
+{% endfor %}
+</div>
+</body>
+</html>

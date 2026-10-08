@@ -1,0 +1,25 @@
+{# MAT-05 소요량 — F-MAT-10 계산 · F-MAT-11 조회 #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.field('기간 시작', 'frm', frm, type='date') }}
+{{ ui.field('기간 끝', 'to', to, type='date') }}
+{% endblock %}
+{% block grid %}
+<h2>{{ t('소요량') }} <small>{{ frm }} ~ {{ to }}</small></h2>
+<table class="grid">
+  <thead><tr><th>{{ t('품목') }}</th><th>{{ t('기간') }}</th><th>{{ t('소요량') }}</th><th>{{ t('현재고') }}</th><th>{{ t('부족') }}</th><th>{{ t('출처') }}</th><th>{{ t('계산 시각') }}</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr{% if r.shortage_qty > 0 %} class="warn"{% endif %}><td>{{ r.item_code }} {{ r.item_name }}</td><td>{{ r.period_from }} ~ {{ r.period_to }}</td><td>{{ r.required_qty|num(3) }} {{ r.unit|txt('') }}</td><td>{{ r.stock_qty|num(3) }}</td><td>{% if r.shortage_qty > 0 %}<b>▲ {{ r.shortage_qty|num(3) }}</b>{% else %}-{% endif %}</td><td>{{ r.source }}</td><td>{{ r.calc_at|dt }}</td></tr>
+  {% else %}
+  <tr><td colspan="7" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<form method="post" action="{{ nav.path_of('MAT-05') }}/calc" id="calc-form"><input type="hidden" name="frm" value="{{ frm }}"><input type="hidden" name="to" value="{{ to }}"></form>
+{% endblock %}
+{% block actions %}
+<button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
+{{ ui.write_button('소요량 계산', user.can('F-MAT-10'), form='calc-form') }}
+{% endblock %}

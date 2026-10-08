@@ -1,0 +1,23 @@
+{# MAT-03 원재료 LOT — F-MAT-06 조회 · F-MAT-07 라벨 출력 #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.field('LOT 번호', 'no', no) }}
+{{ ui.select('품목', 'item_id', item_options, item_id) }}
+{{ ui.select('상태', 'state', [('재고', t('재고')), ('소진', t('소진'))], state) }}
+{{ ui.select('검사', 'insp', [('미검사', t('미검사')), ('합격', t('합격')), ('불합격', t('불합격')), ('조건부', t('조건부'))], insp) }}
+{% endblock %}
+{% block grid %}
+<h2>{{ t('원재료 LOT') }}</h2>
+<table class="grid">
+  <thead><tr><th>{{ t('원재료 LOT') }}</th><th>{{ t('품목') }}</th><th>{{ t('거래처') }}</th><th>{{ t('수량') }}</th><th>{{ t('잔량') }}</th><th>{{ t('검사') }}</th><th>{{ t('상태') }}</th><th>{{ t('투입') }}</th><th>{{ t('라벨') }}</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr><td>{{ r.lot_no }}</td><td>{{ r.item_code }} {{ r.item_name }}</td><td>{{ r.partner_name|txt }}</td><td>{{ r.qty|num(3) }} {{ r.unit|txt('') }}</td><td>{{ r.remain_qty|num(3) }}</td><td>{{ r.insp_status }}</td><td>{{ r.state }}</td><td>{{ r.used_in|txt }}</td>
+      <td><a class="btn btn-sm" href="{{ nav.path_of('MAT-03') }}/{{ r.id }}/label" target="_blank">{{ t('라벨') }}</a></td></tr>
+  {% else %}
+  <tr><td colspan="9" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

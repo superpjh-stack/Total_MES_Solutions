@@ -1,0 +1,31 @@
+{# MAT-04 재고 — F-MAT-08 조회 · F-MAT-09 조정 (모바일 390px: 품목 요약 줄 + LOT 접힘) #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.select('품목', 'item_id', item_options, item_id) }}
+{% endblock %}
+{% block grid %}
+<h2>{{ t('재고') }}</h2>
+{% for r in rows %}
+<details class="card"{% if loop.first %} open{% endif %}>
+  <summary><b>{{ r.item_code }} {{ r.item_name }}</b> <span class="badge">{{ r.qty|num(3) }} {{ r.unit|txt('') }}</span>{% if r.qty != r.trx_sum %} <span class="badge b-warn">{{ t('거래 합') }} {{ r.trx_sum|num(3) }}</span>{% endif %}</summary>
+  {% set rows_ = [] %}
+  {% for l in r.lots %}{% set _ = rows_.append([l.lot_no, l.qty|num(3), l.remain_qty|num(3), l.insp_status, l.state, l.made_at|dt]) %}{% endfor %}
+  {{ ui.grid(['원재료 LOT', '수량', '잔량', '검사', '상태', '입고'], rows_) }}
+</details>
+{% else %}
+<p class="empty">{{ NOT_COLLECTED }}</p>
+{% endfor %}
+<section class="panel">
+  <h2>{{ t('재고 조정') }} <small>F-MAT-09</small></h2>
+  <form method="post" action="{{ nav.path_of('MAT-04') }}/adjust" id="adjust-form" class="form-grid">
+    {{ ui.select('품목', 'item_id', item_options, '', required=true) }}
+    {{ ui.field('조정 수량', 'qty', '', type='number', required=true, step='any') }}
+    {{ ui.field('사유', 'reason', '', required=true) }}
+  </form>
+</section>
+{% endblock %}
+{% block actions %}
+<button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
+{{ ui.write_button('재고 조정', user.can('F-MAT-09'), form='adjust-form') }}
+{% endblock %}

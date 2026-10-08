@@ -182,3 +182,24 @@
 
 ## D-605 개발용 역할 바로 로그인 버튼 · 상태: 가설
 - `MES_ENV=dev` 일 때만 로그인 화면에 역할 4 버튼. 운영 빌드에는 없다.
+
+
+---
+
+## 개발2 (웨이브 A R1·R2 · 2026-10-09)
+
+## D-201 입고 번호 = 그 입고가 만든 원재료 LOT 번호 · 상태: 가설
+- `mat_receipt.receipt_no` 는 유니크인데 `core.yaml: numbering` 8종에 입고 번호 종류가 없다. 1 입고 = 원재료 LOT 1 이므로 **`receipt_no = lot.lot_no`**(`LOT_MATERIAL` 채번 한 번). 새 종류를 지어내지 않는다.
+- 바뀌면 고칠 곳: `routers/mat.py: receipt_create` · `core.yaml: numbering`(종류 추가 시 아키텍트).
+
+## D-202 이상 번호 채번 종류 `ISSUE` · 상태: 가설
+- `qua_issue.issue_no` 유니크 · 채번 종류 없음. `sys_number_rule(ISSUE, prefix Q, YYMMDD-, 3)` 행을 `db/seed_dev2.py` 가 `on conflict do nothing` 으로 넣고 `numbering.next("ISSUE")` 로 발번한다(코드는 종류명만 안다). `core.yaml: numbering` 에 `ISSUE` 를 넣어 `seed_core` 가 품도록 아키텍트에게 요청(`progress-dev2.md` §3).
+
+## D-203 `lineage` 쓰기 함수의 `user` 인자 · 상태: 가설
+- 훅 서명은 `(cur, row, user)` 인데 `interfaces.md` §4 의 lineage 쓰기 함수는 `by`(login_id)만 받았다. `validate_lot · after_save_lot · on_lot_created` 에 `rbac.User` 를 넘기려고 **선택 인자 `user=None`** 을 더했다(계약 뒤에 붙는 선택 인자라 기존 호출은 그대로). `by` 는 여전히 login_id.
+
+## D-204 `collect.receive` 의 반환값 · 모르는 설비의 거부 기록 · 상태: 가설
+- `api-contract.md` §4 는 재전송에 `duplicate: true` 를 요구하는데 §6 반환은 `int` 였다. **`ReceiveResult(raw_id, duplicate, unknown_tags, saved)`**(`int()` 가 raw_id)로 바꿨다. 모르는 설비의 거부 기록은 호출자의 트랜잭션이 422 로 되돌아가도 남아야 하므로 **자동 커밋(`conn.x`)** 으로 쓴다 — `collect` 가 쓰는 테이블은 변함없이 `ifc_collect_raw` · `eqp_collect` 뿐.
+
+## D-205 측정값 매크로 서명 `mf.measure_fields(params, values, latest)` · 상태: 가설
+- 매크로는 DB 를 읽을 수 없어 `process_id` 대신 라우터가 `measure.params_for(process_id)` 로 넘긴 `params` 를 받는다. 파이썬 쪽은 `app/measure.py`(params_for · parse_form · record · fill_collect · values_of · plan_fields). 검사 항목(`qua_insp_plan`)도 `measure.plan_fields` 로 같은 칸 모양.

@@ -1,0 +1,41 @@
+{# QUA-01 검사 계획 — F-QUA-01 등록(항목 N줄) · F-QUA-02 수정 · F-QUA-03 조회 #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.select('검사 유형', 'insp_type', type_options, insp_type) }}
+{{ ui.select('품목', 'item_id', item_options, item_id) }}
+{{ ui.select('공정', 'process_id', process_options, process_id) }}
+{% endblock %}
+{% block grid %}
+<h2>{{ t('검사 계획') }}</h2>
+<table class="grid">
+  <thead><tr><th>{{ t('검사 유형') }}</th><th>{{ t('품목') }}</th><th>{{ t('공정') }}</th><th>{{ t('항목 키') }}</th><th>{{ t('항목') }}</th><th>{{ t('단위') }}</th><th>{{ t('형식') }}</th><th>{{ t('기준') }}</th><th>{{ t('하한') }}</th><th>{{ t('상한') }}</th><th>{{ t('기록') }}</th><th>{{ t('사용') }}</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr><td>{{ r.insp_type }}</td><td>{{ r.item_code|txt }} {{ r.item_name|txt('') }}</td><td>{{ r.process_name|txt }}</td><td><code>{{ r.item_key }}</code></td><td>{{ r.label }}</td><td>{{ r.unit|txt }}</td><td>{{ r.value_type }}</td><td>{{ r.standard|txt }}</td><td>{{ r.min_value|txt }}</td><td>{{ r.max_value|txt }}</td><td>{{ r.recorded }}</td><td>{{ r.use_yn }}</td>
+      <td><form method="post" action="{{ nav.path_of('QUA-01') }}/{{ r.id }}" class="inline"><input type="text" name="standard" value="{{ r.standard|txt('') }}" size="8"><input type="number" name="min_value" value="{{ r.min_value|txt('') }}" step="any" size="5"><input type="number" name="max_value" value="{{ r.max_value|txt('') }}" step="any" size="5">{{ ui.write_button('수정', user.can('F-QUA-02'), kind='ghost') }}</form></td></tr>
+  {% else %}
+  <tr><td colspan="13" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<section class="panel">
+  <h2>{{ t('검사 계획') }} {{ t('등록') }} <small>F-QUA-01 · {{ t('항목') }} 3{{ t('줄') }}</small></h2>
+  <form method="post" action="{{ nav.path_of('QUA-01') }}" id="plan-form" class="form-grid">
+    {{ ui.select('검사 유형', 'insp_type', type_options, '', required=true) }}
+    {{ ui.select('품목', 'item_id', item_options) }}
+    {{ ui.select('공정', 'process_id', process_options) }}
+    {% for i in range(3) %}
+    <fieldset class="row"><legend>{{ t('항목') }} {{ i + 1 }}</legend>
+      {{ ui.field('항목 키', 'item_key') }}{{ ui.field('항목', 'label') }}{{ ui.field('단위', 'unit') }}
+      <label>{{ t('형식') }}<select name="value_type">{% for v in value_types %}<option value="{{ v }}">{{ v }}</option>{% endfor %}</select></label>
+      {{ ui.field('기준', 'standard') }}{{ ui.field('하한', 'min_value', '', type='number', step='any') }}{{ ui.field('상한', 'max_value', '', type='number', step='any') }}
+    </fieldset>
+    {% endfor %}
+  </form>
+</section>
+{% endblock %}
+{% block actions %}
+<button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
+{{ ui.write_button('검사 계획 등록', user.can('F-QUA-01'), form='plan-form') }}
+{% endblock %}

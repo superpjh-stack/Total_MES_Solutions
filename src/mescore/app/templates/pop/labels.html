@@ -1,0 +1,26 @@
+{# POP-04 LOT 라벨 — F-POP-08. ?lot= 이면 print/label_lot 로 간다. 여기는 고르는 화면 (?no= 스캔 → 없는 번호 422 재렌더) #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block body %}
+<section class="panel">
+  <h1>{{ t('생산 LOT') }} {{ t('라벨') }} <small>POP-04</small></h1>
+  {% call ui.scan_box(nav.path_of('POP-04'), name='no', label='LOT 번호 스캔', method='get', placeholder=scan_no, button='라벨') %}
+    <input type="hidden" name="size" value="{{ size }}">
+  {% endcall %}
+  {% if scan_error %}<section class="result err" role="alert" id="scan-result"><p class="result-msg">{{ scan_error }} — {{ scan_no }}</p></section>{% endif %}
+</section>
+<section class="panel">
+  <h2>{{ t('최근') }} {{ t('생산 LOT') }}</h2>
+  <table class="grid">
+    <thead><tr><th>{{ t('생산 LOT') }}</th><th>{{ t('품목') }}</th><th>{{ t('작업지시') }}</th><th>{{ t('수량') }}</th><th>{{ t('상태') }}</th><th>{{ t('시각') }}</th><th>{{ t('라벨') }}</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr><td>{{ r.lot_no }}</td><td>{{ r.item_code|txt }} {{ r.item_name|txt('') }}</td><td>{{ r.work_order_no|txt }}</td><td>{{ r.qty|num(3) }} {{ r.unit|txt('') }}</td><td>{{ r.state }}</td><td>{{ r.made_at|dt }}</td>
+        <td><a class="btn btn-sm" href="{{ nav.path_of('POP-04') }}?lot={{ r.id }}" target="_blank">100×50</a> <a class="btn btn-sm" href="{{ nav.path_of('POP-04') }}?lot={{ r.id }}&size=50x30" target="_blank">50×30</a></td></tr>
+    {% else %}
+    <tr><td colspan="7" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

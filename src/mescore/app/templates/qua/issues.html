@@ -1,0 +1,38 @@
+{# QUA-04 이상 · 시정 — F-QUA-08 등록 · F-QUA-09 조치 · F-QUA-10 종결 · F-QUA-11 조회 #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.select('상태', 'status', status_options, status) }}
+{{ ui.field('기간 시작', 'frm', frm, type='date') }}
+{{ ui.field('기간 끝', 'to', to, type='date') }}
+{{ ui.select('공정', 'process_id', process_options, process_id) }}
+{% endblock %}
+{% block grid %}
+<h2>{{ t('이상') }}</h2>
+<table class="grid">
+  <thead><tr><th>{{ t('번호') }}</th><th>{{ t('발생') }}</th><th>{{ t('공정') }}</th><th>LOT</th><th>{{ t('내용') }}</th><th>{{ t('원인') }}</th><th>{{ t('조치') }}</th><th>{{ t('상태') }}</th><th>{{ t('출처') }}</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr><td>{{ r.issue_no }}</td><td>{{ r.occurred_at|dt }}</td><td>{{ r.process_name|txt }}</td><td>{{ r.lot_no|txt }}</td><td>{{ r.content }}</td><td>{{ r.cause|txt }}</td><td>{{ r.action|txt }}{% if r.action_at %} · {{ r.action_at|dt }} {{ r.action_by|txt('') }}{% endif %}</td><td>{{ r.status }}</td><td>{{ r.source }}</td>
+      <td>{% if r.status != '종결' %}<form method="post" action="{{ nav.path_of('QUA-04') }}/{{ r.id }}/action" class="inline"><input type="text" name="action" placeholder="{{ t('조치 내용') }}" required>{{ ui.write_button('조치', user.can('F-QUA-09'), kind='ghost') }}</form>
+          {% if r.action %}<form method="post" action="{{ nav.path_of('QUA-04') }}/{{ r.id }}/close" class="inline">{{ ui.write_button('종결', user.can('F-QUA-10'), kind='ghost') }}</form>{% endif %}{% endif %}</td></tr>
+  {% else %}
+  <tr><td colspan="10" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<section class="panel">
+  <h2>{{ t('이상') }} {{ t('등록') }} <small>F-QUA-08</small></h2>
+  <form method="post" action="{{ nav.path_of('QUA-04') }}" id="issue-form" class="form-grid">
+    {{ ui.field('발생 시각', 'occurred_at', '', type='datetime-local') }}
+    {{ ui.select('공정', 'process_id', process_options) }}
+    {{ ui.field('LOT', 'lot_no') }}
+    {{ ui.field('내용', 'content', '', required=true) }}
+    {{ ui.field('원인', 'cause') }}
+  </form>
+</section>
+{% endblock %}
+{% block actions %}
+<button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
+{{ ui.write_button('이상 등록', user.can('F-QUA-08'), form='issue-form') }}
+{% endblock %}

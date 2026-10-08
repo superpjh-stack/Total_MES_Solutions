@@ -1,0 +1,30 @@
+{# EQP-01 가동 현황 — F-EQP-01 조회 · F-EQP-02 가동 상태 기록 (제어가 아니다). 수집 설비는 collect.latest · 없으면 미수집 #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block body %}
+<section class="panel">
+  <h1>{{ t('설비') }} {{ t('가동 현황') }} <small>EQP-01 · {{ now|dt }}</small></h1>
+  <table class="grid">
+    <thead><tr><th>{{ t('설비') }}</th><th>{{ t('공정') }}</th><th>{{ t('상태') }}</th><th>{{ t('시작') }}</th><th>{{ t('출처') }}</th><th>{{ t('수집값') }}</th><th>{{ t('마지막 수신') }}</th></tr></thead>
+    <tbody>
+    {% for e in rows %}
+    <tr data-state="{{ e.state|txt('') }}"><td><b>{{ e.equip_code }}</b> {{ e.equip_name }}</td><td>{{ e.process_name|txt }}</td><td>{{ e.state|txt(NOT_COLLECTED) }}</td><td>{{ e.state_since|dt }}</td><td>{{ e.state_source|txt }}</td>
+        <td>{% if e.collect_yn != 'Y' %}-{% elif e.latest %}{% for tag, v in e.latest.tags.items() %}<code>{{ tag }}</code> {{ v.value }}{% if not loop.last %} · {% endif %}{% endfor %}{% else %}{{ NOT_COLLECTED }}{% endif %}</td>
+        <td>{{ e.last_received_at|dt(blank=NOT_COLLECTED if e.collect_yn == 'Y' else '-') }}</td></tr>
+    {% else %}
+    <tr><td colspan="7" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+<section class="panel">
+  <h2>{{ t('가동 상태 기록') }} <small>F-EQP-02 — {{ t('기록이지 제어가 아니다') }}</small></h2>
+  <form method="post" action="{{ nav.path_of('EQP-01') }}" id="state-form" class="form-grid">
+    {{ ui.select('설비', 'equipment_id', equipment_options, '', required=true) }}
+    {{ ui.select('상태', 'state', state_options, '', required=true) }}
+    {{ ui.field('시각', 'at', '', type='datetime-local') }}
+    {{ ui.field('비고', 'note') }}
+    {{ ui.write_button('상태 기록', user.can('F-EQP-02'), form='state-form') }}
+  </form>
+</section>
+{% endblock %}

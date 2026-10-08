@@ -1,0 +1,94 @@
+{# POP-02 작업 시작 · 종료 — F-POP-02 시작 · F-POP-03 종료(측정값 자동 폼) · F-POP-04 정지 · F-POP-05 폐기 · 분할/합병 버튼(D-12). 디자인 이식은 다음 웨이브 (docs/design/pop/pop_result_*.html) #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% import "home/_measure.html" as mf %}
+{% block body %}
+<section class="panel">
+  <h1>{{ t('작업 시작') }} · {{ t('작업 종료') }} <small>POP-02</small></h1>
+  {% call ui.scan_box(nav.path_of('POP-01'), name='no', label='다른 지시로 바꾸려면 지시 번호 스캔', method='get', button='확인') %}{% endcall %}
+</section>
+{% if work_order and not result %}
+<section class="panel">
+  <h2>{{ work_order.work_order_no }} <small>{{ work_order.item_code }} {{ work_order.item_name }} · {{ work_order.process_name }} · {{ t('계획 수량') }} {{ work_order.plan_qty|num(3) }} {{ work_order.unit|txt('') }} · {{ work_order.status }}</small></h2>
+  <form method="post" action="{{ nav.path_of('POP-02') }}/start" id="start-form" class="form-grid">
+    <input type="hidden" name="work_order_id" value="{{ work_order.id }}">
+    {{ ui.select('설비', 'equipment_id', equipment_options, work_order.equipment_id) }}
+    {{ ui.select('작업자', 'worker_id', worker_options) }}
+    {{ ui.field('비고', 'note') }}
+    <div class="actions">{{ ui.write_button('작업 시작', user.can('F-POP-02'), form='start-form') }}</div>
+  </form>
+  {% set rows_ = [] %}
+  {% for r in results %}{% set _ = rows_.append([r.id, r.started_at|dt, r.ended_at|dt, r.good_qty|num(3), r.defect_qty|num(3), r.product_lot_no|txt]) %}{% endfor %}
+  <h3>{{ t('실적') }}</h3>
+  {{ ui.grid(['#', '작업 시작', '작업 종료', '양품', '불량', '생산 LOT'], rows_) }}
+  {% for r in results %}<a class="btn btn-sm" href="{{ nav.path_of('POP-02') }}?id={{ r.id }}">{{ t('실적') }} #{{ r.id }}</a> {% endfor %}
+</section>
+{% elif result %}
+<section class="panel">
+  <h2>{{ t('실적') }} #{{ result.id }} <small><code>{{ result.work_order_no }}</code> · {{ result.item_code }} {{ result.item_name }} · {{ result.process_name }}</small></h2>
+  <dl class="kv">
+    <dt>{{ t('작업 시작') }}</dt><dd>{{ result.started_at|dt }} · {{ result.worker_name|txt }}</dd>
+    <dt>{{ t('설비') }}</dt><dd>{{ result.equip_code|txt }} {{ result.equip_name|txt('') }}</dd>
+    <dt>{{ t('투입') }}</dt><dd>{{ result.input_count }} <a class="btn btn-sm" href="{{ nav.path_of('POP-03') }}?result={{ result.id }}">{{ t('투입') }}</a></dd>
+    <dt>{{ t('정지') }}</dt><dd>{{ result.stop_count }}{% if result.open_stop_count %} · <b>{{ t('정지 중') }}</b>{% endif %}</dd>
+    <dt>{{ t('작업 종료') }}</dt><dd>{{ result.ended_at|dt }}{% if product_lot %} · {{ t('생산 LOT') }} <b>{{ product_lot.no }}</b> <a class="btn btn-sm" href="{{ nav.path_of('POP-04') }}?lot={{ product_lot.id }}" target="_blank">{{ t('라벨') }}</a>{% endif %}</dd>
+  </dl>
+</section>
+{% if not result.ended_at %}
+<form method="post" action="{{ nav.path_of('POP-02') }}/{{ result.id }}/end" id="end-form">
+  <section class="panel">
+    <h2>{{ t('수량') }}</h2>
+    <div class="qty-row">
+      {{ ui.field('양품', 'good_qty', '', type='number', required=true, step='any') }}
+      {{ ui.field('불량', 'defect_qty', '0', type='number', step='any') }}
+    </div>
+  </section>
+  <section class="panel">
+    <h2>{{ t('측정값') }} <small>{{ result.process_name }} · bas_process_param</small></h2>
+    {{ mf.measure_fields(params, values, latest) }}
+    {{ ui.attrs_fields(attr_specs|default([])) }}
+  </section>
+  <div class="actions">{{ ui.write_button('작업 종료', user.can('F-POP-03'), form='end-form') }}</div>
+</form>
+{% else %}
+<section class="panel">
+  <h2>{{ t('측정값') }}</h2>
+  {{ mf.measure_table(params, values) }}
+</section>
+{% endif %}
+<section class="panel">
+  <h2>{{ t('정지') }} · {{ t('폐기') }}</h2>
+  <form method="post" action="{{ nav.path_of('POP-02') }}/{{ result.id }}/stop" id="stop-form" class="form-grid">
+    {{ ui.select('정지 사유', 'reason_code', stop_reasons, '', required=not result.open_stop_count) }}
+    {{ ui.field('비고', 'note') }}
+    {{ ui.write_button('정지 끝' if result.open_stop_count else '정지 시작', user.can('F-POP-04'), form='stop-form') }}
+  </form>
+  <form method="post" action="{{ nav.path_of('POP-02') }}/{{ result.id }}/scrap" id="scrap-form" class="form-grid">
+    {{ ui.field('폐기 수량', 'qty', '', type='number', required=true, step='any') }}
+    {{ ui.select('불량', 'defect_code_id', defect_options) }}
+    {{ ui.write_button('폐기 기록', user.can('F-POP-05'), form='scrap-form') }}
+  </form>
+  {% set srows = [] %}{% for s in stops %}{% set _ = srows.append([s.reason_code, s.started_at|dt, s.ended_at|dt, s.note|txt]) %}{% endfor %}
+  {{ ui.grid(['정지 사유', '정지 시작', '정지 끝', '비고'], srows) }}
+  {% set crows = [] %}{% for s in scraps %}{% set _ = crows.append([s.defect_code|txt, s.qty|num(3), s.scrapped_at|dt]) %}{% endfor %}
+  {{ ui.grid(['불량', '폐기 수량', '시각'], crows) }}
+</section>
+<section class="panel">
+  <h2>{{ t('분할') }} · {{ t('합병') }} <small>D-12 · {{ t('재고') }} {{ t('생산 LOT') }} {{ stock_lots|length }}</small></h2>
+  <form method="post" action="{{ nav.path_of('POP-02') }}/{{ result.id }}/split" id="split-form" class="form-grid">
+    {{ ui.select('생산 LOT', 'lot_id', stock_lot_options, product_lot.id if product_lot else '') }}
+    {{ ui.field('분할 수', 'count', '2', type='number', required=true) }}
+    {{ ui.field('분할 수량 (쉼표)', 'qtys') }}
+    {{ ui.write_button('분할', user.can('F-POP-03'), form='split-form') }}
+  </form>
+  <form method="post" action="{{ nav.path_of('POP-02') }}/{{ result.id }}/merge" id="merge-form" class="form-grid">
+    {{ ui.field('합병할 LOT 번호 (쉼표)', 'lot_ids', '', required=true) }}
+    {{ ui.field('수량', 'qty', '', type='number', step='any') }}
+    {{ ui.write_button('합병', user.can('F-POP-03'), form='merge-form') }}
+  </form>
+  <ul>{% for n in stock_lots %}<li><code>{{ n.no }}</code> {{ n.qty|num(3) }} {{ n.unit|txt('') }} · {{ n.state }}</li>{% else %}<li class="empty">{{ NOT_COLLECTED }}</li>{% endfor %}</ul>
+</section>
+{% else %}
+<section class="panel"><p class="empty">{{ t('작업지시를 스캔하거나 작업 목록에서 고른다') }} — <a href="{{ nav.path_of('POP-01') }}">{{ t('작업 목록') }}</a></p></section>
+{% endif %}
+{% endblock %}

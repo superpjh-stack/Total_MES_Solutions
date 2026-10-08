@@ -1,0 +1,31 @@
+{# MAT-01 입고 — F-MAT-01 등록 · F-MAT-02 수정 · F-MAT-03 조회 (개발2 · 최소 템플릿 · 디자인 이식은 다음 웨이브) #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.field('기간 시작', 'frm', frm, type='date') }}
+{{ ui.field('기간 끝', 'to', to, type='date') }}
+{{ ui.select('품목', 'item_id', item_options, item_id) }}
+{{ ui.select('거래처', 'partner_id', partner_options, partner_id) }}
+{% endblock %}
+{% block grid %}
+<h2>{{ t('입고') }}</h2>
+{% set rows_ = [] %}
+{% for r in rows %}{% set _ = rows_.append([r.receipt_no, r.receipt_date|dt, r.item_code ~ ' ' ~ r.item_name, r.partner_name|txt, r.qty|num(3) ~ ' ' ~ r.unit|txt(''), r.lot_no|txt, r.insp_status|txt, r.state|txt, r.remain_qty|num(3)]) %}{% endfor %}
+{{ ui.grid(['입고 번호', '입고일', '품목', '거래처', '수량', '원재료 LOT', '검사', '상태', '잔량'], rows_) }}
+<section class="panel">
+  <h2>{{ t('입고 등록') }} <small>F-MAT-01</small></h2>
+  <form method="post" action="{{ nav.path_of('MAT-01') }}" id="receipt-form" class="form-grid">
+    {{ ui.select('품목', 'item_id', item_options, '', required=true) }}
+    {{ ui.select('거래처', 'partner_id', partner_options) }}
+    {{ ui.field('수량', 'qty', '', type='number', required=true, step='any') }}
+    {{ ui.field('단위', 'unit') }}
+    {{ ui.field('입고일', 'receipt_date', today, type='date') }}
+    {{ ui.field('비고', 'note') }}
+    {{ ui.attrs_fields(attr_specs) }}
+  </form>
+</section>
+{% endblock %}
+{% block actions %}
+<button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
+{{ ui.write_button('입고 등록', user.can('F-MAT-01'), form='receipt-form') }}
+{% endblock %}

@@ -1,0 +1,41 @@
+{# POP-03 투입 스캔 — F-POP-06 스캔(한 번 = 한 건) · F-POP-07 취소. ?no= 미리 보기 — 없는 번호는 이 화면 422 재렌더 · data-scan 하나 #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block body %}
+<section class="panel">
+  <h1>{{ t('투입') }} <small>POP-03{% if result %} · {{ t('실적') }} #{{ result.id }} · {{ result.work_order_no }} · {{ result.item_name }}{% endif %}</small></h1>
+  {% if result and not result.ended_at %}
+  {% call ui.scan_box(nav.path_of('POP-03'), name='barcode', label='원재료 LOT 스캔', hidden={'work_result_id': result.id}, placeholder=scan_no, button='투입') %}
+    {{ ui.field('투입량', 'qty', '', type='number', step='any') }}
+  {% endcall %}
+  {% elif result %}
+  <p class="empty">{{ t('종료된 실적입니다') }}</p>
+  {% else %}
+  {% call ui.scan_box(nav.path_of('POP-03'), name='no', label='원재료 LOT 스캔 (미리 보기)', method='get', placeholder=scan_no, button='확인') %}{% endcall %}
+  {% endif %}
+  {% if scan_error %}<section class="result err" role="alert" id="scan-result"><p class="result-msg">{{ scan_error }} — {{ scan_no }}</p></section>{% endif %}
+  {% if lot %}<section class="result ok" id="scan-result"><p class="result-msg">{{ lot.no }} · {{ lot.item|txt }} · {{ lot.remain_qty|num(3) }} {{ lot.unit|txt('') }} · {{ lot.insp_status }} · {{ lot.state }}</p></section>{% endif %}
+</section>
+{% if result %}
+<section class="panel">
+  <h2>{{ t('투입') }} {{ rows|length }}</h2>
+  <table class="grid">
+    <thead><tr><th>#</th><th>{{ t('원재료 LOT') }}</th><th>{{ t('품목') }}</th><th>{{ t('투입량') }}</th><th>{{ t('시각') }}</th><th>{{ t('검사') }}</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr{% if r.canceled_yn == 'Y' %} class="canceled"{% endif %}><td>{{ r.id }}</td><td>{{ r.lot_no }}</td><td>{{ r.item_code|txt }} {{ r.item_name|txt('') }}</td><td>{{ r.qty|num(3) }} {{ r.unit|txt('') }}</td><td>{{ r.scanned_at|dt }}</td><td>{{ r.insp_status }}</td>
+        <td>{% if r.canceled_yn == 'N' and not result.ended_at %}<form method="post" action="{{ nav.path_of('POP-03') }}/{{ r.id }}/cancel" class="inline">{{ ui.write_button('취소', user.can('F-POP-07'), kind='ghost') }}</form>{% elif r.canceled_yn == 'Y' %}{{ t('취소') }}{% endif %}</td></tr>
+    {% else %}
+    <tr><td colspan="7" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <a class="btn" href="{{ nav.path_of('POP-02') }}?id={{ result.id }}">{{ t('실적') }}</a>
+</section>
+{% else %}
+<section class="panel">
+  <h2>{{ t('작업 중') }} {{ t('실적') }}</h2>
+  <ul>{% for r in open_results %}<li><a href="{{ nav.path_of('POP-03') }}?result={{ r.id }}">#{{ r.id }} {{ r.work_order_no }} · {{ r.item_name }} · {{ r.started_at|dt }}</a></li>{% else %}<li class="empty">{{ NOT_COLLECTED }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+{% endblock %}

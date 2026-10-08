@@ -8,7 +8,7 @@
 |---|---|---|
 | `db.conn` · `app.packs` · `app.nav` · `app.contracts` · `app.rbac` · `app.auth` · `app.templating` · `app.audit` · `app.util.*` · `ui` 매크로 | 아키텍트 | 전원 |
 | `app.numbering` | **개발1** | 개발1 · 2 · 3 · 팩 |
-| `app.lineage` · `app.printing` · `app.collect` · `ui.measure_fields` | **개발2** | 개발2 · 3 · 팩 |
+| `app.lineage` · `app.printing` · `app.collect` · `app.measure` + `home/_measure.html`(`mf.measure_fields`) | **개발2** | 개발2 · 3 · 팩 |
 | `app.stats` · `app.erp` · `mescore.migrate` | **개발3** | 개발3 · QA2 · 팩 |
 
 ## 1. DB — `mescore.db.conn`
@@ -106,7 +106,7 @@ def create_item(request: Request, item_code: str = Form(...), …, user: rbac.Us
 ```
 
 - 화면 GET 을 등록하면 그 경로의 placeholder 는 저절로 빠진다. 메서드 · 경로가 `function-list.md` 의 `API` 열과 글자 그대로여야 `check-trace` 가 "이어졌다" 고 센다.
-- 공용 매크로 `{% import "home/_macros.html" as ui %}` — `ui.grid` · `ui.field` · `ui.select` · `ui.scan_box` · `ui.write_button` · `ui.print_button` · `ui.undecided` · `ui.notes` · **`ui.attrs_fields(table)`**(팩 속성 폼 자동) · **`ui.measure_fields(process_id, values=None)`**(측정값 폼 자동, 개발2).
+- 공용 매크로 `{% import "home/_macros.html" as ui %}` — `ui.grid` · `ui.field` · `ui.select` · `ui.scan_box` · `ui.write_button` · `ui.print_button` · `ui.undecided` · `ui.notes` · **`ui.attrs_fields(table)`**(팩 속성 폼 자동) · **`mf.measure_fields(params, values={}, latest={})`**(측정값 폼 자동 — 별 파일 `{% import "home/_measure.html" as mf %}` · `params = measure.params_for(process_id)` 를 라우터가 넘긴다 · 개발2) · `mf.measure_table(params, values)`.
 - 사용자 문구는 전부 `t()` — 템플릿 `{{ t("생산 LOT") }}`, 파이썬 `from mescore.app.packs import t`.
 
 ## 3. 채번 — `app.numbering` (개발1)
@@ -132,12 +132,17 @@ numbering.rule(kind) -> dict | None                 # sys_number_rule 행. 없�
 # 쓰기 — 전부 conn.tx() 의 커서를 받는다. 검증 실패는 422
 lineage.link(cur, parent_id, child_id, relation, *, by, qty=None) -> int            # 화살표 한 줄. genealogy_id. 자기 참조 · 순환 · 모르는 relation 422
 lineage.assert_usable(cur, lot_ids) -> None                                         # PRODUCT 는 재고, MATERIAL 은 합격(또는 조건부)이어야 한다
-lineage.make_product_lot(cur, *, work_result_id, by, kind="PRODUCT", qty=None, unit=None, attrs=None) -> dict   # F-POP-03 종료. pop_input → 투입 계보 N줄
-lineage.split(cur, *, parent_id, count, by, qtys=None, relation=SPLIT, kind=None) -> list[dict]        # 1 → N
-lineage.merge(cur, *, parent_ids, by, qty=None, relation=MERGE, kind=None) -> dict                      # N → 1
-lineage.ship(cur, *, shipment_id, lot_id, by) -> int                                 # F-SHP-05 (개발3 이 부른다). 출하 LOT 이 없으면 만든다
-lineage.unship(cur, *, shipment_id, lot_id, by) -> int                               # F-SHP-06
-lineage.consume_material(cur, *, work_result_id, material_lot_id, qty, by) -> int    # F-POP-06 투입 스캔 → pop_input (계보는 종료 때)
+lineage.split(cur, *, parent_id, count, by, qtys=None, relation=SPLIT, kind=None, process_id=None, equipment_id=None, attrs=None, user=None) -> list[dict]   # 1 → N (N ≥ 2 · D-503)
+lineage.merge(cur, *, parent_ids, by, qty=None, relation=MERGE, kind=None, process_id=None, equipment_id=None, attrs=None, user=None) -> dict                 # N → 1 (코어 합병 N ≥ 2 · 팩 합병 계열 N ≥ 1 · D-503)
+lineage.ship(cur, *, shipment_id, lot_id, by, user=None) -> int                      # F-SHP-05 (개발3 이 부른다). 출하 LOT 이 없으면 만든다(LOT_SHIPMENT 채번). 이미 출하 · 소진 · 불합격 422
+lineage.unship(cur, *, shipment_id, lot_id, by, user=None) -> int                    # F-SHP-06 — 출하 화살표 삭제. 등록 상태의 출하만
+lineage.consume_material(cur, *, work_result_id, material_lot_id, qty, by, unit=None) -> int    # F-POP-06 투입 스캔 → pop_input (계보는 종료 때) + 원재료면 mat_stock* 소비
+lineage.cancel_consume(cur, *, input_id, by) -> int                                  # F-POP-07 — 종료 전만 · 재고 되돌림
+lineage.make_material_lot(cur, *, item_id, qty, unit, by, partner_id=None, lot_no=None, made_at=None, attrs=None, insp_status="미검사", user=None) -> dict   # F-MAT-01 · 이관(lot_no 지정)
+lineage.make_product_lot(cur, *, work_result_id, by, kind="PRODUCT", qty=None, unit=None, attrs=None, parent_id=None, user=None) -> dict   # parent_id 가 있으면 `생산` 1:1
+lineage.retag(cur, lot_id, kind, *, by=None) -> dict                                 # 팩 kind 로 바꾼다 (pack-contract.md §5). kind_base 는 등록된 base
+lineage.shipment_lot(cur, shipment_id) -> dict | None                                # 출하 헤더의 출하 LOT 행 (읽기)
+# `user` 는 라우터의 rbac.User — validate_lot · after_save_lot · on_lot_created 훅에 넘긴다(없으면 None). `by` 는 login_id
 
 # 읽기 — 어떤 테이블에도 쓰지 않는다
 lineage.resolve(no) -> Node | None            # 번호(스캔값) → LOT
@@ -147,9 +152,11 @@ lineage.parents_of(lot_id) / children_of(lot_id) -> list[Edge]
 lineage.trace_backward(lot_id) -> Trace       # F-TRC-02
 lineage.trace_forward(lot_id) -> Trace        # F-TRC-01
 
-Node(id, no, kind, kind_label, item, state, work_order_no, qty, unit)
+Node(id, no, kind, kind_label, item, state, work_order_no, qty, unit, kind_base, item_id, item_code, insp_status, work_order_id, shipment_id, remain_qty, made_at)
 Edge(genealogy_id, parent: Node, child: Node, relation, relation_base, qty, depth)
-Trace(start: Node, direction, edges) · .nodes() · .by_kind(kind) · .materials() · .shipments() · .stock()
+Trace(start: Node, direction, edges) · .nodes() · .by_kind(kind) · .materials() · .shipments() · .stock() · .products()
+lineage.node(lot_id) · nodes(lot_ids) · genealogy_rows(lot_ids) · relation(name) -> Relation(name, base) · lot_kind(kind) -> LotKind(kind, base, label) · kind_label(kind)
+# 읽기 함수는 전부 선택 인자 cur 를 받는다 — 같은 트랜잭션 안에서(테스트 되돌림) 읽을 때
 ```
 - `trace_*` 는 **재귀 조회 하나**(`db-schema.md` §3.3). 깊이 · 분기를 가정하지 않고 경로를 저장하지 않는다. `Trace.edges` 는 중복 없이 출발점에서 가까운 순.
 - 팩 relation 은 `base` 로 동작한다 — `splice`(base 합병)는 `merge(relation="splice")`, `슬리팅`(base 분할)은 `split(relation="슬리팅")`. 추적 · 상태 계산은 base 만 본다.
@@ -160,8 +167,10 @@ Trace(start: Node, direction, edges) · .nodes() · .by_kind(kind) · .materials
 ```python
 printing.render_print(request, template, data, *, screen_id) -> HTMLResponse   # templates/print/<template>.html. 인쇄용 레이아웃
 printing.barcode_svg(text, *, height=40) -> str                                 # Code128 인라인 SVG. 외부 CDN 0
-printing.label_for(lot_id) -> dict                                              # 라벨 데이터 (번호 · 품목 · 수량 · 일시 · attrs 표시용)
-class PrintAdapter: def send(self, job: PrintJob) -> PrintResult               # 기본 구현 = 브라우저 인쇄(아무것도 보내지 않는다). 팩이 ZPL 등으로 교체(E7)
+printing.label_for(lot_id, *, size="100x50") -> dict                           # 라벨 데이터 {lot_no kind kind_base kind_label item_code item_name spec qty unit made_at insp_status state work_order_no partner_name attrs[{label value}] size}. 없는 LOT 404
+printing.shipment_label_for(shipment_id) -> dict                                # 출하 라벨 데이터 (D-601 — 개발3 이 render_print("label_shipment", …) 로)
+class PrintAdapter: def send(self, job: PrintJob) -> PrintResult               # 기본 구현 = 브라우저 인쇄(sent=False). 팩 adapters.printing 모듈의 adapter() / ADAPTER 로 교체(E7) — printing.adapter()
+# render_print 의 ctx 에는 data + barcode_svg(함수) + printed_at + printed_by 가 들어간다. 양식 4 의 data 키는 docs/design/README.md 「출력물 4종」 표 그대로(label_lot 은 {"labels": [label], "size", **label})
 ```
 코어 양식 4 — `print/work_order.html` · `print/label_lot.html` · `print/label_shipment.html` · `print/document.html`(성적서). 팩은 같은 이름으로 덮어쓰거나 추가.
 
@@ -169,7 +178,9 @@ class PrintAdapter: def send(self, job: PrintJob) -> PrintResult               #
 
 ```python
 collect.CollectMessage(equip_code, ts, tags: dict, source="gateway", resend=False)
-collect.receive(cur, msg) -> int                 # POST /ifc/collect 가 부른다. ifc_collect_raw 적재(멱등) → eqp_collect 정제 → hook("on_collect")
+collect.CollectMessage.from_payload(dict) -> CollectMessage   # 본문 형식 오류 422
+collect.receive(cur, msg) -> ReceiveResult(raw_id, duplicate, unknown_tags, saved)   # POST /ifc/collect 가 부른다. ifc_collect_raw 적재(멱등 · 같은 메시지는 duplicate=True) → eqp_collect 정제 → hook("on_collect"). int(result) = raw_id
+#   모르는 설비: 거부 사유를 ifc_collect_raw 에 **자동 커밋으로** 남긴 뒤 422 (호출자 트랜잭션이 되돌아가도 기록이 남는다)
 collect.latest(equip_id) -> dict | None          # EQP-01 가동 현황
 collect.series(equip_id, tag, frm, to) -> list   # EQP-04 수집값 조회
 collect.aggregate(equip_id, tag, frm, to, agg) -> float | None   # on_result_closed 가 측정값 collect 소스를 채울 때 (agg = last|avg|max|min)

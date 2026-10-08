@@ -1,0 +1,23 @@
+{# EQP-04 수집값 조회 — F-EQP-08 · collect.series · 0건 미수집. 표 + 간단 추이(막대 폭 = 값/최대) #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.select('설비', 'equipment_id', equipment_options, equipment_id, required=true) }}
+{{ ui.select('태그', 'tag', tag_options, tag, required=true) }}
+{{ ui.field('기간 시작', 'frm', frm, type='date') }}
+{{ ui.field('기간 끝', 'to', to, type='date') }}
+{% endblock %}
+{% block grid %}
+<h2>{{ t('수집값') }} <small>{{ tag|txt }} · {{ frm }} ~ {{ to }}</small></h2>
+{% if summary %}<p>{{ t('건수') }} {{ summary.n }} · {{ t('최소') }} {{ summary.min|txt }} · {{ t('최대') }} {{ summary.max|txt }} · {{ t('평균') }} {{ summary.avg|num(3) }} · {{ t('마지막') }} {{ summary.last|txt }}</p>{% endif %}
+<table class="grid plain">
+  <thead><tr><th>{{ t('시각') }}</th><th>{{ t('값') }}</th><th>{{ t('추이') }}</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr><td>{{ r.ts|dt('%Y-%m-%d %H:%M:%S') }}</td><td>{{ r.value }}</td><td>{% if summary and summary.max and r.value is number %}<span class="bar" style="display:inline-block;height:8px;background:#999;width:{{ (100 * r.value / summary.max)|round|int }}px"></span>{% endif %}</td></tr>
+  {% else %}
+  <tr><td colspan="3" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,24 @@
+{# POP-01 작업 목록 (스캔) — F-POP-01. 지시 번호 스캔 ?no= → POP-02. 없는 번호는 이 화면 422 재렌더 · data-scan 하나 (G-C13) #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block body %}
+<section class="panel">
+  <h1>{{ t('작업 목록') }} <small>POP-01 · {{ today|dt }}</small></h1>
+  {% call ui.scan_box(nav.path_of('POP-01'), name='no', label='작업지시 번호 스캔', method='get', placeholder=scan_no, button='열기') %}{% endcall %}
+  {% if scan_error %}<section class="result err" role="alert" id="scan-result"><p class="result-msg">{{ scan_error }} — {{ scan_no }}</p></section>{% endif %}
+</section>
+<section class="panel">
+  <h2>{{ t('오늘 지시') }} <small>{{ t('대기') }} · {{ t('진행') }}</small></h2>
+  <table class="grid">
+    <thead><tr><th>{{ t('작업지시') }}</th><th>{{ t('품목') }}</th><th>{{ t('공정') }}</th><th>{{ t('설비') }}</th><th>{{ t('계획 수량') }}</th><th>{{ t('계획일') }}</th><th>{{ t('상태') }}</th><th>{{ t('실적') }}</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr{% if r.is_today %} class="today"{% endif %}><td>{{ r.work_order_no }}</td><td>{{ r.item_code }} {{ r.item_name }}</td><td>{{ r.process_name }}</td><td>{{ r.equip_code|txt }}</td><td>{{ r.plan_qty|num(3) }} {{ r.unit|txt('') }}</td><td>{{ r.plan_date|dt }}</td><td>{{ r.status }}{% if r.open_count %} · {{ t('작업 중') }}{% endif %}</td><td>{{ r.result_count }} · {{ t('양품') }} {{ r.good_qty|num(3) }}</td>
+        <td><a class="btn btn-sm" href="{{ nav.path_of('POP-02') }}?wo={{ r.id }}">{{ t('열기') }}</a></td></tr>
+    {% else %}
+    <tr><td colspan="9" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
