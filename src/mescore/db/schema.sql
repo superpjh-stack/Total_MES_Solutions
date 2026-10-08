@@ -11,7 +11,7 @@ set client_min_messages = warning;
 -- bas 기준정보 (10)
 -- ════════════════════════════════════════════════════════════════════
 
--- @table bas_process | bas | 공정
+-- @table bas_process | bas | 공정 | 셋 다
 create table bas_process (
     id            bigserial primary key,
     process_code  text not null,                                   -- 공정 코드 (유니크)
@@ -22,7 +22,7 @@ create table bas_process (
     constraint bas_process_use_chk check (use_yn in ('Y', 'N'))
 );
 
--- @table bas_item | bas | 품목
+-- @table bas_item | bas | 품목 | 셋 다
 create table bas_item (
     id         bigserial primary key,
     item_code  text not null,                                      -- 품목 코드 (유니크)
@@ -35,7 +35,7 @@ create table bas_item (
     constraint bas_item_use_chk check (use_yn in ('Y', 'N'))
 );
 
--- @table bas_bom | bas | BOM 헤더
+-- @table bas_bom | bas | BOM 헤더 | 임진강 `BAS_BOM` · 니즈푸드 BOM 테이블
 create table bas_bom (
     id       bigserial primary key,
     item_id  bigint not null references bas_item (id),             -- 상위 품목
@@ -45,7 +45,7 @@ create table bas_bom (
     constraint bas_bom_use_chk check (use_yn in ('Y', 'N'))
 );
 
--- @table bas_bom_dtl | bas | BOM 구성품
+-- @table bas_bom_dtl | bas | BOM 구성품 | 임진강 `BAS_BOM_DTL`
 create table bas_bom_dtl (
     id                 bigserial primary key,
     bom_id             bigint not null references bas_bom (id),    -- BOM 헤더
@@ -58,7 +58,7 @@ create table bas_bom_dtl (
 );
 create index bas_bom_dtl_bom_idx on bas_bom_dtl (bom_id);
 
--- @table bas_process_param | bas | 공정 측정값 정의 (E3) — 이 행이 POP 종료 폼을 만든다
+-- @table bas_process_param | bas | 공정 측정값 정의 (E3) — 이 행이 POP 종료 폼을 만든다 | 임진강 `SLT_STD WSH_STD`(기준) + 니즈푸드 `BAS_PROCESS_STD` 의 일반화 — **테이블 폭발을 막는 자리**
 create table bas_process_param (
     id           bigserial primary key,
     process_id   bigint not null references bas_process (id),      -- 공정
@@ -83,7 +83,7 @@ create table bas_process_param (
     constraint bas_process_param_use_chk check (use_yn in ('Y', 'N'))
 );
 
--- @table bas_equipment | bas | 설비
+-- @table bas_equipment | bas | 설비 | 셋 다 + 송월 `BAS_EQUIPMENTS`
 create table bas_equipment (
     id          bigserial primary key,
     equip_code  text not null,                                     -- 설비 코드 (유니크 · collect 의 equip_code 와 1:1)
@@ -96,7 +96,7 @@ create table bas_equipment (
     constraint bas_equipment_use_chk check (use_yn in ('Y', 'N'))
 );
 
--- @table bas_partner | bas | 거래처
+-- @table bas_partner | bas | 거래처 | 셋 다
 create table bas_partner (
     id            bigserial primary key,
     partner_code  text not null,                                   -- 거래처 코드 (유니크)
@@ -108,7 +108,7 @@ create table bas_partner (
     constraint bas_partner_use_chk check (use_yn in ('Y', 'N'))
 );
 
--- @table sys_role | sys | 역할
+-- @table sys_role | sys | 역할 | 셋 다
 create table sys_role (
     id         bigserial primary key,
     role_code  text not null,                                      -- 역할 코드 (유니크 · ADMIN 시드 필수)
@@ -118,7 +118,7 @@ create table sys_role (
     constraint sys_role_use_chk check (use_yn in ('Y', 'N'))
 );
 
--- @table sys_user | sys | 사용자
+-- @table sys_user | sys | 사용자 | 셋 다
 create table sys_user (
     id                   bigserial primary key,
     login_id             text not null,                            -- 로그인 ID (유니크)
@@ -134,7 +134,7 @@ create table sys_user (
     constraint sys_user_status_chk check (status in ('사용', '중지', '잠금'))
 );
 
--- @table bas_worker | bas | 작업자
+-- @table bas_worker | bas | 작업자 | 임진강 · 니즈푸드
 create table bas_worker (
     id           bigserial primary key,
     worker_code  text not null,                                    -- 작업자 코드 (유니크)
@@ -147,7 +147,7 @@ create table bas_worker (
 );
 alter table sys_user add constraint sys_user_worker_fk foreign key (worker_id) references bas_worker (id);
 
--- @table bas_defect_code | bas | 불량코드
+-- @table bas_defect_code | bas | 불량코드 | 엘컴화인 · 임진강 `QUA_DEFECT_TYPE`
 create table bas_defect_code (
     id           bigserial primary key,
     defect_code  text not null,                                    -- 불량 코드 (유니크)
@@ -158,7 +158,7 @@ create table bas_defect_code (
     constraint bas_defect_code_use_chk check (use_yn in ('Y', 'N'))
 );
 
--- @table bas_code | bas | 공통코드 (그룹 + 코드 한 테이블)
+-- @table bas_code | bas | 공통코드 (그룹 + 코드 한 테이블) | 셋 다
 create table bas_code (
     id          bigserial primary key,
     group_code  text not null,                                     -- 그룹 (코어 그룹은 core.yaml: code_groups)
@@ -176,7 +176,7 @@ create table bas_code (
 -- ord 수주 · 계획 (4)
 -- ════════════════════════════════════════════════════════════════════
 
--- @table ord_order | ord | 수주 헤더
+-- @table ord_order | ord | 수주 헤더 | 임진강 `ORD_ORDER` · 니즈푸드 `SAL_ORDER` · 엘컴화인 `sales_order`
 create table ord_order (
     id          bigserial primary key,
     order_no    text not null,                                     -- 수주 번호 (유니크 · numbering ORDER)
@@ -189,7 +189,7 @@ create table ord_order (
     constraint ord_order_status_chk check (status in ('등록', '진행', '완료', '취소'))
 );
 
--- @table ord_order_dtl | ord | 수주 상세
+-- @table ord_order_dtl | ord | 수주 상세 | ord_order 와 같다 (§1: 임진강 `ORD_*` · 니즈푸드 `SAL_ORDER*`)
 create table ord_order_dtl (
     id        bigserial primary key,
     order_id  bigint not null references ord_order (id),           -- 수주 헤더
@@ -202,7 +202,7 @@ create table ord_order_dtl (
     constraint ord_order_dtl_status_chk check (status in ('대기', '지시', '출하'))
 );
 
--- @table ord_order_hist | ord | 수주 변경 이력
+-- @table ord_order_hist | ord | 수주 변경 이력 | 임진강 `ORD_ORDER_HIST`
 create table ord_order_hist (
     id            bigserial primary key,
     order_id      bigint not null references ord_order (id),       -- 수주 헤더
@@ -214,7 +214,7 @@ create table ord_order_hist (
 );
 create index ord_order_hist_order_idx on ord_order_hist (order_id, changed_at desc);
 
--- @table ord_plan | ord | 생산계획
+-- @table ord_plan | ord | 생산계획 | 임진강 `ORD_PLAN` · 니즈푸드 `PRD_PLAN`
 create table ord_plan (
     id            bigserial primary key,
     plan_no       text not null,                                   -- 계획 번호 (유니크 · numbering PLAN)
@@ -232,7 +232,7 @@ create table ord_plan (
 -- job 작업지시 (2) · shp 출하 헤더 · 공용 lot
 -- ════════════════════════════════════════════════════════════════════
 
--- @table job_work_order | job | 작업지시
+-- @table job_work_order | job | 작업지시 | 셋 다
 create table job_work_order (
     id             bigserial primary key,
     work_order_no  text not null,                                  -- 지시 번호 (유니크 · numbering WORK_ORDER)
@@ -253,7 +253,7 @@ create table job_work_order (
     constraint job_work_order_status_chk check (status in ('대기', '진행', '마감', '취소'))
 );
 
--- @table shp_shipment | shp | 출하 헤더
+-- @table shp_shipment | shp | 출하 헤더 | 셋 다
 create table shp_shipment (
     id           bigserial primary key,
     shipment_no  text not null,                                    -- 출하 번호 (유니크 · numbering SHIPMENT)
@@ -268,7 +268,7 @@ create table shp_shipment (
     constraint shp_shipment_status_chk check (status in ('등록', '승인', '취소'))
 );
 
--- @table lot | 공용 | 추적 단위 (D-03) — MATERIAL · PRODUCT · SHIPMENT + 팩 등록 kind
+-- @table lot | 공용 | 추적 단위 (D-03) — MATERIAL · PRODUCT · SHIPMENT + 팩 등록 kind | 엘컴화인 3테이블 · 니즈푸드 배치 · 임진강 공정 LOT
 create table lot (
     id              bigserial primary key,
     lot_no          text not null,                                 -- LOT 번호 (유니크 · 바코드 — 영문 대문자 · 숫자 · - 만)
@@ -296,7 +296,7 @@ create index lot_kind_idx on lot (kind_base, made_at desc);
 create index lot_item_idx on lot (item_id);
 create index lot_work_order_idx on lot (work_order_id);
 
--- @table job_lot | job | 지시 ↔ 소요 품목/LOT 매핑
+-- @table job_lot | job | 지시 ↔ 소요 품목/LOT 매핑 | 엘컴화인 `job_lot`(D-10) · 니즈푸드 소요량
 create table job_lot (
     id             bigserial primary key,
     work_order_id  bigint not null references job_work_order (id), -- 작업지시
@@ -311,7 +311,7 @@ create index job_lot_wo_idx on job_lot (work_order_id);
 -- mat 자재 (4)
 -- ════════════════════════════════════════════════════════════════════
 
--- @table mat_receipt | mat | 입고
+-- @table mat_receipt | mat | 입고 | 셋 다
 create table mat_receipt (
     id            bigserial primary key,
     receipt_no    text not null,                                   -- 입고 번호 (유니크)
@@ -325,7 +325,7 @@ create table mat_receipt (
     constraint mat_receipt_no_uq unique (receipt_no)
 );
 
--- @table mat_stock | mat | 품목별 현재고 (거래 합과 같아야 한다)
+-- @table mat_stock | mat | 품목별 현재고 (거래 합과 같아야 한다) | 임진강 `MAT_STOCK` · 니즈푸드 `MAT_PROD_STOCK`
 create table mat_stock (
     id       bigserial primary key,
     item_id  bigint not null references bas_item (id),             -- 품목 (유니크)
@@ -334,7 +334,7 @@ create table mat_stock (
     constraint mat_stock_item_uq unique (item_id)
 );
 
--- @table mat_stock_trx | mat | 재고 거래
+-- @table mat_stock_trx | mat | 재고 거래 | 임진강 `MAT_STOCK_TRX` · 니즈푸드 `MAT_STOCK_MOVE`
 create table mat_stock_trx (
     id         bigserial primary key,
     item_id    bigint not null references bas_item (id),           -- 품목
@@ -350,7 +350,7 @@ create table mat_stock_trx (
 );
 create index mat_stock_trx_item_idx on mat_stock_trx (item_id, trx_at desc);
 
--- @table mat_requirement | mat | 소요량
+-- @table mat_requirement | mat | 소요량 | 임진강 `MAT_REQUIRE` · 니즈푸드 소요량
 create table mat_requirement (
     id            bigserial primary key,
     period_from   date not null,                                   -- 기간 시작
@@ -370,7 +370,7 @@ create table mat_requirement (
 -- pop 생산실적 (5) · lot_genealogy
 -- ════════════════════════════════════════════════════════════════════
 
--- @table pop_work_result | pop | 실적 (작업 1회)
+-- @table pop_work_result | pop | 실적 (작업 1회) | 셋 다
 create table pop_work_result (
     id              bigserial primary key,
     work_order_id   bigint not null references job_work_order (id), -- 작업지시
@@ -388,7 +388,7 @@ create table pop_work_result (
 create index pop_work_result_wo_idx on pop_work_result (work_order_id, started_at desc);
 alter table lot add constraint lot_work_result_fk foreign key (work_result_id) references pop_work_result (id);
 
--- @table lot_genealogy | 공용 | 계보 — 화살표 한 줄 = 부모 LOT → 자식 LOT. lineage 만 쓴다
+-- @table lot_genealogy | 공용 | 계보 — 화살표 한 줄 = 부모 LOT → 자식 LOT. lineage 만 쓴다 | 엘컴화인 `roll_genealogy`
 create table lot_genealogy (
     id             bigserial primary key,
     parent_lot_id  bigint not null references lot (id),            -- 부모 LOT
@@ -439,7 +439,7 @@ create trigger lot_genealogy_no_cycle
     before insert or update on lot_genealogy
     for each row execute function lot_genealogy_guard();
 
--- @table pop_stop | pop | 정지
+-- @table pop_stop | pop | 정지 | 엘컴화인 `work_stop` · 니즈푸드 `PRC_DELAY`
 create table pop_stop (
     id              bigserial primary key,
     work_result_id  bigint not null references pop_work_result (id), -- 실적
@@ -450,7 +450,7 @@ create table pop_stop (
 );
 create index pop_stop_result_idx on pop_stop (work_result_id);
 
--- @table pop_scrap | pop | 폐기
+-- @table pop_scrap | pop | 폐기 | 엘컴화인 `work_scrap` · 임진강 불량
 create table pop_scrap (
     id              bigserial primary key,
     work_result_id  bigint not null references pop_work_result (id), -- 실적
@@ -461,7 +461,7 @@ create table pop_scrap (
 );
 create index pop_scrap_result_idx on pop_scrap (work_result_id);
 
--- @table pop_input | pop | 투입 스캔 (종료 때 투입 계보로 옮겨진다)
+-- @table pop_input | pop | 투입 스캔 (종료 때 투입 계보로 옮겨진다) | 엘컴화인 `material_input` · 니즈푸드 BOM 투입
 create table pop_input (
     id               bigserial primary key,
     work_result_id   bigint not null references pop_work_result (id), -- 실적
@@ -475,7 +475,7 @@ create table pop_input (
 create index pop_input_result_idx on pop_input (work_result_id);
 create index pop_input_lot_idx on pop_input (material_lot_id);
 
--- @table pop_measure | pop | 측정값 기록 (E3) — 실적 1건당 키당 1행
+-- @table pop_measure | pop | 측정값 기록 (E3) — 실적 1건당 키당 1행 | 임진강 `SLT_SALINITY_LOG MIX_CCP_RESULT` · 니즈푸드 설비 측정값 · 엘컴화인 색차 측정값의 일반화
 create table pop_measure (
     id              bigserial primary key,
     work_result_id  bigint not null references pop_work_result (id), -- 실적
@@ -496,7 +496,7 @@ create index pop_measure_key_idx on pop_measure (param_key, measured_at);
 -- qua 품질 (5)
 -- ════════════════════════════════════════════════════════════════════
 
--- @table qua_insp_plan | qua | 검사 계획 (항목 정의)
+-- @table qua_insp_plan | qua | 검사 계획 (항목 정의) | 니즈푸드 `QUA_INSP_PLAN` · 임진강 `BAS_CCP_STD`
 create table qua_insp_plan (
     id          bigserial primary key,
     insp_type   text not null,                                     -- 검사 유형 입고/공정/최종 — 공통코드 INSP_TYPE
@@ -517,7 +517,7 @@ create table qua_insp_plan (
 );
 create unique index qua_insp_plan_uq on qua_insp_plan (insp_type, coalesce(item_id, 0), coalesce(process_id, 0), item_key);
 
--- @table qua_inspection | qua | 검사 1건 (최신 검사가 그 LOT 의 판정)
+-- @table qua_inspection | qua | 검사 1건 (최신 검사가 그 LOT 의 판정) | 셋 다
 create table qua_inspection (
     id            bigserial primary key,
     lot_id        bigint not null references lot (id),             -- 검사한 LOT
@@ -533,7 +533,7 @@ create table qua_inspection (
 );
 create index qua_inspection_lot_idx on qua_inspection (lot_id, inspected_at desc);
 
--- @table qua_insp_item | qua | 검사 항목 값
+-- @table qua_insp_item | qua | 검사 항목 값 | 임진강 CCP 결과 · 니즈푸드 검사 항목
 create table qua_insp_item (
     id              bigserial primary key,
     inspection_id   bigint not null references qua_inspection (id), -- 검사
@@ -547,7 +547,7 @@ create table qua_insp_item (
     constraint qua_insp_item_uq unique (inspection_id, item_key)
 );
 
--- @table qua_defect | qua | 불량 (판정에 붙는 불량코드별 수량)
+-- @table qua_defect | qua | 불량 (판정에 붙는 불량코드별 수량) | 엘컴화인 `inspection_defect` · 임진강 `QUA_DEFECT`
 create table qua_defect (
     id              bigserial primary key,
     inspection_id   bigint not null references qua_inspection (id), -- 검사
@@ -558,7 +558,7 @@ create table qua_defect (
 );
 create index qua_defect_insp_idx on qua_defect (inspection_id);
 
--- @table qua_issue | qua | 이상 · 시정
+-- @table qua_issue | qua | 이상 · 시정 | 니즈푸드 · 임진강 `QUA_ISSUE`
 create table qua_issue (
     id             bigserial primary key,
     issue_no       text not null,                                  -- 이상 번호 (유니크)
@@ -582,7 +582,7 @@ create table qua_issue (
 -- eqp 설비 (4) · ifc 수집 원문
 -- ════════════════════════════════════════════════════════════════════
 
--- @table eqp_run_log | eqp | 가동 구간
+-- @table eqp_run_log | eqp | 가동 구간 | 임진강 `EQP_RUN_LOG` · 니즈푸드 `EQP_STATUS` · 송월 `PRC_EQUIP_STATUS`
 create table eqp_run_log (
     id            bigserial primary key,
     equipment_id  bigint not null references bas_equipment (id),   -- 설비
@@ -596,7 +596,7 @@ create table eqp_run_log (
 );
 create index eqp_run_log_equip_idx on eqp_run_log (equipment_id, started_at desc);
 
--- @table eqp_check | eqp | 점검
+-- @table eqp_check | eqp | 점검 | 임진강 `EQP_CHECK` · 니즈푸드 `EQP_INSPECT`
 create table eqp_check (
     id            bigserial primary key,
     equipment_id  bigint not null references bas_equipment (id),   -- 설비
@@ -608,7 +608,7 @@ create table eqp_check (
 );
 create index eqp_check_equip_idx on eqp_check (equipment_id, checked_at desc);
 
--- @table eqp_fault | eqp | 고장
+-- @table eqp_fault | eqp | 고장 | 임진강 · 니즈푸드 `EQP_FAULT`
 create table eqp_fault (
     id            bigserial primary key,
     equipment_id  bigint not null references bas_equipment (id),   -- 설비
@@ -621,7 +621,7 @@ create table eqp_fault (
 );
 create index eqp_fault_equip_idx on eqp_fault (equipment_id, occurred_at desc);
 
--- @table ifc_collect_raw | ifc | 수집 원문 (모르는 설비도 거부 사유와 함께 남긴다)
+-- @table ifc_collect_raw | ifc | 수집 원문 (모르는 설비도 거부 사유와 함께 남긴다) | 송월 `PRC_MONITOR_DATA DAT_COLLECT_LOGS`
 create table ifc_collect_raw (
     id               bigserial primary key,
     equip_code       text not null,                                -- 설비 코드 (메시지 그대로)
@@ -634,7 +634,7 @@ create table ifc_collect_raw (
     constraint ifc_collect_raw_uq unique (equip_code, ts, source)
 );
 
--- @table eqp_collect | eqp | 수집값 정제본 (시계열)
+-- @table eqp_collect | eqp | 수집값 정제본 (시계열) | 니즈푸드 `EQP_COLLECT` · 임진강 `IF_SENSOR_RAW` · 송월 `PRC_MONITOR_DATA`
 create table eqp_collect (
     id            bigserial primary key,
     equipment_id  bigint not null references bas_equipment (id),   -- 설비
@@ -651,7 +651,7 @@ create index eqp_collect_series_idx on eqp_collect (equipment_id, tag, ts desc);
 -- shp 발행본 · kpi (2) · sys (나머지 7) · ifc (2)
 -- ════════════════════════════════════════════════════════════════════
 
--- @table shp_document | shp | 성적서 · 거래명세서 발행본 (스냅샷 — 발행 뒤 불변)
+-- @table shp_document | shp | 성적서 · 거래명세서 발행본 (스냅샷 — 발행 뒤 불변) | 엘컴화인 성적서 · 평창 거래명세서
 create table shp_document (
     id           bigserial primary key,
     document_no  text not null,                                    -- 문서 번호 (유니크 · numbering DOCUMENT)
@@ -664,7 +664,7 @@ create table shp_document (
     constraint shp_document_type_chk check (doc_type in ('성적서', '거래명세서'))
 );
 
--- @table kpi_indicator | kpi | 지표 정의
+-- @table kpi_indicator | kpi | 지표 정의 | 임진강 `KPI_MASTER` · 니즈푸드 `KPI_INDICATOR`
 create table kpi_indicator (
     id             bigserial primary key,
     indicator_key  text not null,                                  -- 지표 키 (유니크)
@@ -678,7 +678,7 @@ create table kpi_indicator (
     constraint kpi_indicator_visible_chk check (visible_yn in ('Y', 'N'))
 );
 
--- @table kpi_snapshot | kpi | 현황판 일 스냅샷 (배치만 쓴다)
+-- @table kpi_snapshot | kpi | 현황판 일 스냅샷 (배치만 쓴다) | 임진강 `KPI_RESULT DSH_METRIC_TS`
 create table kpi_snapshot (
     id             bigserial primary key,
     snap_date      date not null,                                  -- 날짜
@@ -688,7 +688,7 @@ create table kpi_snapshot (
     constraint kpi_snapshot_uq unique (snap_date, indicator_key)
 );
 
--- @table sys_permission | sys | 권한 표 칸 (메뉴 × 역할 전 칸)
+-- @table sys_permission | sys | 권한 표 칸 (메뉴 × 역할 전 칸) | 엘컴화인 `sys_permission` · 임진강 `SYS_ROLE_AUTH`
 create table sys_permission (
     id         bigserial primary key,
     role_id    bigint not null references sys_role (id),           -- 역할
@@ -699,7 +699,7 @@ create table sys_permission (
     constraint sys_permission_level_chk check (level in ('없음', '조회', '입력'))
 );
 
--- @table sys_session | sys | 세션 (요청마다 사용자 상태와 함께 확인 · D-19)
+-- @table sys_session | sys | 세션 (요청마다 사용자 상태와 함께 확인 · D-19) | 엘컴화인(D-26 쿠키 → DB)
 create table sys_session (
     id                bigserial primary key,
     session_id        text not null,                               -- 세션 ID (유니크 · 쿠키에는 이것만)
@@ -714,7 +714,7 @@ create table sys_session (
 );
 create index sys_session_user_idx on sys_session (user_id);
 
--- @table sys_access_log | sys | 접근 로그 (로그인 · 조회 · 변경 · 오류)
+-- @table sys_access_log | sys | 접근 로그 (로그인 · 조회 · 변경 · 오류) | 셋 다 `SYS_LOG`
 create table sys_access_log (
     id         bigserial primary key,
     logged_at  timestamptz not null default now(),                 -- 시각
@@ -731,7 +731,7 @@ create table sys_access_log (
 );
 create index sys_access_log_at_idx on sys_access_log (logged_at desc);
 
--- @table sys_number_rule | sys | 채번 규칙 (조립식 — prefix + to_char(date_format) + seq)
+-- @table sys_number_rule | sys | 채번 규칙 (조립식 — prefix + to_char(date_format) + seq) | 엘컴화인
 create table sys_number_rule (
     id           bigserial primary key,
     kind         text not null,                                    -- 종류 (유니크 · core.yaml: numbering + 팩)
@@ -743,7 +743,7 @@ create table sys_number_rule (
     constraint sys_number_rule_use_chk check (use_yn in ('Y', 'N'))
 );
 
--- @table sys_number_seq | sys | 채번 카운터 (행 잠금으로 올린다 — numbering 만 쓴다)
+-- @table sys_number_seq | sys | 채번 카운터 (행 잠금으로 올린다 — numbering 만 쓴다) | 엘컴화인
 create table sys_number_seq (
     id         bigserial primary key,
     kind       text not null,                                      -- 종류
@@ -752,7 +752,7 @@ create table sys_number_seq (
     constraint sys_number_seq_uq unique (kind, seq_scope)
 );
 
--- @table sys_migration_log | sys | 이관 로그
+-- @table sys_migration_log | sys | 이관 로그 | 엘컴화인
 create table sys_migration_log (
     id            bigserial primary key,
     command       text not null,                                   -- 명령 basics/orders/lots/history
@@ -770,7 +770,7 @@ create table sys_migration_log (
     run_by        text                                             -- 실행자
 );
 
--- @table sys_backup_hist | sys | 백업 이력
+-- @table sys_backup_hist | sys | 백업 이력 | 임진강 · 니즈푸드 `SYS_BACKUP_HIST`
 create table sys_backup_hist (
     id           bigserial primary key,
     dump_path    text,                                             -- 덤프 경로
@@ -783,7 +783,7 @@ create table sys_backup_hist (
     message      text                                              -- 메시지
 );
 
--- @table ifc_erp_link | ifc | ERP 연계 기록
+-- @table ifc_erp_link | ifc | ERP 연계 기록 | 임진강 `IF_ERP_LINK` · 송월 `DAT_IF_LOGS`
 create table ifc_erp_link (
     id         bigserial primary key,
     kind       text not null,                                      -- 연계 종류
@@ -797,7 +797,7 @@ create table ifc_erp_link (
     constraint ifc_erp_link_status_chk check (status in ('대기', '성공', '실패', '미확정'))
 );
 
--- @table ifc_outbox | ifc | 외부 전송 큐 (after_commit_* 훅이 넣고 erp.flush 가 비운다)
+-- @table ifc_outbox | ifc | 외부 전송 큐 (after_commit_* 훅이 넣고 erp.flush 가 비운다) | 엘컴화인 `erp.py` 일반화 `[가설]`
 create table ifc_outbox (
     id          bigserial primary key,
     event       text not null,                                     -- 사건

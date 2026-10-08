@@ -12,8 +12,8 @@
 | 화면 | `screen-map.md` 의 화면 ID |
 | 유형 | `등록` `수정` `삭제` `취소` `판정` `승인` `스캔` `실행` = 쓰기 · `조회` `출력` = 읽기 · `배치` |
 | 쓰는 테이블 | 그 기능이 **쓰는** 곳. 읽기 기능은 `-`. 모듈의 쓰기 경계(`db-schema.md` §2) 밖에는 쓰지 않는다(G-C05) |
-| 채널 | 그 화면의 채널(`screen-map.md`). 팩이 `channels` 로 바꿀 수 있다 |
-| 권한 | 쓰기 기능: 입력할 수 있는 역할(`goal.md` §6 기본 권한 표). 읽기 기능: `조회 이상` |
+| 채널 | 그 화면의 채널(`screen-map.md`) 중 일부여도 된다(쓰기 기능이 Web 만일 수 있다) — 화면 채널 밖은 안 된다. 팩이 `channels` 로 바꿀 수 있다 |
+| 권한 | 쓰기 기능: 입력할 수 있는 역할 — **`core.yaml: permissions` 에서 계산한 값과 같아야 한다**(`check_trace` 가 대조 · D-13: 괄호 조건 칸은 그 범위 기능만, 일반 기능은 못 한다). 읽기 기능: `조회 이상`. `토큰` = 사용자가 아니라 `X-Collect-Token`(F-IFC-01) |
 | 범위 | 쓰기 기능의 `scope`. `일반` · `입고검사` · `승인` · `지표` · `재전송`. 권한 칸의 `scopes` 에 있어야 쓸 수 있다 |
 | API | 엔드포인트 하나. 경로 앞부분은 `nav.path_of(...)`. `cli <명령>` = `uv run python -m mescore.migrate <명령> --dir <폴더>` |
 | 훅 | 그 기능이 부르는 팩 훅(`interfaces.md` §9). `-` 는 `validate_<table>` 만 |
@@ -87,8 +87,8 @@
 | F-MAT-06 | mat | MAT-03 | 원재료 LOT 조회 | 조회 | - | 관리자 Web, 현장 POP | 조회 이상 | - | `GET /mat/lots` | - | 개발2 | `kind=MATERIAL`. 잔량은 `v_lot_stock`. 상태 · 검사 · 투입처 |
 | F-MAT-07 | mat | MAT-03 | 원재료 LOT 라벨 출력 | 출력 | - | 관리자 Web, 현장 POP | 조회 이상 | - | `GET /mat/lots/{id}/label` | - | 개발2 | `print/label_lot`. 바코드 = `lot_no`. 스캔칸에 넣으면 그 LOT 이 열린다(G-C14) |
 | F-MAT-08 | mat | MAT-04 | 재고 조회 | 조회 | - | 관리자 Web, 모바일 | 조회 이상 | - | `GET /mat/stock` | - | 개발2 | 품목별 현재고(`mat_stock`) + LOT 별 잔량. 390px |
-| F-MAT-09 | mat | MAT-04 | 재고 조정 | 수정 | mat_stock, mat_stock_trx | 관리자 Web | 생산 | 일반 | `POST /mat/stock/adjust` | - | 개발2 | 품목 · 조정 수량 · 사유 → 거래 1행 + 현재고 갱신. 사유 필수 |
-| F-MAT-10 | mat | MAT-05 | 소요량 계산 | 실행 | mat_requirement | 관리자 Web | 생산 | 일반 | `POST /mat/requirements/calc` | - | 개발2 | 기간의 확정 계획 · 대기 지시 × BOM → 품목별 소요 · 현재고 · 부족. 재실행 멱등(기간 키로 갱신). 팩 훅이 만든 행(`source=hook`)은 덮지 않는다 |
+| F-MAT-09 | mat | MAT-04 | 재고 조정 | 수정 | mat_stock, mat_stock_trx | 관리자 Web | 생산 · 현장 | 일반 | `POST /mat/stock/adjust` | - | 개발2 | 품목 · 조정 수량 · 사유 → 거래 1행 + 현재고 갱신. 사유 필수 |
+| F-MAT-10 | mat | MAT-05 | 소요량 계산 | 실행 | mat_requirement | 관리자 Web | 생산 · 현장 | 일반 | `POST /mat/requirements/calc` | - | 개발2 | 기간의 확정 계획 · 대기 지시 × BOM → 품목별 소요 · 현재고 · 부족. 재실행 멱등(기간 키로 갱신). 팩 훅이 만든 행(`source=hook`)은 덮지 않는다 |
 | F-MAT-11 | mat | MAT-05 | 소요량 조회 | 조회 | - | 관리자 Web | 조회 이상 | - | `GET /mat/requirements` | - | 개발2 | 기간별. 부족 품목 강조 |
 | F-POP-01 | pop | POP-01 | 작업 목록 조회 (스캔) | 조회 | - | 현장 POP | 조회 이상 | - | `GET /pop/work` | - | 개발2 | 오늘 지시(대기 · 진행). 지시 번호 스캔 `?no=` → POP-02 로. 없는 번호 422 재렌더. 터치 확대 |
 | F-POP-02 | pop | POP-02 | 작업 시작 | 등록 | pop_work_result | 현장 POP | 생산 · 현장 | 일반 | `POST /pop/result/start` | on_result_started | 개발2 | 지시 · 설비 · 작업자 → 실적 행(`started_at`). 지시 `for share` · 대기/진행만 · 같은 지시의 미종료 실적이 있으면 422 |
@@ -117,15 +117,15 @@
 | F-EQP-06 | eqp | EQP-03 | 고장 조치 | 수정 | eqp_fault, eqp_run_log | 현장 POP, 관리자 Web | 생산 · 현장 | 일반 | `POST /eqp/faults/{id}/fix` | - | 개발2 | 조치 내용 · 복구 시각 → 고장 구간 닫기 |
 | F-EQP-07 | eqp | EQP-03 | 고장 조회 | 조회 | - | 현장 POP, 관리자 Web | 조회 이상 | - | `GET /eqp/faults` | - | 개발2 | 설비 · 기간 · 복구 여부. MTTR 은 `stats.equipment` |
 | F-EQP-08 | eqp | EQP-04 | 수집값 조회 | 조회 | - | 관리자 Web | 조회 이상 | - | `GET /eqp/collect` | - | 개발2 | 설비 · 태그 · 기간 → `collect.series`. 표 + 간단 추이. 0건 `미수집` |
-| F-SHP-01 | shp | SHP-01 | 출하 등록 | 등록 | shp_shipment | 현장 POP, 관리자 Web | 관리자 · 생산 · 현장 | 일반 | `POST /shp/shipments` | - | 개발3 | 거래처 · 출하일 · 수주(선택) → 번호 `SHIPMENT` · `status=등록`. LOT 은 아직 없다 |
-| F-SHP-02 | shp | SHP-01 | 출하 수정 | 수정 | shp_shipment | 현장 POP, 관리자 Web | 관리자 · 생산 · 현장 | 일반 | `POST /shp/shipments/{id}` | - | 개발3 | 승인 전만. 승인 후 422 |
-| F-SHP-03 | shp | SHP-01 | 출하 취소 | 취소 | shp_shipment, lot, lot_genealogy | 현장 POP, 관리자 Web | 관리자 · 생산 · 현장 | 일반 | `POST /shp/shipments/{id}/cancel` | - | 개발3 | 승인 전만. 스캔된 LOT 은 전부 `lineage.unship` 으로 되돌린다 |
+| F-SHP-01 | shp | SHP-01 | 출하 등록 | 등록 | shp_shipment | 현장 POP, 관리자 Web | 생산 · 현장 | 일반 | `POST /shp/shipments` | - | 개발3 | 거래처 · 출하일 · 수주(선택) → 번호 `SHIPMENT` · `status=등록`. LOT 은 아직 없다 |
+| F-SHP-02 | shp | SHP-01 | 출하 수정 | 수정 | shp_shipment | 현장 POP, 관리자 Web | 생산 · 현장 | 일반 | `POST /shp/shipments/{id}` | - | 개발3 | 승인 전만. 승인 후 422 |
+| F-SHP-03 | shp | SHP-01 | 출하 취소 | 취소 | shp_shipment, lot, lot_genealogy | 현장 POP, 관리자 Web | 생산 · 현장 | 일반 | `POST /shp/shipments/{id}/cancel` | - | 개발3 | 승인 전만. 스캔된 LOT 은 전부 `lineage.unship` 으로 되돌린다 |
 | F-SHP-04 | shp | SHP-01 | 출하 조회 | 조회 | - | 현장 POP, 관리자 Web | 조회 이상 | - | `GET /shp/shipments` | - | 개발3 | 기간 · 거래처 · 상태. LOT 수 · 수량 |
-| F-SHP-05 | shp | SHP-02 | 출하 LOT 스캔 | 스캔 | lot, lot_genealogy | 현장 POP, 관리자 Web | 관리자 · 생산 · 현장 | 일반 | `POST /shp/scan` | - | 개발3 | 출하 + 생산 LOT 바코드 → `lineage.ship`(출하 LOT 이 없으면 `kind=SHIPMENT` 생성, `출하` 계보 1줄). 재고 아님 · 불합격 · 미검사 · 이미 출하 422(스캔칸 유지) |
-| F-SHP-06 | shp | SHP-02 | 출하 LOT 스캔 취소 | 취소 | lot, lot_genealogy | 현장 POP, 관리자 Web | 관리자 · 생산 · 현장 | 일반 | `POST /shp/scan/cancel` | - | 개발3 | 승인 전만. `lineage.unship` |
+| F-SHP-05 | shp | SHP-02 | 출하 LOT 스캔 | 스캔 | lot, lot_genealogy | 현장 POP, 관리자 Web | 생산 · 현장 | 일반 | `POST /shp/scan` | - | 개발3 | 출하 + 생산 LOT 바코드 → `lineage.ship`(출하 LOT 이 없으면 `kind=SHIPMENT` 생성, `출하` 계보 1줄). 재고 아님 · 불합격 · 미검사 · 이미 출하 422(스캔칸 유지) |
+| F-SHP-06 | shp | SHP-02 | 출하 LOT 스캔 취소 | 취소 | lot, lot_genealogy | 현장 POP, 관리자 Web | 생산 · 현장 | 일반 | `POST /shp/scan/cancel` | - | 개발3 | 승인 전만. `lineage.unship` |
 | F-SHP-07 | shp | SHP-02 | 출하 승인 | 승인 | shp_shipment | 현장 POP, 관리자 Web | 관리자 | 승인 | `POST /shp/shipments/{id}/approve` | validate_shipment, after_commit_shipment_approved | 개발3 | LOT 0건 422 → 훅(`HookError` 422) → `status=승인` · `approved_at/by`. 승인 후 스캔 · 취소 불가. `after_commit` 으로 ERP 큐 |
 | F-SHP-08 | shp | SHP-03 | 출하 현황 조회 | 조회 | - | 관리자 Web, 모바일 | 조회 이상 | - | `GET /shp/status` | - | 개발3 | 오늘 · 이번 주 출하 · 납기 대비. 390px |
-| F-SHP-09 | shp | SHP-04 | 성적서 발행 | 등록 | shp_document | 관리자 Web | 관리자 · 생산 | 일반 | `POST /shp/documents` | - | 개발3 | 승인된 출하 → 그 LOT 들의 **최신 검사 항목 값**으로 성적서 행(번호 `DOCUMENT`, 내용 스냅샷 JSON). 미승인 422. 같은 출하에 재발행은 새 번호 |
+| F-SHP-09 | shp | SHP-04 | 성적서 발행 | 등록 | shp_document | 관리자 Web | 생산 · 현장 | 일반 | `POST /shp/documents` | - | 개발3 | 승인된 출하 → 그 LOT 들의 **최신 검사 항목 값**으로 성적서 행(번호 `DOCUMENT`, 내용 스냅샷 JSON). 미승인 422. 같은 출하에 재발행은 새 번호 |
 | F-SHP-10 | shp | SHP-04 | 성적서 출력 | 출력 | - | 관리자 Web | 조회 이상 | - | `GET /shp/documents/{id}/print` | - | 개발3 | `print/document`. 스냅샷을 그린다(검사가 나중에 바뀌어도 발행본 불변). 팩이 양식 덮어쓰기(COA 등) |
 | F-TRC-01 | trc | TRC-01 | 정방향 추적 | 조회 | - | 관리자 Web, 모바일 | 조회 이상 | - | `GET /trc/forward?no=` | - | 개발3 | `lineage.trace_forward`. 원재료 LOT → … → 출하 LOT. 재고 LOT 은 `재고` 표시. 없는 번호 422 재렌더. **쓰기 0** |
 | F-TRC-02 | trc | TRC-02 | 역방향 추적 | 조회 | - | 관리자 Web, 모바일 | 조회 이상 | - | `GET /trc/backward?no=` | - | 개발3 | `lineage.trace_backward`. 출하 LOT → 원재료 LOT 전부. 각 노드에서 지시 · 실적 · 측정값 · 검사로 링크(G-C08) |

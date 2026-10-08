@@ -28,7 +28,7 @@
 
 | 경우 | 브라우저 (`Accept: text/html`) | 그 밖 (JSON) |
 |---|---|---|
-| 화면 GET | 200 HTML | 200 HTML (화면은 HTML 뿐) |
+| 화면 GET | 200 HTML | **200 JSON** — 그 화면의 `ctx`(`templating.render` 가 받은 것 + `screen_id` · `user` · `functions` · `template`). placeholder 는 `placeholder: true` (백엔드 우선 · D-18) |
 | 쓰기 성공 | **303** → 원래 화면 + 알림 한 번 | **200** `{"ok": true, "message": "…", …}` (`http.saved(request, msg, data={…})`) |
 | 422 (폼 POST) | **303** → 원래 화면 + 알림(메시지 · 항목별 사유). POP 은 큰 글씨, 닫으면 스캔칸으로. 원래 화면 = `Referer` → 요청 경로의 화면 경로 → 메인 | **422** `{"code": "validation_error"|"hook_rejected", "message": "…", "fields": [{"name": …, "reason": …}]}` |
 | 422 (**스캔 진입 GET** `?no=`) | **그 화면을 422 로 다시 그린다** — 사유를 큰 글씨로, `data-scan` 포커스 유지. 오류 화면으로 보내지 않는다 | **422** `validation_error` |

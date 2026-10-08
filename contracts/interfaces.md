@@ -19,7 +19,7 @@ q1(sql, params=None) -> dict|None   # 첫 행
 x(sql, params=None) -> int          # INSERT/UPDATE/DELETE 한 문장. rowcount
 tx()                                # with conn.tx() as cur: … 여러 문장을 한 트랜잭션으로
 ```
-- DSN 은 `MES_PG_DSN`(기본 `postgresql:///mes_core_db`; 팩은 `make` 가 `mes_<팩>_db` 로 바꾼다). **DB 연결 실패는 삼키지 않는다** → `DbUnavailable` → 503. 로그의 접속 문자열은 비밀번호를 가린다.
+- DSN 은 `MES_PG_DSN`. 비우면 `settings` 가 `MES_PACK` 에 따라 `postgresql:///mes_core_db`(코어 단독 · `_` 팩) / `postgresql:///mes_<팩>_db` 로 정한다. **DB 연결 실패는 삼키지 않는다** → `DbUnavailable` → 503. 로그의 접속 문자열은 비밀번호를 가린다. `conn.table_counts()` 는 시드 멱등 · 백업 대조용(로그 · 세션 제외).
 - 같이 성공하거나 같이 실패해야 하는 것은 `tx()` 하나에. `numbering.next(..., cur=cur)` · `lineage.*(cur, …)` · `packs.hook(...)(cur, …)` 가 그 커서를 받는다.
 - **작업지시 행 잠금**: 작업지시를 고치는 쪽(수정 · 마감 · 취소 — `routers/job.py: lock_work_order`)은 `for update`, 그 지시에 무엇을 붙이는 쪽(실적 시작 `pop.assert_open` · 생산 LOT · 분할/합병 `lineage._assert_open`)은 `for share`. 한 트랜잭션은 지시 행을 하나만 잠그고 순서는 실적/LOT 행 → 지시 행 → 채번 카운터(교착 없음).
 - `IntegrityError` · `DataError` 는 `main.py` 가 422 로 바꾼다. 사람이 읽을 문장은 라우터가 먼저 검사해 `http.validation_error` 로.
@@ -28,49 +28,61 @@ tx()                                # with conn.tx() as cur: … 여러 문장�
 
 ```python
 # app.packs — core.yaml + packs/<팩>/pack.yaml 병합본. 기동 때 한 번
-packs.load(name: str|None) -> Pack        # 병합 규칙 위반이면 PackError 로 기동 거부
-packs.current() -> Pack                   # .name .company .core_version .terms .menus .screens .roles .numbering .channels .attrs .lineage .write_scope
-packs.t(text: str) -> str                 # 용어 치환. 사전에 없으면 원문. 템플릿 전역 t()
-packs.hook(name: str) -> Callable         # 등록된 훅. 없으면 no-op (cur, row, user) -> None
+packs.load(name: str|None) -> Pack        # 병합 규칙 위반이면 PackError 로 기동 거부. name 이 비면 코어만
+packs.current() -> Pack                   # .name .display_name .company .core_version .terms .modules .order .hidden .screens .common .roles .permissions .numbering .channels .attrs .lineage .write_scope .warnings
+packs.t(text: str) -> str                 # 용어 치환 — 키가 그대로면 그 값, 아니면 긴 키부터 부분 치환, 사전에 없으면 원문 (D-07). 템플릿 전역 t() · 필터 |t
+packs.hook(name: str) -> Callable         # 등록된 훅. 없으면 packs.NOOP_HOOK (아무 일도 안 함). packs.has_hook(name) -> bool
 packs.attrs_of(table: str) -> list[AttrSpec]   # pack.yaml: attrs[table] — AttrSpec(key, label, type, required, choices)
-packs.template_dirs() -> list[Path]       # packs/<팩>/templates 가 코어보다 먼저
-packs.router_modules() -> list[str]       # 코어 13 + 팩 라우터 모듈 경로
+packs.read_attrs(form: Mapping | Request, table) -> dict   # 폼의 attr_<key> 칸 → attrs. 필수 누락은 ValueError (라우터가 422 로)
+packs.template_dirs() -> list[Path]       # packs/<팩>/templates 가 코어보다 먼저. packs.overridden_templates() 가 덮어쓴 목록
+packs.router_modules() -> list[str]       # 코어 13 (mescore.app.routers.<m>) + 팩 packs/<팩>/routers/*.py (`_` 로 시작하는 파일 제외)
+packs.core_tables() -> list[str]          # schema.sql 의 `-- @table` 52
 
-# app.nav — 메뉴 · 경로의 원본 (core.yaml + 팩 menus/screens 병합)
-nav.MENUS -> list[Menu]                   # 팩 hide 제외 · order 적용. Menu(code, name, module, owner, screens, hidden)
-nav.SCREENS -> list[Screen]               # 코어 51 + 팩 X- 화면. Screen(screen_id, name, menu_code, module, path, owner, channels, is_pack)
-nav.COMMON -> list[Screen]                # 5
+# app.nav — 메뉴 · 경로의 원본 (core.yaml + 팩 menus/screens 병합). nav.rebuild() 로 다시 만든다(테스트)
+nav.MENUS -> list[Menu]                   # 팩 hide 제외 · order 적용. Menu(code, name, module, owner, channels, screens, hidden, is_pack, seq). nav.ALL_MENUS 는 숨긴 것 포함
+nav.SCREENS -> list[Screen]               # 코어 51 + 팩 X- 화면. Screen(screen_id, name, menu_code, module, path, owner, channels, is_pack, common, auth, probe)
+nav.CORE_SCREENS (51) · nav.PACK_SCREENS · nav.COMMON (5) · nav.ALL (공통 + 화면)
 nav.path_of("BAS-01") -> "/bas/items"     # 경로를 문자열로 다시 적지 않는다
-nav.by_id("BAS-01") -> Screen
-nav.menu("bas") -> Menu
-nav.channel_allowed("POP-02", "pop") -> bool
+nav.by_id("BAS-01") -> Screen · nav.by_path(path) · nav.menu("bas") -> Menu · nav.menu_of_screen(id) · nav.screens_of(module)
+nav.channel_allowed("POP-02", "pop") -> bool   # web 은 전 화면 · 공통 화면은 전 채널 · 그 밖은 channels 선언대로
+nav.DEVICE_CHANNEL = {web: 관리자 Web, pop: 현장 POP, mobile: 모바일, board: 현황판}
 
 # app.contracts — function-list.md (+ 팩 function-list.md) 로더
-contracts.function("F-BAS-01") -> Function(id, module, screen_id, name, kind, tables, channels, roles, scope, api, owner, text)
-contracts.functions_of("BAS-01") -> list[Function]
+contracts.function("F-BAS-01") -> Function(id, module, screen_id, name, kind, tables, channels, roles, scope, api, hooks, owner, text, is_pack)
+#   .is_write .is_batch .is_token(F-IFC-01) .method .path .path_base(`?` 앞) .menu_code
+contracts.functions_of("BAS-01") -> list[Function] · functions_of_module("bas") · functions() 136 · pack_functions() · all_functions()
 contracts.batch_functions() -> list[Function]   # B-MIG-*
+contracts.db_tables() -> {테이블: Table(name, module, desc, columns)}   # db-schema.md §4 렌더본 (공통 컬럼 6 제외)
 
 # app.rbac — 권한 표 (DB sys_permission · sys_role)
-rbac.require_screen("BAS-01")   # 화면 GET 의존성. 그 메뉴 칸이 없음 → 403, 미로그인 → 401, 숨긴 메뉴 → 403
-rbac.require_fn("F-BAS-01")     # 기능 의존성. 쓰기 기능이면 쓰기 판정(scope 포함), 읽기 기능이면 조회 판정
+rbac.require_screen("BAS-01")   # 화면 GET 의존성. 그 메뉴 칸이 없음 → 403, 미로그인 → 401, 숨긴 메뉴 → 403, 채널 허용 밖 → 403
+rbac.require_fn("F-BAS-01")     # 기능 의존성. 쓰기 기능이면 쓰기 판정(scope 포함), 읽기 기능이면 조회 판정. 토큰 기능(F-IFC-01)은 사용자에게 늘 403
 user.can("F-BAS-01") -> bool    # 템플릿 버튼 활성
-user.login_id · user.user_name · user.role_code · user.role_name · user.device   # 요청마다 DB 에서 읽은 지금 값
-rbac.current_user(request) -> User | None
-rbac.invalidate()               # sys_permission · sys_role 변경 뒤 (F-SYS-06 · 09)
-rbac.matrix() · rbac.roles() · rbac.cell(role_code, menu_code) -> Cell(level, scopes)
+user.id · user.login_id · user.user_name · user.role_code · user.role_name · user.device   # 요청마다 DB 에서 읽은 지금 값
+rbac.current_user(request) -> User | None   # sys_session ⋈ sys_user ⋈ sys_role — 무효 · 만료 · 중지 · 비밀번호 변경이면 None (D-19)
+rbac.invalidate()               # sys_permission · sys_role 변경 뒤 (F-SYS-05 · 06 · 08)
+rbac.matrix() · rbac.roles() · rbac.cell(role_code, menu_code) -> Cell(level, scopes) · rbac.counts() · rbac.visible_menus(user)
 
 # app.auth
-auth.login(cur, login_id, password, device) -> Session | None   # 실패 횟수 · 잠금
-auth.logout(cur, session_id)
+auth.login(cur, login_id, password, device, *, client_ip=None) -> LoginResult(ok, session: Session(session_id, user, device), reason)   # 실패 횟수 · 잠금(D-14) · 접근 로그
+auth.logout(cur, session_id) · auth.revoke_user_sessions(cur, user_id)   # F-SYS-03 · 비밀번호 재설정 때
 auth.hash_password(raw) · auth.verify(raw, hashed)
+auth.authenticate(request, login_id, password, device) · auth.open_session(request, session) · auth.close_session(request)   # main.py 가 쓴다
+auth.require_collect_token(request)   # POST /ifc/collect — X-Collect-Token = MES_COLLECT_TOKEN, 아니면 401
 
 # app.templating
-templating.render(request, "bas/items.html", ctx, screen_id="BAS-01", status_code=200) -> HTMLResponse
-# 헤더 · 좌측 메뉴 · 우측 계약 패널 · 채널 레이아웃 · t() · 조회 로그 자동. 템플릿은 base.html 의 search · grid · actions 블록(또는 body)을 채운다
+templating.render(request, "bas/items.html", ctx, screen_id="BAS-01", status_code=200) -> HTMLResponse | JSONResponse
+# 헤더 · 좌측 메뉴 · 우측 계약 패널 · 채널 레이아웃 · t() · 조회 로그 자동. 템플릿은 base.html 의 search · grid · actions 블록(또는 body)을 채운다.
+# **백엔드 우선 (D-18)**: 요청 Accept 에 text/html 이 없으면 템플릿을 그리지 않고 ctx 를 JSON 으로 준다 (request · settings · 함수는 빠진다 ·
+# dataclass · datetime · Decimal 은 풀린다 · `template` 키에 템플릿 이름). 테스트 · API 검증은 이 JSON 으로 판정한다. placeholder 는 {"placeholder": true, "owner", "note", "functions"}.
+templating.placeholder(request, screen_id)   # 미구현 화면 — HTTP 200 + "미구현 — 담당 개발N" + 계약 문장
 
 # app.audit
-audit.log_change(request, user, fn_id, target: str, detail: dict|None = None)   # 쓰기 직후
-audit.log_view(request, user, screen_id)   # templating.render 가 부른다
+audit.log_change(request, user, fn_id, target: str, detail: dict|None = None)   # 쓰기 직후 — kind=change
+audit.log_view(request, user, screen_id)   # templating.render 가 부른다 — kind=view
+audit.write_log(kind=login_ok|login_fail|view|change|error, login_id=, user_id=, screen_id=, fn_id=, target=, detail=, ip=, device=)
+
+# app.util.http — §8. 추가: http.after_commit(request, event, payload) → 응답 뒤 packs.hook("after_commit_<event>")(payload) (D-20)
 ```
 
 라우터 한 개의 모양 (`app/routers/<모듈>.py` 또는 `packs/<팩>/routers/<모듈>.py` — `router = APIRouter()` 만 있으면 자동 include):

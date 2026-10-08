@@ -9,7 +9,7 @@
 packs/<팩>/
 ├── pack.yaml            # 필수. §2
 ├── schema_ext.sql       # E2 · E4 테이블. x_<팩>_ 접두. 코어 ALTER 금지
-├── routers/*.py         # E4. router = APIRouter(). 코어 경로 재정의 금지
+├── routers/*.py         # E4. router = APIRouter(). 코어 경로 재정의 금지. `_` 로 시작하는 파일(`_example.py`)은 include 하지 않는다
 ├── templates/           # E4 · E7. 코어 templates/ 보다 먼저 검색 — 같은 이름은 덮어쓴다(WARN)
 ├── hooks.py             # E5. §5 의 서명
 ├── adapters/*.py        # E7. PrintAdapter · ErpAdapter · CollectDriver
@@ -34,9 +34,9 @@ packs/<팩>/
 | `menus.rename` | | `{코드: 이름}` |
 | `menus.order` | | 코어 + 팩 메뉴 코드 전체 순서. 빠진 것은 뒤에 코어 순서로 |
 | `menus.add[]` | | `{code, name, after}`. `code` 는 코어 12 와 다르게 |
-| `screens[]` | E4 때 | `{id: X-<MOD>-nn, name, module, path, channels[], owner}`. `path` 는 `/<module>/…`, 코어 경로와 겹치지 않게 |
+| `screens[]` | E4 때 | `{id: X-<MOD>-nn, name, module, path, channels[], owner}`. `module` 은 `menus.add` 로 더한 팩 모듈 코드, `path` 는 `/<module>/…`, 코어 경로와 겹치지 않게 |
 | `roles[]` | | `{code, name}`. 주면 코어 기본 4 를 **대체**(관리자 `ADMIN` 은 반드시 포함) |
-| `permissions` | | `seed/permissions.csv` 경로. 열 `menu_code,role_code,level,scopes`. 코어 + 팩 메뉴 × 역할 **전 칸** 있어야 한다 |
+| `permissions` | | `seed/permissions.csv` 경로. 열 `menu_code,role_code,level,scopes`(scopes 는 `일반·승인` 처럼 `·` 또는 `,` 구분). 코어 + 팩 메뉴 × 역할 **전 칸** 있어야 한다(빈 칸 → `PackError`). 주지 않으면 코어 칸은 `core.yaml` 기본값, 팩 모듈 칸은 전부 `없음`(`pack.warnings`) |
 | `numbering` | | `{KIND: {prefix, date, digits}}`. 코어 종류는 형식만 바꾼다. 새 종류 추가 가능 |
 | `channels` | | `{pop: [...], mobile: [...], board: [...]}` 화면 ID. 주면 코어 기본을 **대체** |
 | `attrs` | E2 | `{테이블: [{key, label, type(number|text|bool|date|select), required, choices[]}]}`. 코어 테이블만. `ui.attrs_fields` 가 폼을 만들고 `packs.read_attrs` 가 읽는다 |
@@ -44,10 +44,10 @@ packs/<팩>/
 | `lineage.lot_kinds[]` | E6 | `{kind, base(MATERIAL|PRODUCT|SHIPMENT), label}` |
 | `lineage.relations[]` | E6 | `{name, base(투입|생산|분할|합병|출하)}` |
 | `lineage.states` | E6 | `{IN_STOCK, CONSUMED, SHIPPED}` 표시어 |
-| `write_scope` | E4 때 | `{팩 모듈: [코어 테이블…]}`. 팩 라우터 · 훅이 쓸 수 있는 코어 테이블. `lot_genealogy` 를 넣어도 직접 SQL 은 금지(`lineage` 만) |
-| `hooks` | E5 | 모듈 경로(기본 `hooks.py`) |
+| `write_scope` | E4 때 | `{팩 모듈 또는 hooks: [코어 테이블…]}`. 팩 라우터 · 훅이 쓸 수 있는 코어 테이블. `lot_genealogy` 를 넣어도 직접 SQL 은 금지(`lineage` 만) |
+| `hooks` | E5 | 모듈 경로(기본 `hooks.py`). 파일이 없으면 모든 훅이 no-op |
 | `adapters` | E7 | `{printing, erp, collect}` 모듈 경로 또는 `null`(코어 기본) |
-| `seeds[]` | | CSV 경로 순서. 멱등(키 열로 upsert) |
+| `seeds[]` | | CSV 경로 순서. 멱등(키 열로 upsert). 파일 이름이 대상을 정한다 — `codes*`(bas_code) · `items*`(bas_item · `attrs.<키>` 열은 attrs 로) · `processes*` · `equipment*` · `partners*`. 그 밖은 `seed_core` 가 거부한다 |
 | `tests` · `gates` | | 폴더 · `gates.yaml` 경로 |
 
 ## 3. `attrs` 와 확장 테이블 — 어디에 두는가 (D-05)

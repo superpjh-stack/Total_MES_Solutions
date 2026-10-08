@@ -1,0 +1,13 @@
+-- 팩 확장 테이블 (E2 · E4) — contracts/pack-contract.md §3 · §4 R2 · R3.
+-- 규약: 이름은 x_<팩>_<이름> (확장 1:1 은 x_<팩>_<코어테이블>_ext — 코어 id 가 PK 겸 FK, on delete cascade).
+--       공통 컬럼 6 — id bigserial pk · created_at timestamptz not null default now() · created_by text · updated_at timestamptz · updated_by text · attrs jsonb not null default '{}'.
+--       코어 테이블 ALTER · DROP · 트리거 추가 금지 (check_pack 이 정적 파싱으로 잡는다). FK 로 코어를 가리킬 수는 있다.
+-- 적용: MES_PACK=<팩> make db-schema (코어 schema.sql · views.sql 다음에 이 파일). 비어 있어도 된다.
+
+-- 예 (1:1 확장):
+-- create table x_<팩>_bas_item_ext (
+--     id          bigint primary key references bas_item (id) on delete cascade,
+--     some_value  numeric(18,3),
+--     created_at  timestamptz not null default now(), created_by text, updated_at timestamptz, updated_by text,
+--     attrs       jsonb not null default '{}'
+-- );

@@ -1,0 +1,11 @@
+# 팩 게이트 기대값 (contracts/pack-contract.md §7) — tools/gate.py · check_trace · check_schema 가 읽는다. 수는 지어내지 않는다 — 만든 것만 적는다.
+screens: 0            # 팩 화면 수 (X-) = pack.yaml: screens
+tables: 0             # x_<팩>_ 테이블 수 = schema_ext.sql
+functions: 0          # packs/<팩>/function-list.md 줄 수
+design_source: null   # 근거 설계 산출물 (design.json 등) — 있으면 G-P03, 없으면 null
+scenarios: []         # G-P04 — tests 경로::함수 와 기대값. 예:
+#  - id: S1
+#    name: 계보 10행
+#    test: tests/test_scenario_lineage.py::test_ten_rows
+#    expect: { genealogy_rows: 10, backward_materials: 2, stock_lots: 1 }
+terms_sample: []      # G-P05 — 이 키(코어 중립어)들이 화면에 치환 안 된 채 보이면 FAIL. 예: [작업지시, 생산 LOT, 성적서]

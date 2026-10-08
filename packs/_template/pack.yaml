@@ -1,0 +1,80 @@
+# 팩 매니페스트 템플릿 — 모든 키에 주석 · 기본값 (contracts/pack-contract.md §2 · spec.md §4.1).
+# `make pack-new NAME=<팩>` 이 이 폴더를 복사한다. 지키는 규칙은 pack-contract.md §4 (R1~R11) — 어기면 기동 거부(PackError) 또는 G-P01 FAIL.
+# `_` 로 시작하는 팩(_template · _timing)은 템플릿 · 더미라 게이트를 면제받고 코어 DB(mes_core_db)를 쓴다.
+# 키를 지우면 코어 기본값이 쓰인다. 값은 코어 중립어가 아니어도 된다(업종어 허용 — 금지어 검사는 코어에만).
+
+pack: _template                     # 필수 · 폴더명과 같다 · ^[a-z_][a-z0-9_]*$
+name: 팩 템플릿                      # 필수 · UI 표기 (헤더 · 로그인 화면)
+company: (회사명)                    # 회사명 — 없으면 name
+requires_core: ">=0.1,<1.0"         # 필수 · semver 범위 (core.yaml: core_version 0.1.0). 밖이면 기동 거부 (D-09)
+env_prefix: MES_                    # 바꾸지 않는다
+
+# ── E1 용어 사전 — 코어 중립어 → 업종어. 키는 core.yaml: terms_keys 26개 안에서만 (R6). 값은 자유.
+#    적용: 템플릿 문구 · 메뉴명 · 메시지 · 출력물 · 라벨 제목. 식별자 · URL · 기능 ID 는 바뀌지 않는다 (D-07)
+terms: {}
+#  작업지시: (업종어)
+#  생산 LOT: (업종어)
+#  성적서: (업종어)
+
+# ── E1 메뉴 — 코어 12 에 대해 숨김 · 이름 · 순서 · 추가만 (R4). 코어 화면 ID · 경로 · 기능 ID 는 재정의하지 못한다
+menus:
+  hide: []                          # 숨길 코어 모듈 코드. 숨긴 메뉴의 화면은 403 + 메뉴 없음. 테이블 · 코어 테스트는 남는다
+  rename: {}                        # { 코어 모듈 코드: 새 이름 }
+  order: []                         # 코어 + 팩 모듈 전체 순서. 비우면 core.yaml: order + add[].after
+  add: []                           # 팩 모듈 — { code, name, after, owner, channels }. code 는 코어 12 와 다르게 (R5)
+  #  - { code: exm, name: 예시 모듈, after: pop, owner: 개발N, channels: [관리자 Web] }
+
+# ── E4 팩 화면 — ID X-<MOD>-nn · path 는 /<팩 모듈>/… · module 은 menus.add 의 코드 (R5). 기능은 function-list.md 에 F-X-<MOD>-nn
+screens: []
+#  - { id: X-EXM-01, name: 예시 화면, module: exm, path: /exm/example, channels: [관리자 Web], owner: 개발N }
+
+# ── E1 역할 · 권한 — roles 를 주면 코어 4(ADMIN · PROD · QA · FIELD)를 대체한다(ADMIN 필수). permissions 는 CSV 경로
+#    CSV 열: menu_code,role_code,level,scopes — 코어 12 + 팩 모듈 × 역할 **전 칸** (level 없음|조회|입력 · scopes 는 `일반·승인` 처럼 ·/, 구분)
+#    permissions 를 주지 않으면 코어 칸은 core.yaml 기본값, 팩 모듈 칸은 전부 `없음`(경고)
+# roles:
+#   - { code: ADMIN, name: 관리자 }
+#   - { code: PROD,  name: 생산 }
+#   - { code: QA,    name: 품질 }
+#   - { code: FIELD, name: 현장 }
+# permissions: seed/permissions.csv
+
+# ── E1 채번 — 코어 종류(WORK_ORDER LOT_MATERIAL LOT_PRODUCT LOT_SHIPMENT SHIPMENT DOCUMENT ORDER PLAN)는 형식만 바꾸고 새 종류는 추가. 시드가 sys_number_rule 을 채운다
+numbering: {}
+#  WORK_ORDER: { prefix: J, date: YYMMDD-, digits: 3 }
+#  LOT_PRODUCT: { prefix: R, date: YYMMDD-, digits: 4 }
+
+# ── E1 채널별 화면 — 주면 코어 기본(core.yaml: channels)을 통째로 대체. web 은 전 화면
+# channels:
+#   pop: [POP-01, POP-02, POP-03, POP-04, MAT-01, MAT-02, SHP-02]
+#   mobile: [TRC-01, TRC-02, TRC-03, KPI-02]
+#   board: [KPI-01]
+
+# ── E2 표시용 속성 — 코어 테이블 행의 attrs jsonb. ui.attrs_fields 가 폼을, packs.read_attrs 가 값을 읽는다 (D-05: 검색 · 집계 · 제약은 x_<팩>_<테이블>_ext)
+attrs: {}
+#  lot: [ { key: width_mm, label: 폭(mm), type: number, required: false } ]      # type: number | text | bool | date | select(choices)
+
+# ── E3 공정 측정값 · 검사 항목 — CSV 시드 (migration-files.md §2 04_process_params.csv 형식 · qua_insp_plan)
+# process_params: seed/process_params.csv
+# inspection_items: seed/inspection_items.csv
+
+# ── E6 계보 — base 는 코어 종류(MATERIAL|PRODUCT|SHIPMENT · 투입|생산|분할|합병|출하) (R6). 추적 · 상태 계산은 base 로 한다
+lineage:
+  lot_kinds: []                     # - { kind: BATCH, base: PRODUCT, label: 배치 }
+  relations: []                     # - { name: 혼합, base: 합병 }
+  states: {}                        # { IN_STOCK: 재고, CONSUMED: 소진, SHIPPED: 출하 }
+
+# ── 팩 라우터 · 훅이 쓸 수 있는 코어 테이블 (R7). 키는 팩 모듈 코드 또는 hooks. lot_genealogy · sys_number_seq 는 넣어도 직접 SQL 금지 (R8)
+write_scope: {}
+#  exm: []
+#  hooks: [mat_requirement, qua_issue]
+
+hooks: hooks.py                     # E5 — 이 폴더 기준 경로. 파일이 없으면 no-op
+adapters:                           # E7 — 모듈 경로 또는 null(코어 기본: 브라우저 인쇄 · ERP 501 · HTTP 수집)
+  printing: null
+  erp: null
+  collect: null
+seeds: []                           # E1 CSV 시드 — 파일 이름이 codes* · items* · processes* · equipment* · partners* 로 시작해야 한다 (멱등 upsert)
+#  - seed/codes.csv
+#  - seed/items_example.csv
+tests: tests/                       # 팩 테스트 — @pytest.mark.fn("F-X-…")
+gates: gates.yaml                   # 팩 게이트 기대값 (pack-contract.md §7)

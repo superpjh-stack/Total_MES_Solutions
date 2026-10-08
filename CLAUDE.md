@@ -34,12 +34,12 @@
 
 ## 명령
 
-`make setup` · `db-schema` · `db-seed` · `db-reset` · `pack-new NAME=…`(`_template` 복사) · `pack-check`(병합 규칙) · `contracts`(렌더본 다시 찍기) · `run` · `test` · `check-routes` · `check-trace` · `check-schema` · `check-data` · `check-security` · `check-terms` · `check-pack` · **`gate`**(코어 단독 → 팩 3 판정표) · **`gate-full`**(시드 재실행 포함 — 종료 판정은 이것으로) · `backup` · `restore-check`.
-모든 `make` 는 `MES_PACK=<팩>` 접두로 팩을 고른다. 시드 · 스키마 재생성은 한 번에 하나만(`db-schema` 는 데이터를 전부 지운다).
+`make setup` · `db-schema` · `db-seed` · `db-reset` · `pack-new NAME=…`(`_template` 복사) · `pack-check`(병합 규칙) · `contracts`(렌더본 다시 찍기) · `run` · `test` · `check-routes` · `check-trace` · `check-schema` · `check-data` · `check-security` · `check-terms` · `check-pack` · **`gate`**(코어 단독 → `packs/` 의 팩마다 판정표) · **`gate-full`**(시드 재실행 포함 — 종료 판정은 이것으로) · `core-hash`(R1 기준값 `outputs/core.sha256` — 아키텍트만) · `backup` · `restore-check`.
+모든 `make` 는 `MES_PACK=<팩>` 접두로 팩을 고른다. 시드 · 스키마 재생성은 한 번에 하나만(`db-schema` 는 데이터를 전부 지운다). 검사 도구는 `src/mescore/tools/`(`uv run python src/mescore/tools/<도구>.py`). `check_data` · `check_security` 가 없으면 그 게이트는 `미검증`.
 
 ## 규모 (`spec.md` 에서 센 값 — `make check-trace`)
 
-코어 모듈 **12**(`bas ord job mat pop qua eqp shp trc kpi sys ifc`) · 화면 **51** + 공통 5 · 기능 **132** + 이관 배치 **4** · 테이블 **52** · 공용 모듈 9 · 역할 4 · 권한 48칸(입력 18 · 조회 23 · 없음 7) · 채널 4 · 확장 지점 **7** · 참조 팩 3 + `_template`.
+코어 모듈 **12**(`bas ord job mat pop qua eqp shp trc kpi sys ifc`) · 화면 **51** + 공통 5 · 기능 **132** + 이관 배치 **4** · 테이블 **52** · 공용 모듈 9 · 역할 4 · 권한 48칸(입력 19 · 조회 22 · 없음 7 — `goal.md` §6 표 그대로, D-13) · 채널 4 · 확장 지점 **7** · 참조 팩 3 + `_template`.
 
 | 담당 | 모듈 | 기능 | 공용 모듈 | 참조 팩 |
 |---|---|---|---|---|
@@ -60,7 +60,8 @@
 - 훅: 코어 쓰기 라우터는 `packs.hook("on_…")(cur, row, user)` 를 정해진 자리(`interfaces.md` §9)에서 부른다. 훅이 없으면 아무 일도 없다. `HookError` → 422.
 - 오류: `http.validation_error`(422) · `http.not_found`(404) · `http.undecided("D-nn")`(501). 쓰기 성공 `http.saved(request, msg)` 직후 `audit.log_change(...)`.
 - 스캔 화면: `ui.scan_box` 하나(`data-scan`). 없는 번호는 **그 화면을 422 로 다시 그린다**. 스크립트는 `static/app.js` 만.
-- 렌더: `templating.render(request, tpl, ctx, screen_id=...)`. 공용 매크로 `templates/home/_macros.html`.
+- 렌더: `templating.render(request, tpl, ctx, screen_id=...)`. 공용 매크로 `templates/home/_macros.html`. **백엔드 우선(D-18)**: 요청 `Accept` 에 `text/html` 이 없으면 템플릿 대신 `ctx` 를 JSON 으로 준다 — 테스트 · API 검증은 JSON 으로 판정한다(`TestClient` 기본). 브라우저 검사는 `headers={"accept": "text/html"}`.
+- 팩 속성 · 커밋 뒤 훅: 폼의 `attr_<key>` 는 `packs.read_attrs(form, "bas_item")`, 외부 전송은 `http.after_commit(request, "<event>", payload)` → `after_commit_<event>` 훅(트랜잭션 밖 · D-20).
 - 테스트: 기능마다 하나 이상, `@pytest.mark.fn("F-BAS-01")`. 코어 테스트(`tests/`)는 **어떤 팩에서도** 통과해야 한다. 팩 테스트는 `packs/<팩>/tests/`.
 - 팩: `packs/<팩>/` 안에서만. 코어 테이블 `ALTER` 금지 · 코어 경로 재정의 금지 · `write_scope` 밖 쓰기 금지 · `lot_genealogy` 직접 INSERT 금지. 확장 지점 7 밖이 필요하면 `decisions.md` 에 `코어 변경 요청`.
 
