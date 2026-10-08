@@ -1,0 +1,55 @@
+{# X-COND-01 품목별 공정 조건 기준 — F-X-COND-01 등록 · 02 수정 · 03 사용중지 · 04 조회. 기준값 빈 행은 `미확정` 배지 (임진강 D-08 — 정본 값은 화면에서 입력) #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.select('공정', 'process_id', process_options, process_id) }}
+{{ ui.select('품목', 'item_id', item_options, item_id) }}
+{{ ui.select('키', 'param_key', key_options, param_key) }}
+{% endblock %}
+{% block grid %}
+<h2>{{ t('품목별 공정 조건') }} <small>{{ t('미확정') }} {{ undecided_count }}</small></h2>
+<table class="grid">
+  <thead><tr><th>{{ t('공정') }}</th><th>{{ t('품목') }}</th><th>{{ t('크기구분') }}</th><th>{{ t('키') }}</th><th>{{ t('기준값') }}</th><th>{{ t('하한') }}</th><th>{{ t('상한') }}</th><th>{{ t('허용편차') }}</th><th>{{ t('단위') }}</th><th>{{ t('적용일') }}</th><th>{{ t('사용') }}</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr{% if r.use_yn == 'N' %} class="off"{% endif %}>
+    <td>{{ r.process_code }} {{ r.process_name }}</td><td>{{ r.item_code }} {{ r.item_name }}</td><td>{{ r.size_type|txt(t('전체')) }}</td><td><code>{{ r.param_key }}</code></td>
+    <td>{% if r.std_value is none %}<span class="undecided">{{ t('미확정') }}</span>{% else %}{{ r.std_value|num(3) }}{% endif %}</td>
+    <td>{{ r.min_value|txt }}</td><td>{{ r.max_value|txt }}</td><td>{% if r.tolerance is none %}<span class="undecided">{{ t('미확정') }}</span>{% else %}{{ r.tolerance|num(3) }}{% endif %}</td>
+    <td>{{ r.unit|txt }}</td><td>{{ r.valid_from|dt }}</td><td>{{ r.use_yn }}</td>
+    <td>
+      <form method="post" action="{{ nav.path_of('X-COND-01') }}/{{ r.id }}" class="inline">
+        <input type="number" step="any" name="std_value" placeholder="{{ t('기준값') }}" style="width:6em"><input type="number" step="any" name="tolerance" placeholder="{{ t('허용편차') }}" style="width:6em">
+        {{ ui.write_button('수정', user.can('F-X-COND-02'), kind='ghost') }}
+      </form>
+      {% if r.use_yn == 'Y' %}<form method="post" action="{{ nav.path_of('X-COND-01') }}/{{ r.id }}/delete" class="inline">{{ ui.write_button('사용중지', user.can('F-X-COND-03'), kind='ghost') }}</form>{% endif %}
+      {% if r.open_tanks %}<small>{{ t('진행 중 절임통 배치') }} {{ r.open_tanks }}</small>{% endif %}
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="12" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<section class="panel">
+  <h2>{{ t('공정 조건 등록') }} <small>F-X-COND-01</small></h2>
+  <form method="post" action="{{ nav.path_of('X-COND-01') }}" id="std-form" class="form-grid">
+    {{ ui.select('공정', 'process_id', process_options, process_id, required=true) }}
+    {{ ui.select('품목', 'item_id', item_options, item_id, required=true) }}
+    {{ ui.select('크기구분', 'size_type', size_options, '', blank='전체') }}
+    {{ ui.select('키', 'param_key', key_options, param_key, required=true) }}
+    {{ ui.field('기준값', 'std_value', '', type='number', step='any') }}
+    {{ ui.field('하한', 'min_value', '', type='number', step='any') }}
+    {{ ui.field('상한', 'max_value', '', type='number', step='any') }}
+    {{ ui.field('허용편차', 'tolerance', '', type='number', step='any') }}
+    {{ ui.field('단위', 'unit') }}
+    {{ ui.field('적용 시작일', 'valid_from', today, type='date') }}
+    <label>{{ t('HACCP 정합 확인') }} <input type="checkbox" name="haccp_chk_yn" value="Y"></label>
+  </form>
+  <p class="hint">{{ t('기준값을 비우면 미확정으로 저장된다. 정본 값(염도 9 % · 48 h, 13 % · 24 h, 소독수 10 ppm)은 시드가 아니라 여기서 입력한다.') }}</p>
+</section>
+{% endblock %}
+{% block actions %}
+<button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
+{{ ui.write_button('공정 조건 등록', user.can('F-X-COND-01'), form='std-form') }}
+{% endblock %}

@@ -1,0 +1,38 @@
+{# X-AGE-02 냉장고 입출고 — F-X-AGE-05 입고(스캔) · 06 출고 · 07 조회 + 냉장고별 잔량 요약 #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.select('냉장고', 'equipment_id', fridge_options, equipment_id) }}
+{{ ui.select('품목', 'item_id', item_options, item_id) }}
+{{ ui.field('생산 LOT', 'no', scan_no) }}
+{{ ui.field('기간 시작', 'frm', frm, type='date') }}
+{{ ui.field('기간 끝', 'to', to, type='date') }}
+{{ ui.select('구분', 'trx_type', [('입고', t('입고')), ('출고', t('출고'))], trx_type) }}
+{% endblock %}
+{% block grid %}
+<p>{% for s in summary %}<span class="chip">{{ s.equip_code }} {{ t('잔량') }} {{ s.balance|num(1) }} · {{ t('생산 LOT') }} {{ s.lots }}</span> {% endfor %}</p>
+<section class="panel">
+  <h2>{{ t('냉장고 입고 · 출고') }} <small>F-X-AGE-05 · 06</small></h2>
+  {% call ui.scan_box(nav.path_of('X-AGE-02') + '/in', name='barcode', label='생산 LOT 스캔', button='입고') %}
+    {{ ui.select('냉장고', 'equipment_id', fridge_options, equipment_id, required=true) }}
+    {{ ui.field('수량', 'qty', '', type='number', step='any') }}
+  {% endcall %}
+  <form method="post" action="{{ nav.path_of('X-AGE-02') }}/out" class="form-grid">
+    {{ ui.field('생산 LOT', 'barcode', '', required=true) }}
+    {{ ui.select('냉장고', 'equipment_id', fridge_options, equipment_id, required=true) }}
+    {{ ui.field('수량', 'qty', '', type='number', step='any') }}
+    {{ ui.write_button('출고', user.can('F-X-AGE-06'), kind='ghost') }}
+  </form>
+</section>
+<h2>{{ t('냉장고 입출고 이력') }}</h2>
+<table class="grid">
+  <thead><tr><th>{{ t('처리일시') }}</th><th>{{ t('냉장고') }}</th><th>{{ t('품목') }}</th><th>{{ t('생산 LOT') }}</th><th>{{ t('구분') }}</th><th>{{ t('수량') }}</th><th>{{ t('채널') }}</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr><td>{{ r.moved_at|dt('%Y-%m-%d %H:%M') }}</td><td>{{ r.equip_code }}</td><td>{{ r.item_code|txt }} {{ r.item_name|txt('') }}</td><td><code>{{ r.lot_no }}</code> <small>{{ r.kind }}</small></td><td>{{ r.trx_type }}</td><td>{{ r.qty|num(1) }} {{ r.unit|txt('') }}</td><td>{{ r.device|txt }}</td></tr>
+  {% else %}
+  <tr><td colspan="7" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

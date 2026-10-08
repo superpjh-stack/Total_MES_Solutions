@@ -1,0 +1,59 @@
+{# X-TANK-01 절임통 운영 — F-X-TANK-01 투입 등록 · 02 취소 · 03 완료 · 04 조회. 절임통 8 타일(현황판은 조작 없음 · 5초 갱신은 base.html data-refresh-seconds) #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block body %}
+<section class="panel">
+  <h2>{{ t('절임통 운영') }} <small>{{ t('진행') }} {{ open_count }} / {{ tank_count }}</small></h2>
+  <div class="tiles" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">
+  {% for x in tiles %}
+    <div class="tile{% if x.work_result_id %} on{% endif %}{% if x.overdue %} warn{% endif %}" style="border:1px solid #999;padding:8px">
+      <strong>{{ x.equip_code }}</strong> {{ x.equip_name }}
+      {% if x.work_result_id %}
+        <div>{{ x.tank_status }} · {{ x.work_order_no }} · {{ x.item_name }}</div>
+        <div>{{ t('투입') }} {{ x.started_at|dt('%m-%d %H:%M') }} · {{ t('경과') }} {{ x.elapsed_hours|txt }} h</div>
+        <div>{{ t('예정 완료') }} {% if x.plan_end_at %}{{ x.plan_end_at|dt('%m-%d %H:%M') }}{% if x.overdue %} <strong>{{ t('초과') }}</strong>{% endif %}{% else %}<span class="undecided">{{ t('미확정') }}</span>{% endif %}</div>
+        <div>{{ t('목표 염도') }} {% if x.target_salinity_pct is none %}<span class="undecided">{{ t('미확정') }}</span>{% else %}{{ x.target_salinity_pct|num(2) }} %{% endif %} / {{ x.target_hours|txt }} h</div>
+        <div>{{ t('측정 염도') }} {% if x.salinity is not none %}{{ x.salinity }} % <small>{{ x.salinity_at|dt('%H:%M') }}</small>{% elif x.salinity_note %}<span class="undecided">{{ x.salinity_note }}</span>{% else %}{{ NOT_COLLECTED }}{% endif %}</div>
+        {% if x.lot_no %}<div>{{ t('생산 LOT') }} <code>{{ x.lot_no }}</code></div>{% endif %}
+        {% if device != 'board' %}
+        <form method="post" action="{{ nav.path_of('X-TANK-01') }}/{{ x.work_result_id }}/complete" class="inline"><input type="number" step="any" name="final_salinity_pct" placeholder="{{ t('완료 염도') }}" style="width:6em">{{ ui.write_button('완료', user.can('F-X-TANK-03'), kind='ghost') }}</form>
+        {% if not x.ended_at %}<form method="post" action="{{ nav.path_of('X-TANK-01') }}/{{ x.work_result_id }}/cancel" class="inline">{{ ui.write_button('취소', user.can('F-X-TANK-02'), kind='ghost') }}</form>{% endif %}
+        <a class="btn btn-ghost" href="{{ pop_path }}?id={{ x.work_result_id }}">{{ t('작업 종료') }}</a>
+        {% endif %}
+      {% else %}
+        <div class="empty">{{ t('비어 있음') }}</div>
+      {% endif %}
+      <a href="{{ salinity_path }}?equipment_id={{ x.equipment_id }}">{{ t('염도 추이') }}</a>
+    </div>
+  {% else %}
+    <p class="empty">{{ NOT_COLLECTED }}</p>
+  {% endfor %}
+  </div>
+</section>
+{% if device != 'board' %}
+<section class="panel">
+  <h2>{{ t('절임통 투입 등록') }} <small>F-X-TANK-01 — {{ t('실적 시작은 POP-02') }}</small></h2>
+  <form method="post" action="{{ nav.path_of('X-TANK-01') }}" id="tank-form" class="form-grid">
+    {{ ui.select('진행 중 실적', 'work_result_id', result_options, '', required=true) }}
+    {{ ui.select('절임 조건', 'std_id', std_options, '', blank='품목·크기로 자동') }}
+    {{ ui.select('크기구분', 'size_type', size_options, '', blank='전체') }}
+    {{ ui.field('투입 중량(kg)', 'input_weight_kg', '', type='number', step='any') }}
+    {{ ui.select('염도센서', 'sensor_equipment_id', sensor_options, '', blank='미확정 (D-206)') }}
+  </form>
+  <div class="actions">{{ ui.write_button('투입 등록', user.can('F-X-TANK-01'), form='tank-form') }}</div>
+</section>
+<section class="panel">
+  <h2>{{ t('최근 배치') }}</h2>
+  <table class="grid">
+    <thead><tr><th>{{ t('절임통') }}</th><th>{{ t('작업지시') }}</th><th>{{ t('품목') }}</th><th>{{ t('투입') }}</th><th>{{ t('목표') }}</th><th>{{ t('완료 염도') }}</th><th>{{ t('상태') }}</th><th>{{ t('생산 LOT') }}</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr><td>{{ r.equip_code }}</td><td>{{ r.work_order_no }}</td><td>{{ r.item_name }}</td><td>{{ r.started_at|dt }}</td><td>{{ r.target_salinity_pct|txt }} % / {{ r.target_hours|txt }} h</td><td>{{ r.final_salinity_pct|txt }}</td><td>{{ r.status }}</td><td>{{ r.lot_no|txt }}</td></tr>
+    {% else %}
+    <tr><td colspan="8" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}

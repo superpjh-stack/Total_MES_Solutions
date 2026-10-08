@@ -60,7 +60,7 @@ age,FIELD,입력,
 age,ADMIN,입력,
 age,VENDOR,없음,
 shp,PM,조회,
-shp,PROD,입력,승인
+shp,PROD,입력,일반·승인
 shp,QA,조회,
 shp,FIELD,입력,
 shp,ADMIN,입력,승인

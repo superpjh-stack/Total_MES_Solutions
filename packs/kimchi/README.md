@@ -328,3 +328,144 @@
 | D-511 | 숙성 기본 21일(임진강 "3주")은 `x_kimchi_item_std.aging_days` 가 없을 때만. 품목별 차등 미확정 | 가설 |
 | D-512 | `on_collect` 알람 폭주 방지: 같은 (설비 · 태그) 미해제 알람이 있으면 신규 행 대신 `last_value · count · last_at` 갱신 | 가설 |
 | D-513 | 043 재고 KPI · 049 라인 · 063 상세 대시보드 · 064 대시보드 관리는 범위 밖. 임진강 D-01 과 같은 미확정 | 확정 제안 |
+
+---
+
+## 구현 메모 (개발3 · 2026-10-09 · 웨이브 B)
+
+위 기획 산출물을 코드로 옮겼다. 코어(`src/mescore/**`) 수정 0 · `ALTER` 0 · `lot_genealogy` 직접 SQL 0 · 채번 직접 SQL 0 · `pop_measure` 시계열 0.
+
+### 구현 파일
+
+| 파일 | 내용 |
+|---|---|
+| `schema_ext.sql` | `schema_ext.md` 의 테이블 7 + 뷰 2 (`x_kimchi_v_tank_board` · `x_kimchi_v_aging_stock` — `check_pack` R3 의 `x_kimchi_` 접두 규칙 때문에 `v_kimchi_*` 대신 이 이름) |
+| `hooks.py` | `validate_shipment` · `on_inspection_judged` · `on_collect` · `on_result_closed` · `kpi_extra(frm, to, by=None)` — `hooks.md` §1~§5 |
+| `alarm.py` | `raise_env` (D-512 합침) · `ack` · `clear` — `x_kimchi_env_alarm` 에 쓰는 유일한 자리 |
+| `common.py` | 조회 · 판정 헬퍼 (기준은 전부 데이터에서 · 없으면 None) · `x_kimchi_lot_ext` upsert |
+| `adapters/collect_tags.py` | 설비 종류 · 태그 표(`equipment_example.csv` 의 `equip_type` · `collect_tags` 열을 읽는다) · 태그 → 알람 종류 · 센서 ↔ 절임통 고정 매핑 `SENSOR_TO_TANK = {}` (미확정 D-206). 드라이버는 코어 HTTP 수신 그대로 |
+| `routers/{cond,wsh,tank,pkg,age,alm}.py` | 기능 24 = 엔드포인트 24 (`function-list.md` 의 API 열 글자 그대로) |
+| `templates/{cond,wsh,tank,pkg,age,alm}/*.html` | 화면 8 — `base.html` + `ui` 매크로 · `{{ t("…") }}` |
+| `seed_bootstrap.py` | 새 DB 첫 시드 (아래 "코어 시드 순서") |
+| `tests/` | `_helpers.py` · S1~S4 · 기능 24 · 용어 · 스모크 = 26건 |
+
+### 기획 문서에서 고친 것 (코드가 돌기 위한 최소 수정 — 전부 데이터 · 머리글)
+
+| 파일 | 고친 것 | 왜 |
+|---|---|---|
+| `pack.yaml` `screens[].channels` | `web/pop/board` → `관리자 Web/현장 POP/현황판` 라벨 | `nav.rebuild()` 는 라벨만 받는다(코드 `web` 이면 `AssertionError` 기동 거부). 세 팩 공통 — 코어 `packs.load` 가 코드를 라벨로 바꿔 주는 것이 맞다(§3 요청) |
+| `pack.yaml` `menus.add[]` | `owner: 개발3` · `channels` 추가 | `contracts._validate` 가 기능의 담당 = 모듈 owner 를 요구(없으면 `kimchi` 가 되어 24건 전부 거부) |
+| `function-list.md` | `## 1. 읽는 법` · `## 2. 기능` 머리글 추가 | `contracts` 로더가 `## 2.` 절의 표만 읽는다 |
+| `seed/items_example.csv` | 머리글 `capacity_kg` → `attrs.capacity_kg` 등 | `seed_core` 는 `attrs.` 접두 열만 attrs 로 넣는다 (아니면 조용히 버려진다) |
+| `seed/permissions.csv` | `shp,PROD` 범위 `승인` → `일반·승인` | 범위를 적으면 **그 범위만** 쓸 수 있다(D-13). 시나리오(1-14)의 PROD 출하 등록 · 스캔 · 승인에 둘 다 필요 |
+| `seed/inspection_items.csv` | `metal_detect` · `inspect_qty` · `ng_qty` 의 공정 `P07` → 빈 칸(공정 검사 공통) | 코어 QUA-02 는 **LOT 의 공정**으로 검사 항목을 고른다. 금속검출은 혼합 배치(P06 LOT)에 하므로 P07 전용 행이면 칸이 안 뜬다(§3 요청: 검사 공정 선택) |
+
+고치지 않은 것: `gates.yaml` 의 `expect` 값(아래 "기대값과 다른 실측" 참고 — 기획자 확인 뒤 갱신 요청) · `equipment_example.csv` 의 `equip_type` · `comm_type` · `collect_tags` 열(`seed_core` 설비 시드가 attrs 를 받지 않아 **DB 에는 안 들어간다** — `adapters/collect_tags.py` 가 CSV 를 직접 읽어 보완 · §3 요청) · `processes.csv` 의 `ccp_yn`(같은 이유).
+
+### 기대값과 다른 실측 (gates.yaml `expect` ↔ 코어가 실제로 하는 일)
+
+| 항목 | 기획 | 실측 | 왜 |
+|---|---|---|---|
+| S1 계보 행 | 9 (혼합 2) | **10 (혼합 3)** · 깊이 5 · 원재료 3 · TANK 2 소진 · salinity 2 — 나머지 같다 | 코어 F-POP-03 에 "합병 옵션" 이 없다. 합병(D-12)은 `POST /pop/result/{id}/merge` 가 **새 LOT** 을 만든다. 그래서 양념 투입 실적 LOT(X1′ · M2 · M3 투입)도 혼합의 부모가 된다: `merge([X1′, T1, T2], relation=혼합)` → X1(P06 · 1090). X1′ 를 첫 부모로 두어 X1 이 혼합 공정 · 품목을 잇는다 |
+| S1 `p1_remain_qty` | 150 | **0** (소진) | P1 수량 = 양품 850(출력 중량). 850 − 500 − 350 = 0. 기획의 150 은 P1 을 1000 으로 본 계산 |
+| 한 LOT 을 두 통에 | 투입 2줄 | 투입 2줄 — 단 **두 실적 모두 종료 전에 스캔** | 코어 `v_lot_state` 는 PRODUCT 에 자식 계보가 하나라도 생기면 `소진` 으로 본다(잔량 무관). 첫 통 실적을 종료한 뒤 둘째 통에 스캔하면 422 (§3 요청) |
+| S4 숙성 투입 | `split(relation=숙성)` 1회 · K1 잔량 400 · 계보 +2 | `split(count=2, qtys=[600, 400])` + 잔량 LOT `retag(PRODUCT)` → 숙성 2행 · 잔량은 **새 번호의 포장 LOT**(400 재고) · K1 소진 · 전량이면 `retag(AGING)`(계보 0행) | 코어 `lineage.split` 은 N ≥ 2 (D-503 은 merge 쪽만 N ≥ 1) — 부분 수량 1 → 1 분할이 없다 (§3 요청) |
+| 절임 완료 | `on_result_closed` 가 `x_kimchi_tank.status=완료` 도 | **하지 않는다** — F-X-TANK-03 만 완료 | `function-list` F-X-TANK-03 "완료 전 실적 종료는 422 가 아니다(순서 자유) · 둘 다 끝나야" 를 따랐다. 그래야 종료 뒤 진행 중 배치의 염도 이탈이 TANK LOT(`lot_id`)에 붙는다(S3 `salinity_alarm_lot_kind=TANK`) |
+| 기능 단위 권한(F-X-WSH-02 · TANK-02 · AGE-02 = PROD · ADMIN) | 그 역할만 | **메뉴 단위** — FIELD 도 `wsh` `tank` `age` 입력이라 할 수 있다 | 코어 RBAC 은 메뉴 × 역할 칸. 화면 · 기능 단위 예외는 D-502(코어 변경 요청) 전까지 없다 |
+| 금속검출 NG 의 LOT 투입 | 코어 F-POP-06 422 | **투입된다** (K2 가 만들어지고 출하 승인에서 422) | `lineage.assert_usable` 은 PRODUCT 의 `insp_status` 를 보지 않는다(재고만). 출하 금지는 `validate_shipment` 가 조상까지 보고 막는다 |
+
+### 훅이 정한 세부 (hooks.md 에 없던 것)
+
+- `validate_shipment` 거부 2 의 "이탈": `item_judgement=불합격` · `deviated` · **select 항목은 값 ≠ 기준(`standard`)** (`metal_detect` 는 범위가 없어 코어가 항목 판정을 비운다 — `NG ≠ OK`). 거부 1 은 그 LOT + 역추적 조상에서 `metal_detect` 가 든 최신 검사가 `합격`이고 값이 기준과 같을 때만 통과. 순서: CCP 불합격 → 금속검출 기록 없음 → 숙성 미완료.
+- `on_inspection_judged` 멱등 키: `qua_issue.content` 안의 `[item_key]` 표식 (`qua_issue` 에 항목 컬럼이 없고 `attrs` 를 WHERE 에 쓰면 D-05 WARN). 손실률 이슈는 `[result:<id>:loss_rate_pct]`.
+- `on_result_closed`: 절임통 배치에 센서가 연결돼 있고 코어가 채운 `pop_measure.salinity_pct` 가 비어 있으면(실적 설비 = 절임통이라 코어 `fill_collect` 는 센서 값을 못 본다) **센서 구간 last** 로 채운다(source=collect). 손실률은 `source=manual`(D-510).
+- `on_collect` 테이핑 집계: `pack_count` 가 직전 누계보다 작으면 리셋으로 보고 이번 값을 증분으로. `run_state` 값 형식은 미확정이라 `1/0 · run/stop · 가동/정지` 만 해석, 그 밖은 NULL.
+- `kpi_extra`: kg 환산은 `bas_item.attrs.capacity_kg`, 없으면 제외 + `note`. 일 근무시간 8h(정본 TD1) — `kpi_indicator(throughput_kg_per_h).attrs.work_hours_per_day` 가 있으면 그 값. 목표값은 시드에 없다(KPI-03 입력).
+
+### 코어 시드 순서 — 새 `mes_kimchi_db` 는 `seed_bootstrap.py` 로
+
+`seed_core.seed_pack()` 이 `process_params` → `inspection_items` → `seeds[]` 순이라 새 DB 에서는 공정 9 보다 측정값 19 가 먼저 들어가 `bas_process_param.process_id` NOT NULL 로 멈춘다(세 팩 공통). `MES_PACK=kimchi uv run python packs/kimchi/seed_bootstrap.py` 가 코어 함수만 순서를 바꿔 부른다(SQL 0). 공정이 있는 DB 에서는 `make db-seed` 그대로 · 2회 행 수 diff 0.
+
+### 이 팩이 덮어쓴 코어 템플릿 (R10)
+
+(없음)
+
+### 미확정 처리 (실측)
+
+| 항목 | 코드에서 |
+|---|---|
+| 냉장고 온 · 습도 상 · 하한 | `bas_process_param` min/max NULL → `on_collect` 판정 안 함 (S3 는 픽스처가 임시로 넣고 되돌린다) |
+| 절임 염도 허용편차 | `x_kimchi_item_std.tolerance` NULL → 염도 알람 안 함 · X-COND-01 에 `미확정` 배지 |
+| 염도센서 ↔ 절임통 | `SENSOR_TO_TANK = {}` · 배치 등록 때 센서를 고르지 않으면 X-TANK-01 타일 `미확정 (D-206)` · X-TANK-02 `미확정 (D-206)` |
+| 중량 · CCP 수치 | `qua_insp_plan` min/max NULL → 코어가 항목 판정을 비운다 · 훅도 판정 안 함 |
+| 테이핑 `run_state` 값 | 모르는 값은 NULL |
+| 숙성 기간 품목별 차등 | `x_kimchi_item_std(P09, aging_days)` 없으면 21 (D-511) — 응답에 `aging_days_source` |
+
+### G-P03 추적표 — `design.json` TD3 화면 64 ↔ 코어/팩 화면 (`tools/import_design.py` 가 읽는 표 · §1 매핑표를 산출물 ID 로 다시 적음 · D-506 N:1 · 1:N 허용)
+
+| 산출물 ID | 화면명 | 코어/팩 화면 | 분류 | 비고 |
+|---|---|---|---|---|
+| MES-TD3-001 | 제품품목기준관리 | BAS-01 | 용어 | §1 |
+| MES-TD3-002 | 레시피BOM관리 | BAS-02 | 용어 | §1 |
+| MES-TD3-003 | 공정CCP기준관리 | BAS-04 + QUA-01 | 용어 | §1 |
+| MES-TD3-004 | 설비탱크기준관리 | BAS-05 | 1:1 | §1 |
+| MES-TD3-005 | 거래처관리 | BAS-06 | 1:1 | §1 |
+| MES-TD3-006 | 작업자관리 | BAS-07 | 1:1 | §1 |
+| MES-TD3-007 | 공통코드관리 | BAS-09 | 1:1 | §1 |
+| MES-TD3-008 | 수주등록조회 | ORD-01 | 1:1 | §1 |
+| MES-TD3-009 | 수주변경이력관리 | ORD-02 | 1:1 | §1 |
+| MES-TD3-010 | 납기캘린더조회 | ORD-03 | 1:1 | §1 |
+| MES-TD3-011 | 수주대비출고현황 | ORD-01 + SHP-03 | 용어 | §1 |
+| MES-TD3-012 | 생산계획수립 | ORD-04 | 1:1 | §1 |
+| MES-TD3-013 | 작업지시서관리 | JOB-01 + JOB-02 + JOB-03 | 1:1 | §1 |
+| MES-TD3-014 | 원부자재입고등록 | MAT-01 | 1:1 | §1 |
+| MES-TD3-015 | 입고이력조회 | MAT-03 + TRC-01 | 1:1 | §1 |
+| MES-TD3-016 | 실시간재고관리 | MAT-04 | 용어 | §1 |
+| MES-TD3-017 | 레시피기반소요량계산 | MAT-05 + POP-03 | 1:1 | §1 |
+| MES-TD3-018 | 원물입고검사관리 | MAT-02 | 1:1 | §1 |
+| MES-TD3-019 | 전처리중량관리 | POP-02 | 용어 | §1 |
+| MES-TD3-020 | 세척조건관리 | X-COND-01 | 팩 | §1 |
+| MES-TD3-021 | 소독수농도관리 | X-WSH-01 | 팩 | §1 |
+| MES-TD3-022 | 세척실적데이터수집 | EQP-04 + POP-02 | 용어 | §1 |
+| MES-TD3-023 | 절임조건설정 | X-COND-01 | 팩 | §1 |
+| MES-TD3-024 | 절임통운영관리 | X-TANK-01 + X-TANK-02 | 팩 | §1 |
+| MES-TD3-025 | 과절임부족정보관리 | QUA-04 | 용어 | §1 |
+| MES-TD3-026 | 양념계량관리 | MAT-05 + POP-03 | 용어 | §1 |
+| MES-TD3-027 | 속넣기충진기데이터수집 | EQP-04 | 1:1 | §1 |
+| MES-TD3-028 | 버무림CCP관리 | QUA-02 | 용어 | §1 |
+| MES-TD3-029 | 중량검사관리 | QUA-02 | 용어 | §1 |
+| MES-TD3-030 | 자동테이핑기실적관리 | X-PKG-01 | 팩 | §1 |
+| MES-TD3-031 | 출하냉장고관리 | X-AGE-02 | 팩 | §1 |
+| MES-TD3-032 | 숙성재고관리 | X-AGE-01 | 팩 | §1 |
+| MES-TD3-033 | 냉장고온도습도모니터링 | EQP-04 + X-ALM-01 | 팩 | §1 |
+| MES-TD3-034 | 공정별불량요소관리 | BAS-08 + QUA-02 + QUA-03 | 1:1 | §1 |
+| MES-TD3-035 | 금속검출기관리 | QUA-02 + X-ALM-01 | 용어 | §1 |
+| MES-TD3-036 | 이슈이력관리 | QUA-04 | 1:1 | §1 |
+| MES-TD3-037 | 사용자계정관리 | SYS-01 | 1:1 | §1 |
+| MES-TD3-038 | 권한역할관리 | SYS-02 + SYS-03 | 1:1 | §1 |
+| MES-TD3-039 | 시스템로그조회 | SYS-04 | 1:1 | §1 |
+| MES-TD3-040 | 데이터백업이력조회 | SYS-06 | 1:1 | §1 |
+| MES-TD3-041 | 생산성KPI조회 | KPI-02 + KPI-03 | 용어 | §1 |
+| MES-TD3-042 | 품질KPI조회 | KPI-02 | 용어 | §1 |
+| MES-TD3-043 | 재고KPI조회 | — | 범위 밖 | §1 |
+| MES-TD3-044 | KPI지표관리 | KPI-03 | 1:1 | §1 |
+| MES-TD3-045 | 설비가동관리 | EQP-01 | 1:1 | §1 |
+| MES-TD3-046 | 설비점검관리 | EQP-02 | 1:1 | §1 |
+| MES-TD3-047 | 설비고장관리 | EQP-03 | 1:1 | §1 |
+| MES-TD3-048 | 작업지시서목록 | POP-01 | 1:1 | §1 |
+| MES-TD3-049 | 라인목록 | — | 범위 밖 | §1 |
+| MES-TD3-050 | 생산진행조회 | POP-02 | 1:1 | §1 |
+| MES-TD3-051 | 설비목록 | EQP-01 | 1:1 | §1 |
+| MES-TD3-052 | 발주목록 | MAT-01 + MAT-02 | 용어 | §1 |
+| MES-TD3-053 | 출고지시서목록 | SHP-02 | 1:1 | §1 |
+| MES-TD3-054 | 검색 Agent 8 (1) | — | 범위 밖 | §1 |
+| MES-TD3-055 | 검색 Agent 8 (2) | — | 범위 밖 | §1 |
+| MES-TD3-056 | 검색 Agent 8 (3) | — | 범위 밖 | §1 |
+| MES-TD3-057 | 검색 Agent 8 (4) | — | 범위 밖 | §1 |
+| MES-TD3-058 | 검색 Agent 8 (5) | — | 범위 밖 | §1 |
+| MES-TD3-059 | 검색 Agent 8 (6) | — | 범위 밖 | §1 |
+| MES-TD3-060 | 검색 Agent 8 (7) | — | 범위 밖 | §1 |
+| MES-TD3-061 | 검색 Agent 8 (8) | — | 범위 밖 | §1 |
+| MES-TD3-062 | 대시보드 | CMN-04 + KPI-01 | 1:1 | §1 |
+| MES-TD3-063 | 상세대시보드 | — | 범위 밖 | §1 |
+| MES-TD3-064 | 대시보드관리 | — | 범위 밖 | §1 |

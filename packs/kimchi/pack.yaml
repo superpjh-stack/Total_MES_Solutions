@@ -46,32 +46,32 @@ menus:
     job: 작업지시
     mat: 자재·재고
     pop: POP 작업
-    qua: 품질이상
+    qua: 품질            # t(이상)=품질 이슈 라 "품질이상" 은 "품질품질 이슈" 가 된다 — 품질 로 (개발3)
     eqp: 설비
     shp: 포장·출하
-    trc: 로트 추적
+    trc: 추적            # t(추적)=로트 추적 — "로트 추적" 으로 적으면 치환이 겹쳐 "로트 로트 추적" 이 된다 (개발3)
     kpi: 분석·KPI
     sys: 시스템
     ifc: 인터페이스
   order: [bas, ord, job, mat, cond, wsh, tank, pop, pkg, age, shp, qua, alm, eqp, trc, kpi, ifc, sys]
   add:
-    - { code: cond, name: 공정 조건 기준, after: mat }      # 세척·절임 품목별 기준 (TD3 020·023)
-    - { code: wsh,  name: 세척 공정,     after: cond }     # 소독수 농도 로그 (TD3 021)
-    - { code: tank, name: 절임통 운영,   after: wsh }      # 절임통 8기 (TD3 024)
-    - { code: pkg,  name: 포장 실적,     after: pop }      # 테이핑기 (TD3 030)
-    - { code: age,  name: 숙성 냉장,     after: pkg }      # 숙성 재고·냉장고 입출고 (TD3 031·032)
-    - { code: alm,  name: 알람 이력,     after: qua }      # 기준 이탈 알람 6종 (TD3 standard_note 3)
+    - { code: cond, name: 공정 조건 기준, after: mat, owner: 개발3, channels: [관리자 Web] }      # 세척·절임 품목별 기준 (TD3 020·023)
+    - { code: wsh,  name: 세척 공정,     after: cond, owner: 개발3, channels: [관리자 Web, 현장 POP] }     # 소독수 농도 로그 (TD3 021)
+    - { code: tank, name: 절임통 운영,   after: wsh, owner: 개발3, channels: [관리자 Web, 현장 POP, 현황판] }      # 절임통 8기 (TD3 024)
+    - { code: pkg,  name: 포장 실적,     after: pop, owner: 개발3, channels: [관리자 Web, 현황판] }      # 테이핑기 (TD3 030)
+    - { code: age,  name: 숙성 냉장,     after: pkg, owner: 개발3, channels: [관리자 Web, 모바일] }      # 숙성 재고·냉장고 입출고 (TD3 031·032)
+    - { code: alm,  name: 알람 이력,     after: qua, owner: 개발3, channels: [관리자 Web, 현장 POP, 현황판] }      # 기준 이탈 알람 6종 (TD3 standard_note 3)
 
 # ── E4 팩 화면 8 (기능은 function-list.md) ──────────────────────────────
 screens:
-  - { id: X-COND-01, name: 품목별 공정 조건 기준, module: cond, path: /cond/item-standards, channels: [web],             owner: 개발3 }
-  - { id: X-WSH-01,  name: 소독수 농도 로그,      module: wsh,  path: /wsh/sanitizer,       channels: [web, pop],        owner: 개발3 }
-  - { id: X-TANK-01, name: 절임통 운영,           module: tank, path: /tank/operations,     channels: [web, pop, board], owner: 개발3 }
-  - { id: X-TANK-02, name: 염도 추이,             module: tank, path: /tank/salinity,       channels: [web, board],      owner: 개발3 }
-  - { id: X-PKG-01,  name: 테이핑기 실적,         module: pkg,  path: /pkg/taping,          channels: [web, board],      owner: 개발3 }
-  - { id: X-AGE-01,  name: 숙성 재고,             module: age,  path: /age/stock,           channels: [web, mobile],     owner: 개발3 }
-  - { id: X-AGE-02,  name: 냉장고 입출고,         module: age,  path: /age/cold-moves,      channels: [web, mobile],     owner: 개발3 }
-  - { id: X-ALM-01,  name: 알람 이력,             module: alm,  path: /alm/alarms,          channels: [web, pop, board], owner: 개발3 }
+  - { id: X-COND-01, name: 품목별 공정 조건 기준, module: cond, path: /cond/item-standards, channels: [관리자 Web],             owner: 개발3 }
+  - { id: X-WSH-01,  name: 소독수 농도 로그,      module: wsh,  path: /wsh/sanitizer,       channels: [관리자 Web, 현장 POP],        owner: 개발3 }
+  - { id: X-TANK-01, name: 절임통 운영,           module: tank, path: /tank/operations,     channels: [관리자 Web, 현장 POP, 현황판], owner: 개발3 }
+  - { id: X-TANK-02, name: 염도 추이,             module: tank, path: /tank/salinity,       channels: [관리자 Web, 현황판],      owner: 개발3 }
+  - { id: X-PKG-01,  name: 테이핑기 실적,         module: pkg,  path: /pkg/taping,          channels: [관리자 Web, 현황판],      owner: 개발3 }
+  - { id: X-AGE-01,  name: 숙성 재고,             module: age,  path: /age/stock,           channels: [관리자 Web, 모바일],     owner: 개발3 }
+  - { id: X-AGE-02,  name: 냉장고 입출고,         module: age,  path: /age/cold-moves,      channels: [관리자 Web, 모바일],     owner: 개발3 }
+  - { id: X-ALM-01,  name: 알람 이력,             module: alm,  path: /alm/alarms,          channels: [관리자 Web, 현장 POP, 현황판], owner: 개발3 }
 
 # ── E1 역할 6 — TD3 role_matrix 행 순서 (D-505). 코어 기본 4 를 대체. ADMIN 필수 ──
 roles:

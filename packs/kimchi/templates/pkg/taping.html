@@ -1,0 +1,48 @@
+{# X-PKG-01 테이핑기 실적 — F-X-PKG-01 수기 등록 · 02 조회. 작업지시별 누계는 화면 집계(저장 안 함) · 가동 상태는 eqp_run_log #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.select('설비', 'equipment_id', equipment_options, equipment_id) }}
+{{ ui.select('작업지시', 'work_order_id', work_order_options, work_order_id) }}
+{{ ui.field('기간 시작', 'frm', frm, type='date') }}
+{{ ui.field('기간 끝', 'to', to, type='date') }}
+{{ ui.select('가동상태', 'run_status', [('가동', t('가동')), ('정지', t('정지'))], run_status) }}
+{% endblock %}
+{% block grid %}
+<h2>{{ t('테이핑기 실적') }} <small>{{ t('합계') }} {{ total_qty|num(0) }} {{ t('박스') }}</small></h2>
+<p>{% for m in machines %}<span class="chip">{{ m.equip_code }} {{ m.state }}</span> {% endfor %}</p>
+<table class="grid">
+  <thead><tr><th>{{ t('작업지시') }}</th><th>{{ t('포장수량(박스)') }}</th><th>{{ t('누적가동(분)') }}</th><th>{{ t('건수') }}</th></tr></thead>
+  <tbody>
+  {% for w in per_wo %}<tr><td>{{ w.work_order_no }}</td><td>{{ w.pack_qty|num(0) }}</td><td>{{ w.run_minutes|num(1) }}</td><td>{{ w.rows }}</td></tr>
+  {% else %}<tr><td colspan="4" class="empty">{{ NOT_COLLECTED }}</td></tr>{% endfor %}
+  </tbody>
+</table>
+<table class="grid">
+  <thead><tr><th>{{ t('수집일시') }}</th><th>{{ t('설비') }}</th><th>{{ t('작업지시') }}</th><th>{{ t('포장수량(박스)') }}</th><th>{{ t('카운터') }}</th><th>{{ t('가동상태') }}</th><th>{{ t('누적가동(분)') }}</th><th>{{ t('수집방식') }}</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr><td>{{ r.logged_at|dt('%Y-%m-%d %H:%M:%S') }}</td><td>{{ r.equip_code }}</td><td>{{ r.work_order_no|txt }}</td><td>{{ r.pack_qty|num(0) }}</td><td>{{ r.cum_count|txt }}</td><td>{{ r.run_status|txt }}</td><td>{{ r.run_minutes|txt }}</td><td>{{ r.source }}</td></tr>
+  {% else %}
+  <tr><td colspan="8" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if device != 'board' %}
+<section class="panel">
+  <h2>{{ t('테이핑 실적 수기 등록') }} <small>F-X-PKG-01</small></h2>
+  <form method="post" action="{{ nav.path_of('X-PKG-01') }}" id="tap-form" class="form-grid">
+    {{ ui.select('설비', 'equipment_id', equipment_options, equipment_id, required=true) }}
+    {{ ui.select('작업지시', 'work_order_id', work_order_options, work_order_id) }}
+    {{ ui.field('포장 수량(박스)', 'pack_qty', '', type='number', required=true, step='1') }}
+    {{ ui.field('가동 분', 'run_minutes', '', type='number', step='any') }}
+    {{ ui.select('가동상태', 'run_status', [('가동', t('가동')), ('정지', t('정지'))], '') }}
+    {{ ui.field('기록 시각', 'logged_at', now, type='datetime-local') }}
+  </form>
+</section>
+{% endif %}
+{% endblock %}
+{% block actions %}
+<button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
+{% if device != 'board' %}{{ ui.write_button('등록', user.can('F-X-PKG-01'), form='tap-form') }}{% endif %}
+{% endblock %}

@@ -1,0 +1,35 @@
+{# X-AGE-01 숙성 재고 — F-X-AGE-01 숙성 투입(스캔) · 02 완료 · 03 조회(FIFO 투입일 오름차순) · 04 라벨. 모바일 390px 는 base.html ch-mobile #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.select('품목', 'item_id', item_options, item_id) }}
+{{ ui.select('냉장고', 'equipment_id', fridge_options, equipment_id) }}
+{% endblock %}
+{% block grid %}
+{% if scan_error %}<p class="scan-error"><strong>{{ scan_error }}</strong> — {{ scan_no }}</p>{% endif %}
+<section class="panel">
+  <h2>{{ t('숙성 투입') }} <small>F-X-AGE-01 — {{ t('생산 LOT') }} {{ t('스캔') }} · {{ t('기본') }} {{ default_days }}{{ t('일') }}</small></h2>
+  {% call ui.scan_box(nav.path_of('X-AGE-01'), name='barcode', label='생산 LOT 스캔', button='숙성 투입') %}
+    {{ ui.select('숙성 냉장고', 'equipment_id', fridge_options, equipment_id, required=true) }}
+    {{ ui.field('숙성 수량', 'qty', '', type='number', step='any') }}
+  {% endcall %}
+  {% if lot %}<p>{{ lot.no }} · {{ lot.item }} · {{ t('잔량') }} {{ lot.remain_qty|txt }} {{ lot.unit|txt('') }} · {{ t('예정') }} +{{ aging_days }}{{ t('일') }} <small>({{ aging_days_source }})</small></p>{% endif %}
+</section>
+<h2>{{ t('숙성 재고') }} <small>{{ t('합계') }} {{ total_qty|num(1) }}</small></h2>
+<table class="grid">
+  <thead><tr><th>{{ t('품목') }}</th><th>{{ t('생산 LOT') }}</th><th>{{ t('투입일') }}</th><th>{{ t('경과일수') }}</th><th>{{ t('완료 예정일') }}</th><th>{{ t('숙성수량') }}</th><th>{{ t('냉장고') }}</th><th>{{ t('출하가능') }}</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr{% if r.due_passed and r.shippable_yn != 'Y' %} class="warn"{% endif %}>
+    <td>{{ r.item_code }} {{ r.item_name }}</td><td><code>{{ r.lot_no }}</code></td><td>{{ r.aging_start_date|dt }}</td><td>{{ r.elapsed_days|txt }}</td>
+    <td>{{ r.aging_due_date|dt }}{% if r.due_passed %} <small>{{ t('도래') }}</small>{% endif %}</td><td>{{ r.remain_qty|num(1) }} {{ r.unit|txt('') }}</td><td>{{ r.location_code|txt }}</td>
+    <td>{{ r.shippable_yn }}</td>
+    <td>{% if r.shippable_yn != 'Y' %}<form method="post" action="{{ nav.path_of('X-AGE-01') }}/{{ r.lot_id }}/complete" class="inline"><input type="text" name="reason" placeholder="{{ t('예정일 전이면 사유') }}">{{ ui.write_button('완료', user.can('F-X-AGE-02'), kind='ghost') }}</form>{% endif %}
+        <a class="btn btn-ghost" href="{{ label_base }}/{{ r.lot_id }}/label">{{ t('라벨') }}</a></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="9" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,44 @@
+{# X-WSH-01 소독수 농도 로그 — F-X-WSH-01 수기 기록 · 02 취소 · 03 조회(수기 + 센서 한 목록 · 수집방식 열). 이탈 행 강조 + 알람 이력 링크 #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.select('설비', 'equipment_id', equipment_options, equipment_id) }}
+{{ ui.select('작업지시', 'work_order_id', work_order_options, work_order_id) }}
+{{ ui.field('기간 시작', 'frm', frm, type='date') }}
+{{ ui.field('기간 끝', 'to', to, type='date') }}
+{{ ui.select('이탈', 'deviated', [('Y', t('이탈')), ('N', t('정상'))], deviated) }}
+{% endblock %}
+{% block grid %}
+<h2>{{ t('소독수 농도') }} <small>{{ t('기준') }} {{ threshold_text }} · <a href="{{ alarm_path }}?kind=소독수 10ppm 미달">{{ t('알람 이력') }}</a></small></h2>
+<table class="grid">
+  <thead><tr><th>{{ t('측정 시각') }}</th><th>{{ t('설비') }}</th><th>{{ t('작업지시') }}</th><th>{{ t('농도(ppm)') }}</th><th>{{ t('접촉시간(분)') }}</th><th>{{ t('투입비율') }}</th><th>{{ t('수집방식') }}</th><th>{{ t('판정') }}</th><th>{{ t('알람') }}</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr{% if r.deviated %} class="deviated"{% endif %}>
+    <td>{{ r.measured_at|dt('%Y-%m-%d %H:%M:%S') }}</td><td>{{ r.equip_code }} {{ r.equip_name }}</td><td>{{ r.work_order_no|txt }}</td><td>{{ r.ppm_value|txt }}</td>
+    <td>{{ r.contact_min|txt }}</td><td>{{ r.dosing_rate|txt }}</td><td>{{ r.source }}</td>
+    <td>{% if r.deviated %}<strong>{{ t('이탈') }}</strong>{% elif threshold is none %}<span class="undecided">{{ t('미확정') }}</span>{% else %}{{ t('정상') }}{% endif %}</td>
+    <td>{% if r.alarm_no %}<a href="{{ alarm_path }}">{{ r.alarm_no }} {{ r.alarm_status }}</a>{% else %}-{% endif %}</td>
+    <td>{% if r.cancelable %}<form method="post" action="{{ nav.path_of('X-WSH-01') }}/{{ r.id }}/cancel" class="inline">{{ ui.write_button('취소', user.can('F-X-WSH-02'), kind='ghost') }}</form>{% endif %}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="10" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<section class="panel">
+  <h2>{{ t('소독수 농도 수기 기록') }} <small>F-X-WSH-01</small></h2>
+  <form method="post" action="{{ nav.path_of('X-WSH-01') }}" id="san-form" class="form-grid">
+    {{ ui.select('설비', 'equipment_id', equipment_options, equipment_id, required=true) }}
+    {{ ui.select('작업지시', 'work_order_id', work_order_options, work_order_id) }}
+    {{ ui.field('농도(ppm)', 'ppm_value', '', type='number', required=true, step='any') }}
+    {{ ui.field('접촉시간(분)', 'contact_min', '', type='number', step='any') }}
+    {{ ui.field('투입비율', 'dosing_rate', '', type='number', step='any') }}
+    {{ ui.field('측정 시각', 'measured_at', now, type='datetime-local') }}
+  </form>
+</section>
+{% endblock %}
+{% block actions %}
+<button type="submit" form="screen-search" class="btn">{{ t('조회') }}</button>
+{{ ui.write_button('기록', user.can('F-X-WSH-01'), form='san-form') }}
+{% endblock %}

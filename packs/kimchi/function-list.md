@@ -1,8 +1,12 @@
 # 기능 목록 — `kimchi` 팩 화면 8 · 기능 24 (기획자3 · 2026-10-09 · 기획 초안)
 
+## 1. 읽는 법
+
 > 열은 코어 `contracts/function-list.md` §1 과 같다. 코어로 간 기능(품목 · 작업지시 · 실적 · 검사 · 출하 · 추적 …)은 여기 적지 않는다 — README §1 매핑표가 가리키는 코어 기능을 그대로 쓴다.
 > 공통 규칙: 쓰기는 `rbac.require_fn("F-X-…")` · 저장 뒤 `audit.log_change` · 번호는 `numbering.next` · 계보는 `lineage` 만 · 문구는 `t()`. 0건 `미수집`. 쓰기 대상은 `x_kimchi_*` + `pack.yaml: write_scope` 만(R7).
 > 권한의 역할명은 `pack.yaml: roles`(PM · PROD · QA · FIELD · ADMIN · VENDOR). 범위는 `permissions.csv` 의 `scopes`.
+
+## 2. 기능
 
 | ID | 모듈 | 화면 | 기능명 | 유형 | 쓰는 테이블 | 채널 | 권한 | 범위 | API | 훅 | 담당 | 계약 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|

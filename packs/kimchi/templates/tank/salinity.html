@@ -1,0 +1,28 @@
+{# X-TANK-02 염도 추이 — F-X-TANK-05 조회 (쓰기 0). collect.series(센서, salinity_pct) 표 + 간단 추이 · 기준선 = 진행 중 배치 목표 ± 허용편차 #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.select('절임통 · 센서', 'equipment_id', equipment_options, equipment_id, required=true) }}
+{{ ui.field('기간 시작', 'frm', frm, type='date') }}
+{{ ui.field('기간 끝', 'to', to, type='date') }}
+{% endblock %}
+{% block grid %}
+<h2>{{ t('염도 추이') }} <small>{{ frm }} ~ {{ to }}</small></h2>
+<p>{{ t('목표') }} {% if target is none %}<span class="undecided">{{ t('미확정') }}</span>{% else %}{{ target }} %{% endif %}
+   · {{ t('허용편차') }} {% if tolerance is none %}<span class="undecided">{{ t('미확정') }}</span>{% else %}± {{ tolerance }} %{% endif %}
+   · {{ t('센서') }} {% if sensor_equipment_id %}#{{ sensor_equipment_id }}{% else %}<span class="undecided">{{ note or t('미확정') }}</span>{% endif %}
+   · {{ t('건수') }} {{ summary.n }} · {{ t('최소') }} {{ summary.min|txt }} · {{ t('최대') }} {{ summary.max|txt }} · {{ t('마지막') }} {{ summary.last|txt }}</p>
+<table class="grid plain">
+  <thead><tr><th>{{ t('시각') }}</th><th>{{ t('염도(%)') }}</th><th>{{ t('판정') }}</th><th>{{ t('추이') }}</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  {% set out = (target is not none and tolerance is not none and r.value is number and ((r.value - target)|abs) > tolerance) %}
+  <tr{% if out %} class="deviated"{% endif %}><td>{{ r.ts|dt('%Y-%m-%d %H:%M:%S') }}</td><td>{{ r.value }}</td>
+    <td>{% if target is none or tolerance is none %}<span class="undecided">{{ t('미확정') }}</span>{% elif out %}<strong>{{ t('이탈') }}</strong>{% else %}{{ t('정상') }}{% endif %}</td>
+    <td>{% if summary.max and r.value is number %}<span style="display:inline-block;height:8px;background:#999;width:{{ (100 * r.value / summary.max)|round|int }}px"></span>{% endif %}</td></tr>
+  {% else %}
+  <tr><td colspan="4" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

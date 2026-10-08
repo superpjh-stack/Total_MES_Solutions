@@ -1,0 +1,34 @@
+{# X-ALM-01 알람 이력 — F-X-ALM-01 확인 · 02 해제(조치 필수) · 03 조회. 센서 이탈(팩 표) + 검사·측정값 이탈(qua_issue hook · 읽기 전용 · QUA-04 링크) 한 목록. 현황판 = 미해제 건수 + 최근 5 #}
+{% extends "base.html" %}
+{% import "home/_macros.html" as ui %}
+{% block search %}
+{{ ui.select('종류', 'kind', kind_options, kind) }}
+{{ ui.select('설비', 'equipment_id', equipment_options, equipment_id) }}
+{{ ui.field('기간 시작', 'frm', frm, type='date') }}
+{{ ui.field('기간 끝', 'to', to, type='date') }}
+{{ ui.select('상태', 'status', status_options, status) }}
+{% endblock %}
+{% block grid %}
+<h2>{{ t('알람 이력') }} <small>{{ t('미해제') }} <strong>{{ open_count }}</strong></small></h2>
+<table class="grid">
+  <thead><tr><th>{{ t('발생일시') }}</th><th>{{ t('번호') }}</th><th>{{ t('종류') }}</th><th>{{ t('설비') }}</th><th>{{ t('태그') }}</th><th>{{ t('값') }}</th><th>{{ t('기준') }}</th><th>{{ t('횟수') }}</th><th>{{ t('생산 LOT') }}</th><th>{{ t('상태') }}</th><th>{{ t('조치') }}</th>{% if device != 'board' %}<th></th>{% endif %}</tr></thead>
+  <tbody>
+  {% for r in (recent if device == 'board' else rows) %}
+  <tr{% if r.status in ('발생', '확인') %} class="deviated"{% endif %}>
+    <td>{{ r.first_at|dt('%Y-%m-%d %H:%M') }}{% if r.last_at != r.first_at %}<br><small>{{ t('마지막') }} {{ r.last_at|dt('%m-%d %H:%M') }}</small>{% endif %}</td>
+    <td>{% if r.link %}<a href="{{ r.link }}">{{ r.alarm_no }}</a>{% else %}{{ r.alarm_no }}{% endif %}</td><td>{{ r.kind }}</td><td>{{ r.equip_code }} {{ r.equip_name }}</td><td>{{ r.tag }}</td>
+    <td>{% if r.first_value is not none %}{{ r.first_value }}{% if r.last_value != r.first_value %} → {{ r.last_value }}{% endif %}{% else %}-{% endif %}</td>
+    <td>{{ r.limit_text|txt }}</td><td>{{ r.count }}</td><td>{{ r.lot_no|txt }}</td><td>{{ r.status }}{% if r.acked_by %} <small>{{ r.acked_by }}</small>{% endif %}</td><td>{{ r.action_desc|txt }}</td>
+    {% if device != 'board' %}
+    <td>{% if r.source == 'env' and r.status != '해제' %}
+      {% if r.status == '발생' %}<form method="post" action="{{ nav.path_of('X-ALM-01') }}/{{ r.id }}/ack" class="inline">{{ ui.write_button('확인', user.can('F-X-ALM-01'), kind='ghost') }}</form>{% endif %}
+      <form method="post" action="{{ nav.path_of('X-ALM-01') }}/{{ r.id }}/clear" class="inline"><input type="text" name="action_desc" placeholder="{{ t('조치 내용') }}" required>{{ ui.write_button('해제', user.can('F-X-ALM-02'), kind='ghost') }}</form>
+      {% elif r.source == 'qua_issue' %}<a class="btn btn-ghost" href="{{ r.link }}">{{ t('이상') }}</a>{% endif %}</td>
+    {% endif %}
+  </tr>
+  {% else %}
+  <tr><td colspan="12" class="empty">{{ NOT_COLLECTED }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
