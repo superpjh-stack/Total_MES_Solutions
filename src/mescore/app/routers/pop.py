@@ -63,7 +63,7 @@ def _open_work_orders() -> list[dict]:
                        from job_work_order w join bas_item i on i.id = w.item_id join bas_process p on p.id = w.process_id
                        left join bas_equipment e on e.id = w.equipment_id join v_work_order_progress g on g.work_order_id = w.id
                       where w.status in ('대기', '진행')
-                      order by (w.plan_date = current_date) desc nulls last, w.plan_date nulls last, w.id limit 200""")
+                      order by (w.plan_date = current_date) desc nulls last, w.plan_date desc nulls last, w.id desc limit 500""")
 
 
 # ── POP-01 작업 목록 (스캔) ──────────────────────────────────────────────
