@@ -63,3 +63,15 @@ PASS 3 · FAIL 12 · WARN 0 · BLOCKED 0 · 미검증 27 / 전체 42
 ```
 
 Phase 0 종료 조건(goal.md §3.1) 대조 — G-C01 PASS · G-C04 PASS · G-C23 PASS · G-C02 는 계약 136줄 존재(라우트 · 테스트 · 이관 미연결로 FAIL 이 정상) · G-C03 은 placeholder 로 FAIL(정상) · pytest 전건 통과 · 8030 기동 `/health` 200 · `/login` 200. G-C21 은 `check-routes` 가 placeholder 0 을 요구해 R2 전까지 FAIL 이 정상이다. "G-P01 은 팩 3 뼈대로 PASS" 는 D-24 로 이번에 재지 않았다.
+
+## 2026-10-09 회전 1 — 오케스트레이터 (Phase 0 판정 · 기획 · 디자인 동시 진행)
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| Phase 0 종료 조건 | G-C01 · G-C04 · G-C23 PASS · G-C02 계약 136줄(라우트 0/132 FAIL 정상) · G-C03 placeholder 53 FAIL 정상 · PASS 3 · FAIL 12 · 미검증 27 | `make gate`(오케스트레이터 직접 재실행) |
+| 테스트 | 50 passed · 0 failed | `uv run pytest -q` |
+| 기획 산출물 | `packs/foodservice` 18파일(화면 0 · 테이블 8 · 역할 6 · 권한 72칸) · `packs/printfilm` 20파일(화면 7 · 기능 24 · 테이블 8 · 권한 60칸) · `packs/kimchi` 14파일(화면 8 · 기능 24 · 테이블 7 · 권한 108칸) — 셋 다 `pack-check` 는 선언 파일(`hooks.py` 등) 미작성으로 PackError(웨이브 B 몫) | `ls packs/*/` · `MES_PACK=<팩> make pack-check` |
+| 디자인 산출물 | `docs/design/tokens.css` 토큰 97 · `web/` 레이아웃 + 컴포넌트 18 + 화면 14 · `pop/` 13 · `mobile/` 8 · `board/` 2 · `print/` 4 + 바코드 규격 · `home/` 2 · README 3절 보존 | `ls docs/design/*` · `grep -c '^## ' docs/design/README.md` |
+| 코어 매핑 결과 | 니즈푸드 49: 1:1 18 · 용어+확장 23 · 팩 0 · 밖 8 / 엘컴화인 기능 100: 1:1 54 · 용어 18 · 팩 24 · 밖 4 / 임진강 64: 1:1 30 · 용어 13 · 팩 8 · 밖 13 — 코어 테이블 신설 요구 0 | 각 `packs/<팩>/README.md` 매핑표 |
+| 결정 | D-501~D-509(기획) · D-601~D-605(디자인) 추가 · 코어 변경 요청 2건(D-501 설비 알람 · D-502 화면 권한) · 차단 1(D-509) | `decisions.md` |
+| 다음 | 웨이브 A R1·R2 개발 3명 — 백엔드 우선: 공용 모듈 → 모듈별 라우터 + JSON 검증 + 기능별 테스트. 템플릿은 최소(매크로). 프런트 이식은 웨이브 A′ | — |

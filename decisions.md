@@ -131,3 +131,54 @@
 
 ## D-27 `tools/backup.py` 는 아키텍트가 이식했다 · 상태: 가설
 - G-C20 의 판정은 QA3 몫이지만 `make backup` · `make restore-check` 명령 자체는 CLAUDE.md 「명령」에 있어 엘컴화인 `tools/backup.py` 를 `MES_` · `mes_core_db` 로 바꿔 두었다. 운영 DB 에는 쓰지 않고 임시 DB 에만 복구한다.
+
+---
+
+## 기획 · 디자인 결정 후보 (회전 1 · 오케스트레이터가 옮김 · 2026-10-09)
+
+기획자 3명의 `packs/<팩>/README.md` 끝 "결정 후보 D-5nn" 절과 디자이너 3명의 `docs/design/README.md` 에서 코어에 닿는 것만 옮겼다. 팩 안에서만 유효한 결정은 각 팩 README 가 원본이다.
+
+## D-501 세 팩 공통 — 설비 단위 임계값 · 이탈 알람이 코어에 없다 · 상태: 코어 변경 요청
+- foodservice(냉장 5 ℃ · 냉동 −18 ℃ 온도조절기 이탈) 와 kimchi(냉장 온습도 · 염도 센서 이탈) 가 같은 것을 요구한다. E3 는 **공정** 측정값뿐이라 설비 수집값의 범위 판정 · 알람 발생/해제 이력이 코어 EQP 화면에 못 나온다.
+- 후보: `bas_equipment_param`(설비 · 태그 · 하한 · 상한) + `collect.receive` 가 범위 판정해 `eqp_collect.deviated` 표시 + `eqp_alarm`(발생 · 확인 · 해제). 테이블 52 → 54 가 된다.
+- 1차 웨이브 B 는 팩 테이블(`x_<팩>_env_alarm`)로 가고, 웨이브 D 에서 아키텍트가 코어 반영 여부를 정한다. 반영하면 두 팩의 알람 테이블을 지운다.
+
+## D-502 두 팩 공통 — 화면 단위 권한 예외 · 상태: 코어 변경 요청
+- foodservice(영양사: 메뉴 · 레시피 · 검식기준만 입력) · kimchi(레시피 BOM 열람 통제). 메뉴 × 역할 칸으로는 표현이 안 된다.
+- 후보: `sys_permission` 에 `screen_id` 선택 컬럼(NULL = 메뉴 전체, 값 = 그 화면만 덮어씀). `rbac.cell` 이 화면 칸을 먼저 본다. 1차는 메뉴 단위로 넓혀 둔다(각 팩 D-504).
+
+## D-503 `lineage.split/merge` 에 `process_id · equipment_id · attrs` 인자 · 상태: 가설
+- printfilm CR-2. `make_product_lot` 은 받는데 둘은 안 받아 후가공 · 슬리팅 롤의 공정 · 설비를 같은 `tx` 에서 따로 `update lot` 해야 했다. **개발2 R1 에서 인자를 넣는다**(`interfaces.md` §4 갱신). 코어 변경이 아니라 R1 구현 범위.
+
+## D-504 팩 ext 행을 같은 트랜잭션에 쓰는 훅 자리 · 상태: 가설
+- foodservice ⑤ · printfilm(on_result_closed 에서 ext). `validate_<table>` 은 저장 전이라 새 행의 `id` 가 없다. **`after_save_<table>(cur, row, user)`** 훅을 추가한다(저장 직후 · 같은 tx · `row["id"]` 있음). `interfaces.md` §9 · `pack-contract.md` §5 에 추가 — 아키텍트 웨이브 D, 개발 R2 라우터는 `packs.hook("after_save_<table>")` 호출 자리를 미리 둔다.
+
+## D-505 `on_order_status_changed` · `on_work_order_canceled` 훅 · 상태: 가설
+- foodservice ③. 지시 취소 시 훅이 만든 `mat_requirement(source=hook)` 를 되돌릴 자리가 없다. 개발1 F-JOB-04 · 개발3 F-ORD-02/03 에 호출 자리를 둔다.
+
+## D-506 G-P03 추적표는 N:1 · 1:N 매핑을 허용한다 · 상태: 가설
+- foodservice ④(화면 49 중 N:1 1건 · 1:N 4건). `tools/import_design.py` · `check_trace --pack` 은 산출물 ID 하나가 코어/팩 화면 여럿에, 여럿이 하나에 가는 것을 고아로 세지 않는다. 고아 = 어느 화면에도 안 간 ID.
+
+## D-507 코어 `job_lot` 은 BOM 소요 줄이다 — Job-Lot-Roll 매핑 화면은 코어에 없다 · 상태: 가설
+- printfilm CR-1. 1차 printfilm 은 Job → Roll 로 간다(생산 LOT 중간 단계 없음). 필요해지면 팩 화면 `X-JOB-01`.
+
+## D-508 `kpi_extra(frm, to, by=None)` · 상태: 가설
+- foodservice ⑤ · kimchi C-8. `by` 인자를 받고 `kpi_snapshot` 배치가 `kpi_extra` 결과도 저장한다. 개발3 R1.
+
+## D-509 `bas_process_param.item_id` 선택 컬럼 · 상태: 차단
+- kimchi C-2(품목별 세척 · 절임 범위). 스키마 변경이라 아키텍트 웨이드 D 판단. 1차는 공정 단위 범위만.
+
+## D-601 출하 라벨 경로 · 상태: 가설
+- 디자이너3. `function-list.md` 에 없다. `GET /shp/shipments/{id}/label`(SHP-02 인쇄 버튼, 기능 수에 안 센다 — D-12 와 같은 취급). 바코드 값 = 출하 번호. LOT 라벨은 `?size=100x50|50x30` 한 요청 한 크기.
+
+## D-602 현황판 `stats.board()` 키 · 지표 상태 · 상태: 가설
+- 디자이너3 절(`docs/design/README.md`)의 키 목록이 1차 계약. 지표 `status` 는 서버 계산(값 ≥ 목표 good · ≥ 95 % warn · 그 밖 critical · 목표 NULL → 없음). 개발3 이 확정하고 README 를 갱신한다. 다크 전환 조건 미확정.
+
+## D-603 `static/app.js` 동작 사양 = 디자이너2 절 S-01~S-14 · 상태: 가설
+- 스캔칸 포커스 · 알림 중 스캔 · 422 두 갈래 · 503 disabled. 템플릿 이식 때 `data-demo` · `.demo` · `[원형 전용]` 블록은 지운다.
+
+## D-604 Web 에서 실적을 읽는 화면 · 상태: 가설
+- 디자이너1. POP-02 는 POP 전용이라 Web 실적 조회 화면 ID 가 없다. JOB-02 지시 현황의 지시 행에서 실적 목록으로 드릴다운(`GET /job/status?wo=`)으로 한다. 기능 수 불변.
+
+## D-605 개발용 역할 바로 로그인 버튼 · 상태: 가설
+- `MES_ENV=dev` 일 때만 로그인 화면에 역할 4 버튼. 운영 빌드에는 없다.
