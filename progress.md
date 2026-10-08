@@ -169,3 +169,15 @@ PASS 22 · FAIL 11 · WARN 0 · BLOCKED 0 · 미검증 9 / 전체 42
 ```
 
 다음 회전(QA 3 투입)에 막히는 것: ① QA 도구 3(`check_data` · `check_security` · `check_screens`)이 생기면 `gate.py` 가 그 출력을 우선 — 출력 형식은 `interfaces.md` §10 ② 같은 `mes_core_db` 를 7명이 동시에 쓰므로 행 수 diff · 건수 비교 판정(G-C05 · C09 · C15 · C18)은 **단독 실행**에서만 믿을 수 있다 — QA 는 자기 DB(`MES_PG_DSN`)를 쓰거나 `gate-full` 은 한 번에 하나 ③ 테스트 잔존 데이터(오늘 지시 663건 · 설비 165건 · 접근 로그 2만)가 상한 500 화면을 밀어낸다 — QA2 `check_data` 는 `make db-reset` 뒤 빈 DB 에서 시작해야 한다 ④ 웨이브 A′ 가 도는 동안 템플릿 HTML 단언(test_measure · check_terms)이 흔들린다 — 디자이너 3명이 끝낸 뒤 회전 4 아키텍트가 `core-hash` 를 다시 찍고 G-P01 R1 을 재판정 ⑤ G-C22 · G-P06 은 브라우저 · 사람 실측.
+
+## 2026-10-09 회전 3 — 오케스트레이터 (웨이브 A′ 프런트 · 웨이브 B 팩 3 · 아키텍트 D-1 판정)
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| 코어 게이트 | **PASS 21 · FAIL 1(G-C21 ← job 테스트 2) · 미검증 3**(C09 gate-full · C10 QA SQL · C22 브라우저) | `make gate`(오케스트레이터 직접) |
+| 팩 게이트 | 3팩 모두 G-P02 · G-P04 PASS · G-P05 foodservice/printfilm PASS(kimchi FAIL = SYS-04 `|t` 코어 한 줄) · G-P01 FAIL 3(코어 해시 기준값이 A′ 이전) · G-P03 미검증(check_trace ↔ import_design 미배선 · 도구 직접 실행은 3팩 고아 0) | 〃 |
+| 테스트 | 239 passed · 2 failed(`test_job_work_orders` — 잔존 지시 1,493건 > LIST_LIMIT 500 · 정렬) · 팩 테스트 foodservice 19 · printfilm 39 · kimchi 26 | `uv run pytest -q` · `MES_PACK=<팩> uv run pytest -q packs/<팩>/tests` |
+| 프런트 | 토큰 `tokens.css` 분리 · base/매크로(서명 변경 0) · Web 18 · POP 13 · 모바일 · 현황판 폴링 1배 · 출력물 4 · 메인 · 대시보드 · 추적 — placeholder 0 · 금지어 0 · 캡처 `outputs/design/` 100장+ | `make check-routes` · `check-terms` · `ls outputs/design` |
+| 팩 재현 | printfilm S1 `lot_genealogy` 10행(투입 3 · splice 2 · 슬리팅 3 · 출하 2) · foodservice 소요량 144/120/24 · 배치 측정값 collect · kimchi S1 10행(기획 9 — 합병 API 가 별도 LOT) · S2 422 hook_rejected · S3 알람 합침 · S4 숙성 | 각 팩 `tests/` · `outputs/e2e/<팩>/` |
+| 코어 변경 요청 | 세 팩 공통: 설비 알람(D-501 반영 결정 · 테이블 52→54 는 정본 수정 필요 → **사람 결정**) · 팩 시드 적재 범위(CR-9) · check_trace↔import_design(CR-10) · R9 범위(CR-11) · `read_attrs(Request)` 버그 · `menus.rename` 이중 치환 · 채널 코드 정규화 · 시드 순서 · `audit` 기능명 `t()` | `progress-dev{1,2,3}.md` §3 |
+| 다음 | 회전 4: 아키텍트 D-2(요청 처리 · core-hash · R9 정의) · 개발 3 수정 · QA 3(`mes_qa_db` 전용 · check_screens/data/security · E2E) · 디자이너1 채널 틀 통합 | — |
