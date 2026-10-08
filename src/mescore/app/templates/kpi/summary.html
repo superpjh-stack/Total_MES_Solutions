@@ -1,4 +1,6 @@
-{# KPI-02 집계 — 탭 = ?kind= 링크(F-KPI-02 생산 · 03 품질 · 04 납기 · 05 설비). 타일 + 표. 비율은 숫자. 쓰기 0. 모바일: 카드. 품질 탭은 measure_series 키 선택. #}
+{# KPI-02 집계 — 탭 = ?kind= 링크(F-KPI-02 생산 · 03 품질 · 04 납기 · 05 설비). 타일 + 표. 비율은 숫자. 쓰기 0.
+   ctx(개발3 · 폼 name 바꾸지 않는다): kind kinds section{by rows total} by by_options frm to param_key agg series measure_keys aggs.
+   디자이너1 web/screens/kpi_summary.html(nav.tabs · .tiles · table.grid) + 디자이너2 mobile/kpi_summary_m.html(카드). 품질 탭은 measure_series 키 선택. #}
 {% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "trc/_cards.html" as cards %}
@@ -6,8 +8,8 @@
 
 {% block search %}
 <input type="hidden" name="kind" value="{{ kind }}">
-{{ ui.field('기간 시작', 'frm', frm|dt, type='date') }}
-{{ ui.field('기간 끝', 'to', to|dt, type='date') }}
+{{ ui.field('기간 시작', 'frm', frm|dt('%Y-%m-%d'), type='date') }}
+{{ ui.field('기간 끝', 'to', to|dt('%Y-%m-%d'), type='date') }}
 {% if by_options %}{% set bo = [] %}{% for b in by_options %}{% set _ = bo.append((b, t({'day': '일별', 'item': '품목별', 'process': '공정별', 'equipment': '설비별', 'defect': '불량코드별', 'partner': '거래처별'}[b]))) %}{% endfor %}
 {{ ui.select('기준', 'by', bo, by, blank='기본') }}{% endif %}
 {% if kind == 'quality' %}{% set ko = [] %}{% for k in measure_keys %}{% set _ = ko.append((k.param_key, k.label ~ ' (' ~ k.param_key ~ ')')) %}{% endfor %}
@@ -17,46 +19,48 @@
 {% endblock %}
 
 {% block grid %}
-<nav class="tabs">{% for k in kinds %}<a href="?kind={{ k.code }}&frm={{ frm }}&to={{ to }}"{% if k.code == kind %} aria-current="page"{% endif %}{% if not k.allowed %} class="off"{% endif %}>{{ t(k.name) }}</a>{% endfor %}</nav>
+<nav class="tabs" aria-label="{{ t('집계 종류') }}">{% for k in kinds %}<a href="?kind={{ k.code }}&frm={{ frm|dt('%Y-%m-%d') }}&to={{ to|dt('%Y-%m-%d') }}"{% if k.code == kind %} aria-current="page"{% endif %}{% if not k.allowed %} class="off" title="{{ t('이 역할은 볼 수 없는 집계') }}"{% endif %}>{{ t(k.name) }}</a>{% endfor %}</nav>
 {% set tot = section.total %}
-{% if not tot %}<p class="empty">{{ NOT_COLLECTED }} — {{ frm|dt }} ~ {{ to|dt }}</p>{% endif %}
+{% set title = (frm|dt('%Y-%m-%d')) ~ ' ~ ' ~ (to|dt('%Y-%m-%d')) %}
+<h2>{{ t({'production': '생산', 'quality': '품질', 'delivery': '납기', 'equipment': '설비'}[kind]) }} {{ t('집계') }} <small>{{ title }}{% if by %} · {{ t({'day': '일별', 'item': '품목별', 'process': '공정별', 'equipment': '설비별', 'defect': '불량코드별', 'partner': '거래처별'}.get(by, by)) }}{% endif %} · {{ section.rows|length }}{{ t('행') }}</small></h2>
+{% if not tot %}<p class="empty-inline">{{ NOT_COLLECTED }} — {{ title }}</p>{% endif %}
 
 {% if kind == 'production' %}
-{% if tot %}{{ cards.tiles([('계획 수량', tot.plan_qty|num(3) if tot.plan_qty is not none else none, '', ''), ('양품', tot.good_qty|num(3) if tot.good_qty is not none else none, '', ''), ('불량', tot.defect_qty|num(3) if tot.defect_qty is not none else none, '', ''), ('달성률', tot.achieve_rate|num(1) if tot.achieve_rate is not none else none, '%', ''), ('양품률', tot.good_rate|num(1) if tot.good_rate is not none else none, '%', '')]) }}{% endif %}
-{% set rows = [] %}{% for r in section.rows %}{% set _ = rows.append([(r.day|dt if r.day is defined and r.day else (r.code|txt) ~ ' ' ~ (r.name|txt(''))), r.wo_count, r.plan_qty|num(3), r.result_count, r.good_qty|num(3), r.defect_qty|num(3), cards.pct(r.achieve_rate), cards.pct(r.good_rate)]) %}{% endfor %}
+{% if tot %}{{ cards.tiles([('계획 수량', tot.plan_qty|num(3) if tot.plan_qty is not none else none, '', ''), ('양품', tot.good_qty|num(3) if tot.good_qty is not none else none, '', ''), ('불량', tot.defect_qty|num(3) if tot.defect_qty is not none else none, '', 'warn' if tot.defect_qty else ''), ('달성률', tot.achieve_rate|num(1) if tot.achieve_rate is not none else none, '%', ''), ('양품률', tot.good_rate|num(1) if tot.good_rate is not none else none, '%', '')]) }}{% endif %}
+{% set rows = [] %}{% for r in section.rows %}{% set _ = rows.append([(r.day|dt('%Y-%m-%d') if r.day is defined and r.day else (r.code|txt) ~ ' ' ~ (r.name|txt(''))), r.wo_count, r.plan_qty|num(3), r.result_count, r.good_qty|num(3), r.defect_qty|num(3), cards.pct(r.achieve_rate), cards.pct(r.good_rate)]) %}{% endfor %}
 {{ ui.grid(['기준', '작업지시', '계획 수량', '실적', '양품', '불량', '달성률', '양품률'], rows) }}
 {% elif kind == 'quality' and by == 'defect' %}
 {% set rows = [] %}{% for r in section.rows %}{% set _ = rows.append([r.code, r.name, r.defect_count, r.defect_qty|num(3), r.inspection_count]) %}{% endfor %}
 {{ ui.grid(['불량코드', '이름', '건수', '수량', '검사 수'], rows) }}
 {% elif kind == 'quality' %}
-{% if tot %}{{ cards.tiles([('검사', tot.inspection_count, t('건'), ''), ('합격', tot.pass_count, '', ''), ('불합격', tot.fail_count, '', 'err' if tot.fail_count else ''), ('조건부', tot.cond_count, '', ''), ('합격률', tot.pass_rate|num(1) if tot.pass_rate is not none else none, '%', '')]) }}{% endif %}
-{% set rows = [] %}{% for r in section.rows %}{% set _ = rows.append([(r.day|dt if r.day is defined and r.day else (r.code|txt) ~ ' ' ~ (r.name|txt(''))), r.inspection_count, r.pass_count, r.fail_count, r.cond_count, cards.pct(r.pass_rate)]) %}{% endfor %}
+{% if tot %}{{ cards.tiles([('검사', tot.inspection_count, t('건'), ''), ('합격', tot.pass_count, '', ''), ('불합격', tot.fail_count, '', 'err' if tot.fail_count else ''), ('조건부', tot.cond_count, '', 'warn' if tot.cond_count else ''), ('합격률', tot.pass_rate|num(1) if tot.pass_rate is not none else none, '%', '')]) }}{% endif %}
+{% set rows = [] %}{% for r in section.rows %}{% set _ = rows.append([(r.day|dt('%Y-%m-%d') if r.day is defined and r.day else (r.code|txt) ~ ' ' ~ (r.name|txt(''))), r.inspection_count, r.pass_count, r.fail_count, r.cond_count, cards.pct(r.pass_rate)]) %}{% endfor %}
 {{ ui.grid(['기준', '검사', '합격', '불합격', '조건부', '합격률'], rows) }}
 {% if series is not none %}
 <h3>{{ t('측정값') }} <code>{{ param_key }}</code> · {{ agg }}</h3>
-{% set srows = [] %}{% for s in series %}{% set _ = srows.append([s.day|dt, s.value|num(3) if s.value is not none else '-', s.n, s.deviated_count, s.min_value|num(3) if s.min_value is not none else '-', s.max_value|num(3) if s.max_value is not none else '-']) %}{% endfor %}
+{% set srows = [] %}{% for s in series %}{% set _ = srows.append([s.day|dt('%Y-%m-%d'), s.value|num(3) if s.value is not none else '-', s.n, s.deviated_count, s.min_value|num(3) if s.min_value is not none else '-', s.max_value|num(3) if s.max_value is not none else '-']) %}{% endfor %}
 {{ ui.grid(['일', '값', '건수', '이탈', '최소', '최대'], srows) }}
 {% endif %}
 {% elif kind == 'delivery' %}
 {% if tot %}{{ cards.tiles([('납기 건수', tot.due_count, '', ''), ('출하 완료', tot.shipped_count, '', ''), ('준수', tot.on_time, '', ''), ('지연', tot.late, '', 'err' if tot.late else ''), ('대기', tot.pending, '', ''), ('준수율', tot.on_time_rate|num(1) if tot.on_time_rate is not none else none, '%', '')]) }}{% endif %}
-{% set rows = [] %}{% for r in section.rows %}{% set _ = rows.append([(r.day|dt if r.day is defined and r.day else (r.code|txt) ~ ' ' ~ (r.name|txt(''))), r.due_count, r.shipped_count, r.on_time, r.late, r.pending, cards.pct(r.on_time_rate)]) %}{% endfor %}
+{% set rows = [] %}{% for r in section.rows %}{% set _ = rows.append([(r.day|dt('%Y-%m-%d') if r.day is defined and r.day else (r.code|txt) ~ ' ' ~ (r.name|txt(''))), r.due_count, r.shipped_count, r.on_time, r.late, r.pending, cards.pct(r.on_time_rate)]) %}{% endfor %}
 {{ ui.grid(['기준', '납기 건수', '출하 완료', '준수', '지연', '대기', '준수율'], rows) }}
 {% else %}
 {% if tot %}{{ cards.tiles([('설비', tot.equipment_count, '', ''), ('가동률', tot.run_rate|num(1) if tot.run_rate is not none else none, '%', ''), ('정지', tot.stop_count, t('건'), ''), ('고장', tot.fault_count, t('건'), 'err' if tot.fault_count else ''), ('MTTR', tot.mttr_hours|num(2) if tot.mttr_hours is not none else none, 'h', '')]) }}{% endif %}
-{% set rows = [] %}{% for r in section.rows %}{% set _ = rows.append([r.code ~ ' ' ~ r.name, r.current_state or NOT_COLLECTED, (r.run_seconds / 3600)|num(2), (r.logged_seconds / 3600)|num(2), cards.pct(r.run_rate), r.stop_count, r.fault_count, r.mttr_hours|num(2) if r.mttr_hours is not none else '-']) %}{% endfor %}
+{% set rows = [] %}{% for r in section.rows %}{% set _ = rows.append([r.code ~ ' ' ~ r.name, cards.badge(r.current_state) if r.current_state else NOT_COLLECTED, (r.run_seconds / 3600)|num(2), (r.logged_seconds / 3600)|num(2), cards.pct(r.run_rate), r.stop_count, r.fault_count, r.mttr_hours|num(2) if r.mttr_hours is not none else '-']) %}{% endfor %}
 {{ ui.grid(['설비', '현재 상태', '가동 시간', '기록 시간', '가동률', '정지', '고장', 'MTTR'], rows) }}
 {% endif %}
 
-{% if device == 'mobile' %}
-<div class="m-sec">
+<div class="m-sec m-only">
   {% for r in section.rows %}
-  {% set title = (r.day|dt if r.day is defined and r.day else (r.code|txt) ~ ' ' ~ (r.name|txt(''))) %}
+  {% set title = (r.day|dt('%Y-%m-%d') if r.day is defined and r.day else (r.code|txt) ~ ' ' ~ (r.name|txt(''))) %}
   {% if kind == 'production' %}{{ cards.card(title, '', [('계획', r.plan_qty|num(3)), ('양품', r.good_qty|num(3)), ('불량', r.defect_qty|num(3)), ('달성률', cards.pct(r.achieve_rate)), ('양품률', cards.pct(r.good_rate))]) }}
   {% elif kind == 'quality' and by == 'defect' %}{{ cards.card(title, '', [('건수', r.defect_count), ('수량', r.defect_qty|num(3))]) }}
   {% elif kind == 'quality' %}{{ cards.card(title, '', [('검사', r.inspection_count), ('합격', r.pass_count), ('불합격', r.fail_count), ('합격률', cards.pct(r.pass_rate))]) }}
   {% elif kind == 'delivery' %}{{ cards.card(title, '', [('납기', r.due_count), ('출하 완료', r.shipped_count), ('지연', r.late), ('준수율', cards.pct(r.on_time_rate))]) }}
   {% else %}{{ cards.card(title, r.current_state or '', [('가동률', cards.pct(r.run_rate)), ('정지', r.stop_count), ('고장', r.fault_count)]) }}{% endif %}
+  {% else %}
+  <p class="empty-inline">{{ NOT_COLLECTED }}</p>
   {% endfor %}
 </div>
-{% endif %}
 {% endblock %}

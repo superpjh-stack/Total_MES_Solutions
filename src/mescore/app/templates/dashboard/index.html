@@ -1,14 +1,72 @@
-{# CMN-04 대시보드 — 역할별 판 하나: 공통 숫자 4 + 역할별 강조 1 + 바로가기(권한 칸 조회 이상만). 읽기만 — stats.dashboard(). 디자이너3 home/dashboard.html 의 데이터. #}
+{# CMN-04 대시보드 — 디자이너3 docs/design/home/dashboard.html 이식. 역할별 판 하나(관리자 · 생산 · 품질 · 현장): 공통 숫자 4 + 역할별 강조 1 + 바로가기(권한 칸 조회 이상만).
+   ctx(개발3 routers/dashboard.py · 바꾸지 않는다): board(판 이름) today{date work_orders results inspections_pending shipments_pending} extra{key label value} extra_all shortcuts[{screen_id name path}].
+   읽기만 — stats.dashboard(). 타일 링크는 user.can_open + nav.channel_allowed 로 템플릿이 판단한다(권한 없으면 링크 없는 타일). null → 미수집. #}
 {% extends "base.html" %}
 {% import "trc/_cards.html" as cards %}
-{% block head %}{{ cards.styles() }}{% endblock %}
+{% block head %}{{ cards.styles() }}
+<style>
+.dash{display:flex;flex-direction:column;gap:14px}
+.dash .panel-head{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px 16px}
+.dash .panel-head h2{margin:0;font-size:var(--fs-xl)}.dash .panel-head h2 small{font-weight:400;color:var(--c-ink-2);font-size:var(--fs-md);margin-left:10px}
+.dash .as-of{font-size:12.5px;color:var(--c-ink-3)}.dash .as-of a{color:var(--c-accent)}
+.dash .tiles{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0}
+@media (max-width:900px){.dash .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.dash .tile{display:flex;flex-direction:column;gap:4px;min-height:112px;padding:14px 16px}
+.dash .tile .l{font-size:12.5px}.dash .tile .v{font-size:34px;line-height:1.05;font-weight:600}.dash .tile .v.is-empty{font-size:16px}
+.dash .tile .s{margin-top:auto;font-size:var(--fs-sm);color:var(--c-ink-3)}
+.dash .tile[data-focus]{border-color:var(--c-accent);background:var(--c-accent-tint)}
+.dash .tile .v[data-status="critical"]{color:var(--c-err)}.dash .tile .v[data-status="warn"]{color:var(--c-warn)}.dash .tile .v[data-status="good"]{color:var(--c-ok)}
+.dash .row{display:grid;grid-template-columns:2fr 1fr;gap:12px}
+@media (max-width:900px){.dash .row{grid-template-columns:minmax(0,1fr)}}
+.dash .box{background:var(--c-surface);border:var(--bw) solid var(--c-line);border-radius:var(--r-lg);padding:14px 16px;min-width:0}
+.dash .box h3{margin:0 0 10px;font-size:var(--fs-md);color:var(--c-ink-2);font-weight:600}
+.dash .links{display:flex;flex-wrap:wrap;gap:8px}
+.dash .links a{padding:8px 14px;border:var(--bw) solid var(--c-line);border-radius:8px;font-size:13.5px;background:var(--c-bg);color:inherit}
+.dash .links a:hover{border-color:var(--c-accent);color:var(--c-accent);text-decoration:none}
+.dash .links a.print{border-style:dashed}
+.dash .focus{background:var(--c-surface);border:var(--bw) solid var(--c-line);border-radius:var(--r-lg);padding:14px 16px;display:flex;align-items:baseline;gap:14px;min-width:0;flex-wrap:wrap}
+.dash .focus b{font-size:34px;line-height:1;font-variant-numeric:tabular-nums}.dash .focus b.is-empty{font-size:16px}
+.dash .focus b[data-status="critical"]{color:var(--c-err)}.dash .focus b[data-status="warn"]{color:var(--c-warn)}.dash .focus b[data-status="good"]{color:var(--c-ok)}
+.dash .focus span{color:var(--c-ink-2)}.dash .focus a{margin-left:auto;font-size:var(--fs-md);color:var(--c-accent)}
+body.ch-pop .dash .tile .v{font-size:44px}body.ch-pop .dash .links a{padding:14px 20px;font-size:16px}
+</style>
+{% endblock %}
 
 {% block body %}
-<section class="panel">
-  <h2>{{ t('대시보드') }} <small class="muted">{{ t(board) }} · {{ today.date }}</small></h2>
-  {{ cards.stat_grid([('오늘 작업지시', today.work_orders, t('건')), ('오늘 실적', today.results, t('건')), ('검사 대기', today.inspections_pending, t('건')), ('출하 대기', today.shipments_pending, t('건'))]) }}
-  {{ cards.tiles([(extra.label, extra.value, t('건'), 'warn' if extra.value else '')]) }}
-  <h3>{{ t('바로가기') }}</h3>
-  <div class="chips">{% for s in shortcuts %}<a class="chip" href="{{ s.path }}">{{ t(s.name) }}</a>{% else %}<span class="muted">{{ t('열 수 있는 화면이 없습니다') }}</span>{% endfor %}</div>
+{% set role = user.role_code %}
+{% macro href(sid, extra='') %}{% if user.can_open(sid) and nav.channel_allowed(sid, device) %}{{ nav.path_of(sid) }}{{ extra }}{% endif %}{% endmacro %}
+{% macro tile(sid, label, value, sub='', status='', focus=false, extra='') %}
+{% set h = href(sid, extra)|trim %}
+<{{ 'a' if h else 'div' }} class="tile"{% if h %} href="{{ h }}"{% endif %}{% if focus %} data-focus{% endif %}>
+  <div class="l">{{ t(label) }}</div>
+  <div class="v{% if value is none %} is-empty{% endif %}"{% if status and value %} data-status="{{ status }}"{% endif %}>{{ value if value is not none else NOT_COLLECTED }}</div>
+  {% if sub %}<div class="s">{{ sub }}</div>{% endif %}
+</{{ 'a' if h else 'div' }}>
+{% endmacro %}
+{% set focus_link = {'approvals_pending': ('SHP-02', '출하 승인'), 'late_orders': ('SHP-03', '출하 현황'), 'issues_open': ('QUA-04', '이상 · 시정'),
+                     'labels_today': ('POP-04', 'LOT 라벨'), 'deviated': ('KPI-02', '측정값 추이'), 'faults': ('EQP-03', '고장')}.get(extra.key) %}
+{% set zero_good = extra.key in ('late_orders', 'issues_open', 'deviated', 'faults') %}
+<section class="panel dash" data-role="{{ role }}">
+  <div class="panel-head">
+    <h2>{{ t('오늘') }} <small>{{ t(board) }} · {{ today.date }}</small></h2>
+    <span class="as-of">{{ t('집계') }} {{ now[11:16] }} {{ t('기준') }}{% set b = href('KPI-01', '?device=board')|trim %}{% if b %} · {{ t('현황판') }} <a href="{{ b }}">{{ b }}</a>{% endif %}</span>
+  </div>
+  <div class="tiles">
+    {{ tile('JOB-02', '오늘 지시', today.work_orders, t('계획일 = 오늘 · 취소 제외'), '', role in ('PROD', 'FIELD')) }}
+    {{ tile('KPI-02', '오늘 실적', today.results, t('오늘 시작한 실적'), '', false, '?kind=production') }}
+    {{ tile('QUA-02', '검사 대기', today.inspections_pending, t('판정 전 검사'), 'warn', role == 'QA') }}
+    {{ tile('SHP-01', '출하 대기', today.shipments_pending, t('등록 · 미승인') if role == 'ADMIN' else t('등록 상태'), '', role == 'ADMIN') }}
+  </div>
+  <div class="row">
+    <div class="box">
+      <h3>{{ t('바로가기') }}</h3>
+      <div class="links">{% for s in shortcuts %}<a href="{{ s.path }}"{% if s.screen_id in ('JOB-03', 'POP-04', 'SHP-04') %} class="print"{% endif %}>{{ t(s.name) }}</a>{% else %}<span class="is-empty">{{ t('열 수 있는 화면이 없습니다') }}</span>{% endfor %}</div>
+    </div>
+    <div class="focus">
+      <b{% if extra.value is none %} class="is-empty"{% elif zero_good %} data-status="{{ 'critical' if extra.value else 'good' }}"{% endif %}>{{ extra.value if extra.value is not none else NOT_COLLECTED }}</b>
+      <span>{{ t(extra.label) }}</span>
+      {% if focus_link %}{% set fh = href(focus_link[0], '?kind=quality' if extra.key == 'deviated' else '')|trim %}{% if fh %}<a href="{{ fh }}">{{ t(focus_link[1]) }} →</a>{% endif %}{% endif %}
+    </div>
+  </div>
 </section>
 {% endblock %}

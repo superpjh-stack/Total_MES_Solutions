@@ -1,24 +1,25 @@
-{# KPI-03 지표 정의 — 조회(F-KPI-08 정의 + 현재값 + 목표 대비) · 등록(F-KPI-06) · 수정(F-KPI-07 목표값 · 표시 여부). 목표 NULL → 미확정(D-602). #}
+{# KPI-03 지표 정의 — 조회(F-KPI-08 정의 + 현재값 + 목표 대비) · 등록(F-KPI-06) · 수정(F-KPI-07 목표값 · 표시 여부). 목표 NULL → 미확정(D-602).
+   ctx(개발3 · 폼 name 바꾸지 않는다): rows opened frm to core_keys pack_keys can_write. 디자이너1 컴포넌트(표 · 배지 · undecided). #}
 {% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "trc/_cards.html" as cards %}
 {% block head %}{{ cards.styles() }}{% endblock %}
 
 {% block search %}
-{{ ui.field('기간 시작', 'frm', frm|dt, type='date') }}
-{{ ui.field('기간 끝', 'to', to|dt, type='date') }}
+{{ ui.field('기간 시작', 'frm', frm|dt('%Y-%m-%d'), type='date') }}
+{{ ui.field('기간 끝', 'to', to|dt('%Y-%m-%d'), type='date') }}
 {% endblock %}
 
 {% block grid %}
 <table class="grid">
-  <thead><tr><th>{{ t('순서') }}</th><th>{{ t('지표 키') }}</th><th>{{ t('이름') }}</th><th>{{ t('산식') }}</th><th>{{ t('현재값') }}</th><th>{{ t('목표값') }}</th><th>{{ t('상태') }}</th><th>{{ t('표시') }}</th><th></th></tr></thead>
+  <thead><tr><th class="num">{{ t('순서') }}</th><th>{{ t('지표 키') }}</th><th>{{ t('이름') }}</th><th>{{ t('산식') }}</th><th class="num">{{ t('현재값') }}</th><th class="num">{{ t('목표값') }}</th><th>{{ t('상태') }}</th><th>{{ t('표시') }}</th><th></th></tr></thead>
   <tbody>
   {% for r in rows %}
-    <tr{% if opened and opened.id == r.id %} class="sel"{% endif %}><td>{{ r.seq }}</td><td><code>{{ r.indicator_key }}</code></td><td>{{ r.name }}</td><td><code>{{ r.calc_kind }}</code>{% if not r.known %} <span class="undecided">{{ t('키 없음') }}</span>{% endif %}</td>
+    <tr{% if opened and opened.id == r.id %} class="sel"{% endif %}><td class="num">{{ r.seq }}</td><td><code>{{ r.indicator_key }}</code></td><td>{{ t(r.name) }}</td><td><code>{{ r.calc_kind }}</code>{% if not r.known %} <span class="undecided">{{ t('키 없음') }}</span>{% endif %}</td>
       <td class="num">{% if r.value is none %}<span class="is-empty">{{ NOT_COLLECTED }}</span>{% else %}{{ r.value|num(1) }} {{ r.unit|txt('') }}{% endif %}</td>
       <td class="num">{% if r.target_value is none %}{{ ui.undecided('D-602') }}{% else %}{{ r.target_value|num(1) }}{% endif %}</td>
-      <td>{% if r.status %}{{ cards.badge(r.status, {'good': 'b-ok', 'warn': 'b-warn', 'critical': 'b-err'}[r.status]) }}{% else %}-{% endif %}</td>
-      <td>{{ r.visible_yn }}</td><td><a class="btn btn-sm btn-ghost" href="?id={{ r.id }}">{{ t('수정') }}</a></td></tr>
+      <td>{% if r.status %}{{ cards.badge({'good': '정상', 'warn': '경고', 'critical': '미달'}[r.status], {'good': 'badge-ok', 'warn': 'badge-warn', 'critical': 'badge-err'}[r.status]) }}{% else %}-{% endif %}</td>
+      <td>{{ cards.badge('표시', 'badge-info') if r.visible_yn == 'Y' else cards.badge('숨김', 'badge-neutral') }}</td><td><a class="btn btn-sm" href="?id={{ r.id }}">{{ t('수정') }}</a></td></tr>
   {% else %}
     <tr><td colspan="9" class="empty">{{ NOT_COLLECTED }}</td></tr>
   {% endfor %}
@@ -36,6 +37,7 @@
       {{ ui.select('표시', 'visible_yn', [('Y', 'Y'), ('N', 'N')], opened.visible_yn) }}
       {{ ui.field('순서', 'seq', opened.seq) }}
     </div>
+    <p class="muted"><small>{{ t('목표값을 비워 보내면 바꾸지 않는다 · 미확정으로 되돌리려면') }} <code>clear_target=1</code></small></p>
   </form>
 </section>
 {% endif %}

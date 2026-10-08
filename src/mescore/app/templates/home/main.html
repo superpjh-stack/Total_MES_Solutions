@@ -1,33 +1,77 @@
-{# 메인 = IA 화면 (CMN-02 · 개발1 · routers/home.py). 디자이너3 docs/design/home/home.html 의 규칙을 최소로 옮겼다 — 이식은 웨이브 A′.
-   모듈 카드를 일하는 순서(core.yaml: order · 팩 menus.order = nav.MENUS)로. 현재 역할의 칸이 `없음` 이면 카드는 흐리게(data-level="없음") + 링크 없음 (G-C17).
-   수는 계약 · core.yaml · 병합본에서 센다. "오늘 건수" 는 stats(개발3)가 생기면 — 지금은 미수집. 문구는 t(). #}
+{# 메인 = IA 화면 (CMN-02 · 개발1 routers/home.py). 디자이너3 docs/design/home/home.html 이식.
+   ctx(개발1 · 바꾸지 않는다): cards[{menu seq level allowed screens[{screen functions}] fn_count write_roles today}] n_allowed n_menus n_screens n_functions n_batch lineage numbering pack.
+   모듈 카드를 일하는 순서(core.yaml: order · 팩 menus.order = nav.MENUS)로. 현재 역할의 칸(rbac.cell)이 `없음` 이면 카드는 흐리게 + 링크 없음(G-C17 — check_routes 가 href 로 센다).
+   팩이 hide 한 모듈은 nav.MENUS 에 없다(카드 없음). "오늘 건수" 는 c.today — 개발1 이 stats 공개 함수로 넘기면 보인다, 지금은 None → 미수집. 문구는 t(). #}
 {% extends "base.html" %}
+{% import "trc/_cards.html" as cmp %}
+{% block head %}{{ cmp.styles() }}
+<style>
+.ia-top .intro{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px 24px}
+.ia-top .intro h2{margin:0;font-size:var(--fs-xl)}.ia-top .intro h2 small{font-weight:400;color:var(--c-ink-2);font-size:var(--fs-md);margin-left:10px}
+.ia-top .who{color:var(--c-ink-2);font-size:var(--fs-md)}.ia-top .who b{color:var(--c-ink)}
+.ia-top .sys{margin:8px 0 0;font-size:var(--fs-sm);color:var(--c-ink-3)}.ia-top .sys b{color:var(--c-ink-2);font-weight:600}
+.ia-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;padding-top:10px}
+@media (max-width:1100px){.ia-cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:820px){.ia-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:520px){.ia-cards{grid-template-columns:minmax(0,1fr)}}
+.ia-cards .card{position:relative;display:flex;flex-direction:column;gap:10px;background:var(--c-surface);border:var(--bw) solid var(--c-line);border-radius:var(--r-lg);padding:16px 16px 14px;min-height:196px;min-width:0}
+.ia-cards .card:hover{border-color:var(--c-accent);box-shadow:var(--sh-2)}
+.ia-cards .card.card-ext{border-style:dashed}
+.ia-cards .card[data-level="없음"]{opacity:.45;background:transparent}
+.ia-cards .card[data-level="없음"]:hover{border-color:var(--c-line);box-shadow:none}
+.ia-cards .step{position:absolute;top:-10px;left:12px;background:var(--c-ink);color:var(--c-ink-inverse);font-size:var(--fs-xs);font-weight:600;padding:2px 8px;border-radius:999px;letter-spacing:.04em;min-width:0;line-height:1.5}
+.ia-cards .card[data-level="없음"] .step{background:var(--c-ink-3)}
+.ia-cards h3{margin:4px 0 0;font-size:17px;display:flex;align-items:baseline;gap:8px;min-width:0}
+.ia-cards h3 a.go{color:inherit}.ia-cards h3 a.go:hover{color:var(--c-accent);text-decoration:underline}
+.ia-cards h3 code{font-size:var(--fs-xs);color:var(--c-ink-3);font-family:var(--font-mono);font-weight:400;background:transparent;padding:0}
+.ia-cards .level{margin-left:auto;font-size:var(--fs-xs);padding:1px 7px;border-radius:999px;border:var(--bw) solid var(--c-line);color:var(--c-ink-2);white-space:nowrap}
+.ia-cards .level[data-write]{border-color:var(--c-accent);color:var(--c-accent)}
+.ia-cards .facts{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;font-size:12.5px;color:var(--c-ink-2)}
+.ia-cards .facts b{display:block;font-size:22px;line-height:1.1;color:var(--c-ink);font-weight:600;font-variant-numeric:tabular-nums}
+.ia-cards .facts b.is-empty{font-size:14px;color:var(--c-ink-3);font-weight:400}
+.ia-cards .roles{font-size:var(--fs-sm);color:var(--c-ink-3)}.ia-cards .roles b{color:var(--c-ink-2);font-weight:500}.ia-cards .roles .chan{color:var(--c-ink-3)}
+.ia-cards .screens{display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:auto;padding-top:4px}
+.ia-cards .screens a,.ia-cards .screens span{font-size:var(--fs-sm);padding:2px 8px;border-radius:999px;background:var(--c-bg);color:var(--c-ink-2);border:var(--bw) solid transparent}
+.ia-cards .screens a:hover{border-color:var(--c-line);color:var(--c-ink);text-decoration:none}
+.legend{margin:14px 0 0;font-size:12.5px;color:var(--c-ink-3);display:flex;gap:18px;flex-wrap:wrap}
+</style>
+{% endblock %}
 {% block body %}
-<section class="panel ia-top intro">
-  <h2>{{ user.user_name }} <small>{{ user.role_name }} · {{ channel }}</small></h2>
-  <dl class="kv">
-    <dt>{{ t('열 수 있는 메뉴') }}</dt><dd>{{ n_allowed }} / {{ n_menus }} <small>— {{ t('권한 표') }}({{ t('시스템') }} &gt; {{ t('권한 표') }})의 지금 값</small></dd>
-    <dt>{{ t('이 시스템') }}</dt><dd>{{ system_name }} — {{ t('코어') }} {{ core_version }}{% if pack.name %} + {{ t('팩') }} <b>{{ pack.display_name }}</b> ({{ pack.name }}){% else %} ({{ t('코어 단독') }}){% endif %}. {{ t('모듈') }} {{ n_menus }} · {{ t('화면') }} {{ n_screens }} · {{ t('기능') }} {{ n_functions }} + {{ t('이관 배치') }} {{ n_batch }}.</dd>
-    <dt>{{ t('중심') }}</dt><dd><b>{{ t('원재료 LOT') }} → {{ t('생산 LOT') }} → {{ t('출하 LOT') }} {{ t('계보') }}</b> ({{ t('관계') }}: {% for r in lineage.relations %}{{ r.name }}{% if not loop.last %} · {% endif %}{% endfor %}) 와 <b>{{ t('측정값') }}</b> ({{ t('선언') }} → {{ t('자동 폼') }} → {{ t('기록') }} → {{ t('집계') }}).</dd>
-    <dt>{{ t('번호') }}</dt><dd>{% for kind, rule in numbering.items() %}<code>{{ kind }}</code> {{ rule.prefix }}{{ rule.date }}{{ '0' * (rule.digits - 1) }}1{% if not loop.last %} · {% endif %}{% endfor %} <small>— {{ t('형식은 채번 규칙(SYS-05) 행') }}</small></dd>
-  </dl>
-  {% if not n_allowed %}<p class="empty">{{ t('열 수 있는 메뉴가 없다 — 권한 표를 확인한다') }}.</p>{% endif %}
+{% set ns = namespace(w=0, r=0, n=0) %}
+{% for c in cards %}{% if c.level.startswith('입력') %}{% set ns.w = ns.w + 1 %}{% elif c.allowed %}{% set ns.r = ns.r + 1 %}{% else %}{% set ns.n = ns.n + 1 %}{% endif %}{% endfor %}
+<section class="panel ia-top">
+  <div class="intro">
+    <h2>{{ t('메인') }} <small>{{ t('일하는 순서대로 — 왼쪽 위부터') }}</small></h2>
+    <span class="who">{{ t('역할') }} <b>{{ user.role_name }}</b> · {{ t('입력 가능') }} {{ ns.w }} · {{ t('조회') }} {{ ns.r }} · {{ t('권한 없음') }} {{ ns.n }} · {{ channel }}</span>
+  </div>
+  <p class="sys">{{ system_name }} — {{ t('코어') }} {{ core_version }}{% if pack.name %} + {{ t('팩') }} <b>{{ pack.display_name }}</b> ({{ pack.name }}){% else %} ({{ t('코어 단독') }}){% endif %} · {{ t('모듈') }} {{ n_menus }} · {{ t('화면') }} {{ n_screens }} · {{ t('기능') }} {{ n_functions }} + {{ t('이관 배치') }} {{ n_batch }}
+    · {{ t('계보') }} {% for r in lineage.relations %}{{ t(r.name) }}{% if not loop.last %} · {% endif %}{% endfor %}
+    · {{ t('번호') }} {% for kind, rule in numbering.items() %}<code>{{ kind }}</code> {{ rule.prefix }}{{ rule.date }}{{ '0' * (rule.digits - 1) }}1{% if not loop.last %} · {% endif %}{% endfor %}</p>
+  {% if not n_allowed %}<p class="empty-inline">{{ t('열 수 있는 메뉴가 없다 — 권한 표를 확인한다') }}.</p>{% endif %}
 </section>
 
 <section class="panel" id="ia-menus">
-  <h2>{{ t('메뉴') }} <small>{{ t('일하는 순서 — 좌측 메뉴와 같다. 권한이 없음인 모듈은 흐리게 보이고 열리지 않는다') }}</small></h2>
-  <div class="cards">
+  <div class="ia-cards cards">
     {% for c in cards %}
-    <div class="card{% if c.menu.is_pack %} card-ext{% endif %}{% if not c.allowed %} dim{% endif %}" data-menu="{{ c.menu.code }}" data-level="{{ c.level }}"{% if not c.allowed %} style="opacity:.45" aria-disabled="true"{% endif %}>
-      <h3><span><span class="step">{{ c.seq }}</span> {% if c.allowed and c.menu.screens %}<a class="go" href="{{ c.menu.screens[0].path }}">{{ t(c.menu.name) }}</a>{% else %}{{ t(c.menu.name) }}{% endif %}</span> <small class="level" data-level="{{ c.level }}">{{ c.level }}</small></h3>
-      <ul>
-        {% for s in c.screens %}
-        <li>{% if c.allowed %}<a href="{{ s.screen.path }}">{{ t(s.screen.name) }}</a>{% else %}<span class="no">{{ t(s.screen.name) }}</span>{% endif %}{% if s.functions %} <small>— {% for n in s.functions %}{{ t(n) }}{% if not loop.last %} · {% endif %}{% endfor %}</small>{% endif %}</li>
-        {% else %}<li class="empty">{{ t('화면 없음') }}</li>{% endfor %}
-      </ul>
-      <p class="card-foot">{{ t('기능') }} {{ c.fn_count }} · {{ t('화면') }} {{ c.menu.screens|length }} · {{ t('입력') }}: {{ c.write_roles|join(' · ') if c.write_roles else t('없음') }} · {{ t('오늘') }} {{ c.today if c.today is not none else NOT_COLLECTED }}{% if c.menu.is_pack %} · <b>{{ t('팩') }}</b>{% endif %}</p>
-    </div>
+    <article class="card{% if c.menu.is_pack %} card-ext{% endif %}" data-module="{{ c.menu.module }}" data-menu="{{ c.menu.code }}" data-level="{{ '없음' if not c.allowed else c.level }}"{% if not c.allowed %} aria-disabled="true"{% endif %}>
+      <span class="step">{{ c.seq }} {{ t(c.menu.name) }}</span>
+      <h3>{% if c.allowed and c.menu.screens %}<a class="go" href="{{ c.menu.screens[0].path }}">{{ t(c.menu.name) }}</a>{% else %}<span>{{ t(c.menu.name) }}</span>{% endif %} <code>{{ c.menu.module }}</code><span class="level"{% if c.level.startswith('입력') %} data-write{% endif %}>{{ t('권한 없음') if not c.allowed else c.level }}</span></h3>
+      <div class="facts">
+        <div>{{ t('화면') }}<b>{{ c.menu.screens|length }}</b></div>
+        <div>{{ t('오늘') }}<b{% if c.today is none %} class="is-empty"{% endif %}>{{ c.today if c.today is not none else NOT_COLLECTED }}</b></div>
+      </div>
+      <div class="roles">{{ t('입력') }} <b>{{ c.write_roles|join(' · ') if c.write_roles else '—' }}</b>{% if c.menu.channels and c.menu.channels|reject('equalto', 'web')|list %} <span class="chan">· {{ c.menu.channels|reject('equalto', 'web')|join(' · ') }}</span>{% endif %}{% if c.menu.is_pack %} · <b>{{ t('팩') }}</b>{% endif %} · {{ t('기능') }} {{ c.fn_count }}</div>
+      <div class="screens">
+        {% for s in c.screens %}{% if c.allowed %}<a href="{{ s.screen.path }}" title="{{ s.functions|map('t')|join(' · ') }}">{{ t(s.screen.name) }}</a>{% else %}<span>{{ t(s.screen.name) }}</span>{% endif %}{% else %}<span class="is-empty">{{ t('화면 없음') }}</span>{% endfor %}
+      </div>
+    </article>
     {% endfor %}
+  </div>
+  <div class="legend">
+    <span>{{ t('번호 = 일하는 순서(팩 menus.order 로 바뀐다)') }}</span>
+    <span>{{ t('흐린 카드 = 이 역할의 권한 칸이 없음 (403 · 탐색에서도 숨김)') }}</span>
+    <span>{{ t('카드 이름은 용어 치환 · 팩 rename 자리 — 경로 · 화면 ID 는 바뀌지 않는다') }}</span>
+    <span>{{ t('오늘 건수가 없으면 미수집') }}</span>
   </div>
 </section>
 {% endblock %}

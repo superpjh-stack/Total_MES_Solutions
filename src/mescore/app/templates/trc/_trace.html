@@ -1,6 +1,22 @@
-{# 추적 화면 공통 본문 — TRC-01(정방향) · TRC-02(역방향) 이 include 한다. 쓰기 0. Web: 깊이순 화살표 표 · 모바일: 깊이마다 한 단, 분기는 details 로 접기(JS 0). #}
+{# 추적 화면 공통 본문 — TRC-01(정방향) · TRC-02(역방향) 이 include 한다. 쓰기 0. ctx(개발3 routers/trc.py · 바꾸지 않는다): mode no trace start start_links stages[{depth edges[{relation qty from to links}] relations nodes open}] materials shipments stock depth node_count edge_count scan_error.
+   Web(디자이너1 web/screens/trc_backward.html): 계보 트리(ul.tree · 가지 details 접기 — 깊이 2 까지 펴고 그 아래는 접힘 · 노드마다 지시 · 검사 · 출하 · 정/역방향 링크) + 깊이순 화살표 표.
+   모바일(디자이너2 mobile/trc_backward_m.html): 390px 세로 단계 — 깊이마다 한 단, 분기는 details 로 접기(JS 0). 없는 번호는 422 재렌더 + data-scan 포커스. #}
 {% import "home/_macros.html" as ui %}
 {% import "trc/_cards.html" as cards %}
+{% set arrow = '←' if mode == backward else '→' %}
+{% macro node(nd, rel='', links=none, qty=none, start=false) -%}
+<span class="node{% if start %} start{% endif %}">{% if rel %}<span class="rel">{{ t(rel) }} {{ arrow }}</span>{% endif %}<span class="badge badge-kind">{{ nd.kind }}</span><span class="no">{{ nd.no }}</span>{% if nd.item %}<span>{{ nd.item }}</span>{% endif %}{% if qty is not none or nd.qty is not none %}<span class="qty">{{ (qty if qty is not none else nd.qty)|num(3) }} {{ nd.unit|txt('') }}</span>{% endif %}{{ cards.badge(nd.state) }}{% if nd.insp_status %}{{ cards.badge(nd.insp_status) }}{% endif %}{% if links %}<span class="links">{% if links.work_order %}<a href="{{ links.work_order }}">{{ t('지시') }}</a>{% endif %}{% if links.inspection %}<a href="{{ links.inspection }}">{{ t('검사') }}</a>{% endif %}{% if links.shipment %}<a href="{{ links.shipment }}">{{ t('출하') }}</a>{% endif %}{% if links.lot %}<a href="{{ links.lot }}">LOT</a>{% endif %}<a href="{{ links.forward }}">{{ t('정방향') }}</a><a href="{{ links.backward }}">{{ t('역방향') }}</a></span>{% endif %}</span>
+{%- endmacro %}
+{% macro branch(kids, nid, depth) -%}
+{% if kids.get(nid) %}
+<ul>
+  {% for e in kids[nid] %}
+  <li>{% if kids.get(e.to.id) %}<details{% if depth < 3 %} open{% endif %}><summary>{{ node(e.to, e.relation, e.links, e.qty) }}</summary>{{ branch(kids, e.to.id, depth + 1) }}</details>{% else %}{{ node(e.to, e.relation, e.links, e.qty) }}{% endif %}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+{%- endmacro %}
+
 <section class="panel">
   {{ cards.scan_alert(scan_error) }}
   <div class="chips">
@@ -11,45 +27,63 @@
   {{ ui.scan_box(nav.path_of('TRC-01') if mode == forward else nav.path_of('TRC-02'), name='no', label='추적할 번호', method='get', button='추적', placeholder=no) }}
 
   {% if trace %}
-  <h2>{{ t('출발') }} <code>{{ start.no }}</code> {{ cards.badge(start.state) }}
-    <small class="muted">{{ t(start.kind_label) }} · {{ start.item|txt }} · {{ t('깊이') }} {{ depth }} · {{ t('노드') }} {{ node_count }} · {{ t('화살표') }} {{ edge_count }}</small></h2>
-  <div class="links">{% for k, href in start_links.items() %}<a href="{{ href }}">{{ t({'lot': 'LOT', 'work_order': '작업지시', 'inspection': '검사', 'shipment': '출하', 'forward': '정방향 추적', 'backward': '역방향 추적'}[k]) }}</a> {% endfor %}</div>
-  {% if not stages %}<p class="empty">{{ t('이 방향으로 이어진 계보가 없습니다') }} — {{ t(start.kind_label) }} {{ cards.badge(start.state) }}</p>{% endif %}
+  <h2>{{ t('역방향 추적') if mode == backward else t('정방향 추적') }} <small><code>{{ start.no }}</code> {{ t(start.kind_label) }}{% if start.item %} · {{ start.item }}{% endif %}</small>
+    <span class="right"><small>{{ t('깊이') }} {{ depth }} · {{ t('노드') }} {{ node_count }} · {{ t('화살표') }} {{ edge_count }}{% if mode == backward %} · {{ t('원재료 LOT') }} {{ materials|length }}{% else %} · {{ t('출하 LOT') }} {{ shipments|length }} · {{ t('재고') }} {{ stock|length }}{% endif %} · {{ t('재귀 조회 1회') }}</small></span></h2>
+  {% if not stages %}<p class="empty-inline">{{ t('이 방향으로 이어진 계보가 없습니다') }} — {{ t(start.kind_label) }} {{ cards.badge(start.state) }}</p>{% endif %}
 
-  <table class="grid plain">
-    <thead><tr><th>{{ t('깊이') }}</th><th>{{ t('관계') }}</th><th>{{ t('에서') }}</th><th>{{ t('으로') }}</th><th>{{ t('종류') }}</th><th>{{ t('품목') }}</th><th>{{ t('수량') }}</th><th>{{ t('상태') }}</th><th>{{ t('작업지시') }}</th><th></th></tr></thead>
+  {# ── Web: 계보 트리 — 들여쓰기 + 연결선, 가지는 details 로 접힌다 ── #}
+  {% set kids = {} %}
+  {% for st in stages %}{% for e in st.edges %}{% set _ = kids.setdefault(e['from'].id, []).append(e) %}{% endfor %}{% endfor %}
+  <ul class="tree web-only" aria-label="{{ t('계보 트리') }}">
+    <li>{{ node(start, '', start_links, none, true) }}{{ branch(kids, start.id, 1) }}</li>
+  </ul>
+
+  {# ── Web: 화살표 표 (Trace.edges — 출발점에서 가까운 순, 중복 없음) ── #}
+  <h3 class="web-only">{{ t('화살표') }} <small>{{ t('깊이순 · 중복 없음') }}</small></h3>
+  <table class="grid plain compact web-only">
+    <thead><tr><th class="num">{{ t('깊이') }}</th><th>{{ t('관계') }}</th><th>{{ t('에서') }}</th><th>{{ t('으로') }}</th><th>{{ t('종류') }}</th><th>{{ t('품목') }}</th><th class="num">{{ t('수량') }}</th><th>{{ t('상태') }}</th><th>{{ t('작업지시') }}</th><th></th></tr></thead>
     <tbody>
     {% for st in stages %}{% for e in st.edges %}
-      <tr><td>{{ st.depth }}</td><td>{{ t(e.relation) }}</td><td><code>{{ e['from'].no }}</code></td><td><code>{{ e.to.no }}</code></td><td>{{ t(e.to.kind_label) }}</td>
+      <tr><td class="num">{{ st.depth }}</td><td>{{ t(e.relation) }}</td><td><code>{{ e['from'].no }}</code></td><td><code>{{ e.to.no }}</code></td><td>{{ t(e.to.kind_label) }}</td>
         <td>{{ e.to.item|txt }}</td><td class="num">{{ e.qty|num(3) if e.qty is not none else '-' }}</td><td>{{ cards.badge(e.to.state) }}</td>
         <td>{% if e.to.work_order_no %}<a href="{{ e.links.work_order }}"><code>{{ e.to.work_order_no }}</code></a>{% else %}-{% endif %}</td>
         <td><a href="{{ e.links.backward }}">{{ t('역방향') }}</a> · <a href="{{ e.links.forward }}">{{ t('정방향') }}</a>{% if e.links.inspection %} · <a href="{{ e.links.inspection }}">{{ t('검사') }}</a>{% endif %}</td></tr>
-    {% endfor %}{% endfor %}
+    {% endfor %}{% else %}
+      <tr><td colspan="10" class="empty">{{ NOT_COLLECTED }}</td></tr>
+    {% endfor %}
     </tbody>
   </table>
 
-  <div class="m-sec trace">
+  {# ── 모바일: 세로 단계 — 깊이마다 한 단, 분기는 details 로 접기 ── #}
+  <div class="m-sec trace m-only">
+    <div class="t-node start">
+      {{ cards.card(start.no, start.state, [('종류', t(start.kind_label)), ('품목', start.item|txt), ('수량', ((start.qty|num(3)) ~ ' ' ~ (start.unit|txt(''))) if start.qty is not none else none), ('작업지시', start.work_order_no|txt)],
+                    ([('지시', start_links.work_order)] if start_links.work_order else []) + ([('검사', start_links.inspection)] if start_links.inspection else []) + ([('출하', start_links.shipment)] if start_links.shipment else []), 'start') }}
+    </div>
     {% for st in stages %}
     <div class="t-node">
-      <div class="depth">{{ t('깊이') }} {{ st.depth }} · {{ st.relations|map('t')|join(' · ') }} · {{ st.edges|length }}</div>
-      <details class="fold"{% if st.open %} open{% endif %}><summary><span class="grow">{{ st.nodes|length }} LOT</span></summary>
+      <div class="depth">{{ t('깊이') }} {{ st.depth }} · {{ st.relations|map('t')|join(' · ') }} {{ arrow }} {{ st.edges|length }}{{ t('건') }}</div>
+      <details class="fold"{% if st.open %} open{% endif %}><summary><span class="grow">{{ st.nodes|length }} LOT</span><span class="badge badge-neutral">{{ t('펼침') if st.open else t('접힘') }}</span></summary>
+        <div class="body">
         {% for e in st.edges %}
-        {{ cards.card(e.to.no, e.to.state, [('관계', t(e.relation)), ('종류', t(e.to.kind_label)), ('품목', e.to.item|txt), ('수량', (e.qty|num(3)) ~ ' ' ~ (e.to.unit|txt('')) if e.qty is not none else '-'), ('작업지시', e.to.work_order_no|txt)],
-                       [('역방향', e.links.backward), ('정방향', e.links.forward)] + ([('검사', e.links.inspection)] if e.links.inspection else [])) }}
+        {{ cards.card(e.to.no, e.to.state, [('관계', t(e.relation) ~ ' ' ~ arrow ~ ' ' ~ e['from'].no), ('종류', t(e.to.kind_label)), ('품목', e.to.item|txt), ('수량', ((e.qty|num(3)) ~ ' ' ~ (e.to.unit|txt(''))) if e.qty is not none else none), ('작업지시', e.to.work_order_no|txt)],
+                       [('역방향', e.links.backward), ('정방향', e.links.forward)] + ([('검사', e.links.inspection)] if e.links.inspection else []) + ([('지시', e.links.work_order)] if e.links.work_order else [])) }}
         {% endfor %}
+        </div>
       </details>
     </div>
     {% endfor %}
   </div>
 
   {% if mode == backward and materials %}
-  <h3>{{ t('원재료 LOT 전부') }} <small>{{ materials|length }}</small></h3>
-  <ul>{% for m in materials %}<li><code>{{ m.no }}</code> {{ m.item|txt }} {{ cards.badge(m.state) }} <a href="{{ nav.path_of('TRC-01') }}?no={{ m.no }}">{{ t('정방향') }}</a></li>{% endfor %}</ul>
+  <h3>{{ t('원재료 LOT 전부') }} <small>{{ t('중복 없이') }} {{ materials|length }}</small></h3>
+  <ul class="plain-list">{% for m in materials %}<li><code>{{ m.no }}</code> {{ m.item|txt }} {{ cards.badge(m.state) }}{% if m.insp_status %} {{ cards.badge(m.insp_status) }}{% endif %} <a href="{{ nav.path_of('TRC-01') }}?no={{ m.no }}">{{ t('정방향') }}</a></li>{% endfor %}</ul>
   {% endif %}
   {% if mode == forward %}
   <h3>{{ t('출하 LOT') }} <small>{{ shipments|length }}</small> · {{ t('재고') }} <small>{{ stock|length }}</small></h3>
-  <ul>{% for x in shipments %}<li><code>{{ x.no }}</code> {{ cards.badge('출하') }}</li>{% endfor %}
-      {% for s in stock %}<li><code>{{ s.no }}</code> {{ s.item|txt }} {{ cards.badge('재고') }}</li>{% endfor %}</ul>
+  <ul class="plain-list">{% for x in shipments %}<li><code>{{ x.no }}</code> {{ cards.badge('출하') }}</li>{% endfor %}
+      {% for s in stock %}<li><code>{{ s.no }}</code> {{ s.item|txt }} {{ cards.badge('재고') }}</li>{% endfor %}
+      {% if not shipments and not stock %}<li class="is-empty">{{ NOT_COLLECTED }}</li>{% endif %}</ul>
   {% endif %}
   {% endif %}
 </section>

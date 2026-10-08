@@ -1,0 +1,146 @@
+/* 출력물 4종(작업지시서 · LOT 라벨 · 출하 라벨 · 성적서) 공용 스타일 — 디자이너3. docs/design/print/*.html 의 <style> 을 한 파일로.
+   양식별 규칙은 body[data-print="work_order|label_lot|label_shipment|document"] 로 나눈다. 화면에서는 종이처럼 보이고, 인쇄에서는 @page 여백 · 배경 제거.
+   바코드는 printing.barcode_svg 의 인라인 SVG — fill:#000 만 예외(barcode_spec.md §2). 외부 CDN · 웹폰트 0. */
+
+/* ── TEMP-TOKENS: static/style.css :root 에 디자이너1 토큰이 아직 없어 출력물이 쓰는 토큰만 임시로 둔다. tokens.css 가 오면 지운다. ── */
+:root{
+  --font-sans:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","맑은 고딕","Noto Sans KR","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"D2Coding","Liberation Mono",monospace;
+  --r-md:4px;--r-lg:6px;--sh-2:0 4px 14px rgba(16,20,24,.16);
+  --c-bg:#f2f3f5;--c-surface:#ffffff;--c-surface-2:#eef0f2;--c-line:#d3d7dc;
+  --c-ink:#1b1f24;--c-ink-2:#5c6670;--c-ink-3:#8c959e;--c-ink-inverse:#ffffff;
+  --c-accent:#1f5fa8;--c-err:#b42318;--c-warn:#9a6200;--c-deviated:#9a6200;--c-empty:#8c959e;
+  --c-print-ink:#000000;--c-print-line:#000000;--c-print-bg:#ffffff;
+}
+@media print{:root{--c-bg:#fff;--c-surface:#fff;--c-surface-2:#fff;--c-line:#000;--c-ink:#000;--c-ink-2:#333;--c-ink-3:#666;--sh-2:none}}
+/* ── /TEMP-TOKENS ── */
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--c-bg);color:var(--c-ink);font-family:var(--font-sans);font-size:11pt;line-height:1.4}
+.toolbar{max-width:210mm;margin:16px auto 8px;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0 16px}
+.toolbar .cap{font-size:13px;color:var(--c-ink-2)}
+.toolbar .btn{font:inherit;font-size:14px;padding:8px 18px;border:1px solid var(--c-accent);background:var(--c-accent);color:var(--c-ink-inverse);border-radius:8px;cursor:pointer}
+.mono{font-family:var(--font-mono)}
+.empty-page{max-width:210mm;margin:24px auto;color:var(--c-empty);text-align:center}
+
+/* ── A4 용지 (작업지시서 · 성적서) — 화면에서는 종이처럼, 인쇄에서는 @page 여백만 ── */
+.sheet{background:var(--c-surface);width:210mm;min-height:297mm;margin:0 auto 24px;padding:14mm 12mm;box-shadow:var(--sh-2);position:relative}
+body[data-print="document"] .sheet{padding:14mm 12mm 16mm;font-size:10.5pt}
+.sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8mm;border-bottom:2px solid var(--c-ink);padding-bottom:3mm;margin-bottom:4mm}
+.sheet-head h1{margin:0 0 2mm;font-size:22pt;letter-spacing:.1em}
+.sheet-head h1 small{font-size:10pt;letter-spacing:0;color:var(--c-ink-2);margin-left:3mm;font-weight:400}
+.no{font-size:11pt;color:var(--c-ink-2);margin:0}
+.no strong{font-family:var(--font-mono);font-size:14pt;color:var(--c-ink);margin-left:3mm}
+.no.meta{margin-top:1mm;font-size:9pt}
+.status{display:inline-block;border:1px solid var(--c-ink);padding:0 2mm;margin-left:3mm;font-size:9pt;vertical-align:middle}
+.code{text-align:center;width:62mm}
+body[data-print="document"] .code{width:58mm}
+.code .barcode{width:62mm;height:14mm;display:block;fill:#000}
+body[data-print="document"] .code .barcode{width:58mm;height:12mm}
+.code .txt{font-family:var(--font-mono);font-size:10pt;letter-spacing:.08em;margin-top:1mm}
+.code .cap{font-size:8pt;color:var(--c-ink-3)}
+
+.sheet h2{font-size:11pt;margin:5mm 0 1.5mm;display:flex;justify-content:space-between;align-items:baseline}
+.sheet h2 small{font-weight:400;color:var(--c-ink-3);font-size:8.5pt}
+.sheet table{width:100%;border-collapse:collapse;font-size:10pt}
+body[data-print="document"] .sheet table{font-size:9.5pt}
+.sheet th,.sheet td{border:1px solid var(--c-line);padding:1.6mm 2mm;text-align:left;vertical-align:top}
+.sheet th{background:var(--c-surface-2);font-weight:600;white-space:nowrap}
+.sheet th small{font-weight:400;color:var(--c-ink-2)}
+table.kv th{width:22mm;color:var(--c-ink-2)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.c,th.c{text-align:center}
+td.mono{font-family:var(--font-mono);white-space:nowrap}
+td.blank{height:8.5mm}                          /* 손으로 적는 칸 */
+td.auto{color:var(--c-ink-3);background:var(--c-surface-2)}   /* 수집원 collect — 자동으로 채워지는 칸 */
+td.empty{color:var(--c-ink-3);text-align:center}
+.range{white-space:nowrap}
+td.dev{font-weight:700;color:var(--c-deviated)}
+.judge{font-weight:700}
+.judge[data-j="불합격"]{color:var(--c-err)}
+.judge[data-j="조건부"]{text-decoration:underline}
+.judge[data-j="미확정"],.judge[data-j="미수집"]{color:var(--c-ink-3);font-weight:400}
+tr.std td{background:var(--c-surface-2);color:var(--c-ink-2);font-size:8.5pt}
+
+.sign{display:grid;grid-template-columns:repeat(4,1fr);gap:3mm;margin-top:6mm;page-break-inside:avoid}
+.sign div{border:1px solid var(--c-line);height:22mm;position:relative;padding:1.5mm 2mm;font-size:9pt;color:var(--c-ink-2)}
+.sign div span{position:absolute;right:2mm;bottom:1.5mm;font-size:8pt;color:var(--c-ink-3)}
+.verdict{display:grid;grid-template-columns:1fr auto;gap:4mm;align-items:center;margin-top:6mm;border:2px solid var(--c-ink);padding:3mm 4mm;page-break-inside:avoid}
+.verdict .sum{font-size:9.5pt;color:var(--c-ink-2)}
+.verdict .sum b{color:var(--c-ink)}
+.verdict .big{font-size:20pt;font-weight:700;letter-spacing:.1em}
+.verdict .big[data-j="불합격"]{color:var(--c-err)}
+.verdict .big[data-j="미확정"],.verdict .big[data-j="미수집"]{color:var(--c-ink-3);font-size:14pt;font-weight:400}
+.issue{display:grid;grid-template-columns:1fr 1fr 44mm;gap:3mm;margin-top:6mm;page-break-inside:avoid;font-size:9.5pt}
+.issue div{border:1px solid var(--c-line);padding:2mm 3mm;min-height:22mm;position:relative}
+.issue div h3{margin:0 0 1mm;font-size:8.5pt;color:var(--c-ink-2);font-weight:600}
+.issue .seal{display:flex;align-items:center;justify-content:center;color:var(--c-ink-3);font-size:8.5pt}
+.foot{margin-top:5mm;font-size:8.5pt;color:var(--c-ink-3);display:flex;justify-content:space-between;gap:4mm}
+
+/* ── 라벨 (LOT · 출하) — mm 단위 고정. 안쪽 여백 3mm/2mm 는 라벨 프린터 절단 오차 자리 ── */
+.labels{display:flex;flex-wrap:wrap;gap:32px;padding:8px 24px 40px;max-width:900px;margin:0 auto;align-items:flex-start}
+.label{background:var(--c-surface);color:var(--c-print-ink);overflow:hidden;position:relative;box-shadow:0 0 0 1px var(--c-line);page-break-after:always;display:grid}
+.label .barcode{display:block;width:100%;fill:#000}
+.lotno{font-family:var(--font-mono);font-weight:600;letter-spacing:.06em;text-align:center;white-space:nowrap}
+.kind{display:inline-block;border:1px solid var(--c-print-line);padding:0 1.2mm;font-weight:600;white-space:nowrap}
+.ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.attrs{color:var(--c-print-ink);line-height:1.25}
+.attrs div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.attrs b{font-weight:600}
+
+/* LOT 라벨 100×50mm */
+.label[data-size="100x50"]{width:100mm;height:50mm;padding:3mm 4mm;grid-template-rows:auto auto 13mm auto 1fr;row-gap:1mm;font-size:9pt}
+.label[data-size="100x50"] .row1{display:flex;justify-content:space-between;align-items:baseline;font-size:8.5pt;color:var(--c-print-ink)}
+.label[data-size="100x50"] .item{font-size:14pt;font-weight:700;line-height:1.15}
+.label[data-size="100x50"] .item .mono{font-weight:500;font-size:10pt;margin-right:2mm}
+.label[data-size="100x50"] .barcode{height:13mm;width:80mm;margin:0 auto}     /* 좌우 10mm 씩 quiet zone */
+.label[data-size="100x50"] .lotno{font-size:12pt}
+.label[data-size="100x50"] .row5{display:grid;grid-template-columns:30mm 1fr;align-items:end;column-gap:3mm}
+.label[data-size="100x50"] .qty{font-size:16pt;font-weight:700;line-height:1}
+.label[data-size="100x50"] .qty small{font-size:9pt;font-weight:400;margin-left:1mm}
+.label[data-size="100x50"] .attrs{font-size:8pt}
+
+/* LOT 라벨 50×30mm */
+.label[data-size="50x30"]{width:50mm;height:30mm;padding:2mm 2.5mm;grid-template-rows:auto 8mm auto auto 1fr;row-gap:.6mm;font-size:6.5pt}
+.label[data-size="50x30"] .row1{display:flex;justify-content:space-between;align-items:baseline;gap:1mm;font-size:6.5pt}
+.label[data-size="50x30"] .row1 .item{font-weight:700;font-size:7.5pt}
+.label[data-size="50x30"] .barcode{height:8mm;width:42mm;margin:0 auto}        /* 좌우 ≥ 2.5mm quiet zone */
+.label[data-size="50x30"] .lotno{font-size:8pt;letter-spacing:.04em}
+.label[data-size="50x30"] .row4{display:flex;justify-content:space-between;font-size:6.5pt}
+.label[data-size="50x30"] .qty{font-weight:700;font-size:8pt}
+.label[data-size="50x30"] .attrs{font-size:6pt}
+.label[data-size="50x30"] .kind{padding:0 .8mm;font-size:6pt}
+
+/* 출하 라벨 100×50mm */
+.label.ship{width:100mm;height:50mm;padding:3mm 4mm;grid-template-columns:56mm 1fr;grid-template-rows:auto 1fr auto;column-gap:3mm;row-gap:1mm;font-size:9pt}
+.label.ship .head{grid-column:1/3;display:flex;justify-content:space-between;align-items:baseline}
+.label.ship .head .title{font-size:13pt;font-weight:700;letter-spacing:.08em}
+.label.ship .head .status{border:1px solid var(--c-print-line);padding:0 1.5mm;margin:0;font-size:8pt;font-weight:600}
+.label.ship .head .status[data-status="승인"]{background:var(--c-print-ink);color:var(--c-ink-inverse)}
+.label.ship .partner{font-size:15pt;font-weight:700;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;align-self:center}
+.label.ship .partner small{display:block;font-size:8pt;font-weight:400;color:var(--c-print-ink);font-family:var(--font-mono)}
+.label.ship .facts{display:grid;grid-template-columns:auto 1fr;column-gap:2mm;row-gap:.6mm;align-content:center;font-size:8.5pt;margin:0}
+.label.ship .facts dt{color:var(--c-print-ink);white-space:nowrap}
+.label.ship .facts dd{margin:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.label.ship .facts dd.big{font-size:14pt;line-height:1}
+.label.ship .facts dd.mono{font-weight:500}
+.label.ship .code{grid-column:1/3;display:grid;grid-template-columns:1fr auto;align-items:end;column-gap:3mm;width:auto;text-align:left}
+.label.ship .barcode{width:60mm;height:12mm}
+.label.ship .shno{font-family:var(--font-mono);font-size:11pt;font-weight:600;letter-spacing:.06em;text-align:center;width:60mm}
+.label.ship .sub{font-size:7.5pt;color:var(--c-print-ink);text-align:right;line-height:1.3}
+
+/* ── 인쇄 — 여백 · 페이지 크기 · 배경 제거 (README 디자이너3 §3) ── */
+@media print{
+  body{background:var(--c-print-bg)}
+  .no-print{display:none!important}
+  body[data-print="work_order"]{font-size:10.5pt}
+  body[data-print="document"]{font-size:10pt}
+  .sheet{width:auto;min-height:0;margin:0;padding:0;box-shadow:none}
+  .sheet th,td.auto,tr.std td{background:var(--c-print-bg)}
+  thead{display:table-header-group}
+  tr{page-break-inside:avoid}
+  .sheet h2{page-break-after:avoid}
+  .labels{display:block;padding:0;margin:0;max-width:none}
+  .label{box-shadow:none}
+  .label.ship .head .status[data-status="승인"]{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}

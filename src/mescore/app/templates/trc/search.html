@@ -1,4 +1,5 @@
-{# TRC-03 번호 검색 — F-TRC-03 lineage.search. 번호 일부 · 품목으로. 결과에서 정/역방향으로. 모바일: 카드. 쓰기 0. #}
+{# TRC-03 번호 검색 — F-TRC-03 lineage.search. 번호 일부 · 품목으로. ctx(개발3 · 바꾸지 않는다): q results[{node links}] limit. 쓰기 0.
+   Web: 표. 모바일(디자이너2 mobile/trc_search_m.html): 390px 카드 — 원재료 LOT 은 정방향, 출하 · 생산 LOT 은 역방향이 주 버튼. #}
 {% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "trc/_cards.html" as cards %}
@@ -13,23 +14,25 @@
   </div>
   {{ ui.scan_box(nav.path_of('TRC-03'), name='q', label='번호 · 품목 일부', method='get', button='검색', placeholder=q) }}
   {% if results is not none %}
-  <h2>{{ t('검색 결과') }} <small>{{ results|length }}{% if results|length >= limit %} ({{ t('최근') }} {{ limit }}){% endif %}</small></h2>
-  <table class="grid">
-    <thead><tr><th>{{ t('번호') }}</th><th>{{ t('종류') }}</th><th>{{ t('품목') }}</th><th>{{ t('수량') }}</th><th>{{ t('상태') }}</th><th>{{ t('검사') }}</th><th>{{ t('작업지시') }}</th><th></th></tr></thead>
+  <h2>{{ t('검색 결과') }} <small>「{{ q }}」 · {{ results|length }}{{ t('건') }}{% if results|length >= limit %} — {{ t('더 좁혀 주세요') }} ({{ t('최근') }} {{ limit }}){% endif %}</small></h2>
+  <table class="grid web-only">
+    <thead><tr><th>{{ t('번호') }}</th><th>{{ t('종류') }}</th><th>{{ t('품목') }}</th><th class="num">{{ t('수량') }}</th><th>{{ t('상태') }}</th><th>{{ t('검사') }}</th><th>{{ t('작업지시') }}</th><th></th></tr></thead>
     <tbody>
     {% for r in results %}
-      <tr><td><code>{{ r.node.no }}</code></td><td>{{ t(r.node.kind_label) }}</td><td>{{ r.node.item|txt }}</td><td class="num">{{ r.node.qty|num(3) if r.node.qty is not none else '-' }} {{ r.node.unit|txt('') }}</td>
-        <td>{{ cards.badge(r.node.state) }}</td><td>{{ cards.badge(r.node.insp_status) if r.node.insp_status else '-' }}</td><td>{{ r.node.work_order_no|txt }}</td>
+      <tr><td><code>{{ r.node.no }}</code></td><td><span class="badge badge-kind">{{ r.node.kind }}</span> {{ t(r.node.kind_label) }}</td><td>{{ r.node.item|txt }}</td><td class="num">{{ r.node.qty|num(3) if r.node.qty is not none else '-' }} {{ r.node.unit|txt('') }}</td>
+        <td>{{ cards.badge(r.node.state) }}</td><td>{{ cards.badge(r.node.insp_status) if r.node.insp_status else '-' }}</td><td>{% if r.node.work_order_no %}<a href="{{ r.links.work_order }}"><code>{{ r.node.work_order_no }}</code></a>{% else %}-{% endif %}</td>
         <td><a href="{{ r.links.forward }}">{{ t('정방향') }}</a> · <a href="{{ r.links.backward }}">{{ t('역방향') }}</a></td></tr>
     {% else %}
-      <tr><td colspan="8" class="empty">{{ NOT_COLLECTED }} — {{ t('맞는 번호가 없습니다') }}</td></tr>
+      <tr><td colspan="8" class="empty">{{ NOT_COLLECTED }} — {{ t('맞는 번호가 없습니다 · 번호 일부를 더 넣어 본다') }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
-  <div class="m-sec">
+  <div class="m-sec m-only">
     {% for r in results %}
-    {{ cards.card(r.node.no, r.node.state, [('종류', t(r.node.kind_label)), ('품목', r.node.item|txt), ('수량', (r.node.qty|num(3) if r.node.qty is not none else '-') ~ ' ' ~ (r.node.unit|txt(''))), ('검사', r.node.insp_status|txt), ('작업지시', r.node.work_order_no|txt)],
-                   [('정방향', r.links.forward), ('역방향', r.links.backward)]) }}
+    {% set primary = [('정방향', r.links.forward), ('역방향', r.links.backward)] if r.node.kind_base == 'MATERIAL' else [('역방향', r.links.backward), ('정방향', r.links.forward)] %}
+    {{ cards.card(r.node.no, r.node.state, [('종류', t(r.node.kind_label)), ('품목', r.node.item|txt), ('수량', ((r.node.qty|num(3)) ~ ' ' ~ (r.node.unit|txt(''))) if r.node.qty is not none else none), ('검사', t(r.node.insp_status) if r.node.insp_status else none), ('작업지시', r.node.work_order_no|txt)], primary) }}
+    {% else %}
+    <p class="empty-inline">{{ NOT_COLLECTED }} — {{ t('맞는 번호가 없습니다 · 번호 일부를 더 넣어 본다') }}</p>
     {% endfor %}
   </div>
   {% endif %}

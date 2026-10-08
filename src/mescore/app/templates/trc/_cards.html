@@ -1,64 +1,55 @@
-{# 개발3 공용 조각 — 모바일 카드(디자이너2 mobile/ 원형의 class: m-sec · m-card · kv · badge b-* · chips · fold · stat-grid · week-day) + 최소 스타일.
-   폭 390px 에서 가로 넘침 0 — 모든 상자 min-width:0 · 번호는 overflow-wrap:anywhere. 표를 쓰지 않고 행 하나 = 카드 하나. 접기는 details(JS 0).
-   {% import "trc/_cards.html" as cards %} · {{ cards.styles() }} 를 {% block head %} 에. #}
+{# 디자이너3 공용 조각 — 개발3 템플릿(trc · kpi · ifc · dashboard)과 home/main.html 이 import 한다.
+   class 이름은 디자이너1 Web 컴포넌트(docs/design/web/components.html #badge · #tabs · #kv(dl.kv · .tiles · ul.tree) · #empty · #alerts)와
+   디자이너2 모바일(docs/design/mobile/mobile.css: m-sec · m-card · kv · badge · chips · fold · trace · t-node · stat-grid) 그대로.
+   {% import "trc/_cards.html" as cards %} · {{ cards.styles() }} 를 {% block head %} 에(보조 규칙만 — 토큰 · 컴포넌트 규칙은 style.css · mobile.css). 폭 390px 가로 넘침 0. #}
 
 {% macro styles() %}
 <style>
-.m-sec{margin:0 0 12px;min-width:0}.m-sec h2{font-size:14px;margin:0 0 6px}.m-sec h2 small{font-weight:400;color:#666;margin-left:6px}
-.m-card{border:1px solid #d8dde3;border-radius:6px;padding:8px 10px;margin:0 0 8px;min-width:0;background:#fff}
-.m-card h3{margin:0 0 4px;font-size:14px;display:flex;justify-content:space-between;gap:8px;align-items:baseline;min-width:0}
-.m-card h3 code,.m-card code{overflow-wrap:anywhere;font-size:13px}
-.m-card dl.kv{grid-template-columns:84px minmax(0,1fr);font-size:12.5px}.m-card dl.kv dd{font-variant-numeric:tabular-nums}
-.m-card .links{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px}.m-card .links a{font-size:12.5px}
-.badge{display:inline-block;border-radius:10px;padding:0 7px;font-size:11.5px;line-height:18px;border:1px solid #ccd;white-space:nowrap}
-.badge.b-ok{background:#e6f4ea;border-color:#9fd3ad}.badge.b-warn{background:#fff3df;border-color:#f0c070}.badge.b-err{background:#fde8e8;border-color:#f09a9a}
-.badge.b-off{background:#eef0f3}.badge.b-wait{background:#e8f0fb;border-color:#a9c4ec}
-.chips{display:flex;gap:6px;overflow-x:auto;padding:0 0 6px;margin:0 0 8px}.chip{white-space:nowrap;border:1px solid #ccd;border-radius:14px;padding:3px 10px;font-size:12.5px;text-decoration:none;color:inherit}
-.chip.on{background:#2b5797;color:#fff;border-color:#2b5797}
-.stat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0 0 10px}
-.stat{border:1px solid #d8dde3;border-radius:6px;padding:8px 10px;min-width:0}.stat .l{font-size:11.5px;color:#666}.stat .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
-.stat .v small,.stat .u{font-size:12px;font-weight:400;color:#666}
-.fold summary{cursor:pointer;min-height:48px;display:flex;align-items:center;gap:8px;padding:4px 0}.fold summary .grow{flex:1;min-width:0}
-.week-day{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid #eee;font-size:13px;min-width:0}
-.week-day .d{min-width:52px}.week-day .cnt{font-variant-numeric:tabular-nums}
-.trace .t-node{position:relative;padding-left:14px;margin:0 0 8px}.trace .t-node::before{content:"";position:absolute;left:4px;top:0;bottom:-8px;border-left:2px solid #d8dde3}
-.trace .t-node.start::before{display:none}.trace .depth{font-size:12px;color:#666;margin:0 0 4px}
-.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:0 0 10px}
-.tile{border:1px solid #d8dde3;border-radius:6px;padding:8px 10px;min-width:0}.tile .l{font-size:11.5px;color:#666}.tile .v{font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}
-.tile.warn{border-color:#f0c070}.tile.err{border-color:#f09a9a}
-.form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px 12px;margin:0 0 8px}
-.lines{width:100%;border-collapse:collapse;font-size:12.5px}.lines td,.lines th{padding:4px 6px;border-bottom:1px solid #eee;text-align:left}
-.num{text-align:right;font-variant-numeric:tabular-nums}.alert-422{border:1px solid #f09a9a;background:#fde8e8;padding:8px 10px;border-radius:6px;margin:0 0 8px;font-size:14px}
-.alert-422 ul{margin:4px 0 0;padding-left:18px}.muted{color:#666}.is-empty{color:#888;font-weight:400}
-.tabs{display:flex;gap:4px;margin:0 0 8px;flex-wrap:wrap}.tabs a{padding:4px 10px;border:1px solid #ccd;border-radius:4px;text-decoration:none;color:inherit}
-.tabs a[aria-current="page"]{background:#2b5797;color:#fff;border-color:#2b5797}
-body.ch-mobile .grid-panel table.grid{display:none}
-@media (max-width:480px){.form-grid{grid-template-columns:minmax(0,1fr)}}
+/* 디자이너1 style.css §3(badge · tiles · tabs · tree · dl.kv · alert-422)와 디자이너2 mobile.css(m-card · fold · trace · chips)에 없는 보조 규칙만.
+   채널별 보임: Web 은 표 · 트리(.web-only), 모바일은 카드(.m-only). */
+.is-empty{color:var(--c-empty);font-weight:400}
+.tile.ok{border-color:var(--c-ok-line);background:var(--c-ok-bg)}
+a.tile{display:block;color:inherit}a.tile:hover{border-color:var(--c-accent);text-decoration:none}
+.tabs a.off{opacity:.45}
+.panel h2 .right{float:right;font-weight:400}
+.plain-list{margin:0;padding-left:var(--sp-4);font-size:var(--fs-sm)}.plain-list li{margin:2px 0}
+body:not(.ch-mobile) .chips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 var(--sp-2)}
+body:not(.ch-mobile) .chip{border:var(--bw) solid var(--c-line);border-radius:14px;padding:3px 10px;font-size:var(--fs-sm);color:inherit;white-space:nowrap}
+body:not(.ch-mobile) .chip.on{background:var(--c-accent);color:var(--c-accent-ink);border-color:var(--c-accent)}
+body:not(.ch-mobile) .chip:hover{text-decoration:none;border-color:var(--c-accent)}
+body.ch-mobile .web-only,body.ch-mobile .grid-panel table.grid{display:none}
+body:not(.ch-mobile) .m-only{display:none}
+body.ch-mobile .m-card.start{border-color:var(--c-accent)}
+body.ch-mobile .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
 </style>
 {% endmacro %}
 
-{# 상태 → 배지 class #}
+{# 상태 → 배지 class (디자이너1 이름). 모르는 글자는 neutral #}
 {% macro badge(text, kind='') %}
-{% set k = kind or ({'합격':'b-ok','승인':'b-ok','확정':'b-ok','완료':'b-ok','가동':'b-ok','재고':'b-ok','불합격':'b-err','취소':'b-off','고장':'b-err','지연':'b-err',
-                      '조건부':'b-warn','진행':'b-wait','등록':'b-wait','계획':'b-wait','대기':'b-wait','정지':'b-off','소진':'b-off','출하':'b-wait','미검사':'b-off'}.get(text, 'b-off')) %}
+{% set k = kind or ({'재고':'badge-stock','소진':'badge-consumed','출하':'badge-shipped',
+                      '합격':'badge-pass','불합격':'badge-fail','조건부':'badge-cond','미검사':'badge-none',
+                      '가동':'badge-run','정지':'badge-stop','점검':'badge-check','고장':'badge-fault',
+                      '승인':'badge-ok','확정':'badge-ok','완료':'badge-ok','종결':'badge-ok','전송':'badge-ok',
+                      '진행':'badge-info','등록':'badge-info','계획':'badge-info','대기':'badge-info','조치':'badge-info',
+                      '취소':'badge-neutral','실패':'badge-err','지연':'badge-err','발생':'badge-err','미확정':'badge-warn'}.get(text, 'badge-neutral')) %}
 <span class="badge {{ k }}">{{ t(text) if text else NOT_COLLECTED }}</span>
 {% endmacro %}
 
-{# 모바일 카드 — title(번호) · badge · kv [(라벨, 값), …] · links [(문구, href), …] #}
+{# 모바일 카드 — title(번호) · badge · kv [(라벨, 값), …] · links [(문구, href), …] (첫 링크가 주 버튼) #}
 {% macro card(title, status='', kv=[], links=[], extra_class='') %}
 <div class="m-card {{ extra_class }}">
   <h3><code>{{ title }}</code>{% if status %}{{ badge(status) }}{% endif %}</h3>
   {% if kv %}<dl class="kv">{% for l, v in kv %}<dt>{{ t(l) }}</dt><dd>{{ v if v is not none and v != '' else NOT_COLLECTED }}</dd>{% endfor %}</dl>{% endif %}
-  {% if links %}<div class="links">{% for text, href in links %}<a href="{{ href }}">{{ t(text) }}</a>{% endfor %}</div>{% endif %}
+  {% if links %}<div class="links">{% for text, href in links %}<a{% if loop.first %} class="primary"{% endif %} href="{{ href }}">{{ t(text) }}</a>{% endfor %}</div>{% endif %}
   {% if caller %}{{ caller() }}{% endif %}
 </div>
 {% endmacro %}
 
-{# 타일 — [(라벨, 값, 단위, class)] #}
+{# 타일 — [(라벨, 값, 단위, class[, 보조 문구])] · 값 none → 미수집 #}
 {% macro tiles(items) %}
 <div class="tiles">
-{% for l, v, u, cls in items %}
-  <div class="tile {{ cls }}"><div class="l">{{ t(l) }}</div><div class="v">{% if v is none %}<span class="is-empty">{{ NOT_COLLECTED }}</span>{% else %}{{ v }}{% if u %}<small class="u"> {{ u }}</small>{% endif %}{% endif %}</div></div>
+{% for it in items %}
+  <div class="tile {{ it[3] }}"><div class="l">{{ t(it[0]) }}</div><div class="v">{% if it[1] is none %}<span class="is-empty">{{ NOT_COLLECTED }}</span>{% else %}{{ it[1] }}{% if it[2] %}<small>{{ it[2] }}</small>{% endif %}{% endif %}</div>{% if it|length > 4 and it[4] %}<div class="s">{{ it[4] }}</div>{% endif %}</div>
 {% endfor %}
 </div>
 {% endmacro %}

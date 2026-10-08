@@ -1,58 +1,41 @@
-{# 출하 라벨 — 100×50mm (개발2 양식 · 개발3 이 D-601 `GET /shp/shipments/{id}/label` 에서 render_print("label_shipment", printing.shipment_label_for(id))).
-   바코드 값 = shipment_no 글자 그대로 — SHP-02 스캔칸에 넣으면 그 출하가 열린다. 디자이너3 원형 docs/design/print/label_shipment.html 의 필드. #}
+{# 출하 라벨 — 100×50mm. 디자이너3 docs/design/print/label_shipment.html 이식. 개발3 이 D-601 `GET /shp/shipments/{id}/label` 에서
+   render_print("label_shipment", printing.shipment_label_for(id), screen_id="SHP-02") 로 부른다 — 키는 바꾸지 않는다:
+   shipment_no partner_code partner_name ship_date status approved_at approved_by lot_count total_qty unit order_no shipment_lot_no.
+   바코드 값 = shipment_no 글자 그대로 — SHP-02 스캔칸에 넣으면 그 출하가 열린다. `승인` 배지는 인쇄 때 print-color-adjust. 스타일은 static/print.css. #}
 <!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ t('출하') }} {{ t('라벨') }} · {{ system_name }}</title>
-<style>
-*{box-sizing:border-box}
-body{margin:0;background:#f4f4f4;color:#000;font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}
-.toolbar{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;font-size:13px}
-.btn{font:inherit;font-size:14px;padding:8px 18px;border:1px solid #333;background:#333;color:#fff;border-radius:6px;cursor:pointer}
-.sheet{padding:8px 16px 32px}
-.label{width:100mm;height:50mm;padding:3mm 4mm;background:#fff;box-shadow:0 0 0 1px #bbb;display:grid;grid-template-rows:auto auto 1fr auto;row-gap:1mm;font-size:9pt;page-break-after:always;overflow:hidden}
-.head{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid #000;padding-bottom:1mm}
-.title{font-weight:700;font-size:11pt}
-.status{display:inline-block;border:1px solid #000;padding:0 1.5mm;font-weight:600}
-.status[data-status="승인"]{background:#000;color:#fff;print-color-adjust:exact;-webkit-print-color-adjust:exact}
-.partner{font-size:13pt;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.partner small{font-weight:400;font-size:8pt;margin-left:2mm}
-.body{display:grid;grid-template-columns:34mm 1fr;column-gap:3mm;align-items:end}
-.facts{margin:0;display:grid;grid-template-columns:auto 1fr;column-gap:2mm;row-gap:.5mm;font-size:8.5pt}
-.facts dt{font-weight:600}.facts dd{margin:0}.facts .big{font-size:14pt;font-weight:700;line-height:1}
-.code{text-align:center}
-.barcode{display:block;width:60mm;height:12mm;margin:0 auto}
-.no{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600;letter-spacing:.06em;font-size:11pt}
-.sub{font-size:8pt;text-align:right}
-@media print{@page{size:100mm 50mm;margin:0}body{background:#fff}.no-print{display:none !important}.sheet{padding:0}.label{box-shadow:none}}
-</style>
+<title>{{ t('출하 라벨') }} · {{ shipment_no }} · {{ system_name }}</title>
+<link rel="stylesheet" href="/static/print.css?v={{ asset_v }}">
+<style>@media print{@page{size:100mm 50mm;margin:0}}</style>
 </head>
-<body>
+<body data-print="label_shipment">
 <div class="toolbar no-print">
-  <span>{{ t('출하') }} {{ t('라벨') }} · 100×50mm · {{ t('바코드 값 = 출하 번호') }}</span>
+  <span class="cap">{{ t('출하 라벨') }} · 100×50mm · {{ t('바코드 값 = 출하 번호') }}</span>
   <button class="btn" type="button" onclick="window.print()">{{ t('인쇄') }}</button>
 </div>
-<div class="sheet">
-<section class="label" data-shipment="{{ shipment_no }}">
+
+<div class="labels">
+<section class="label ship" data-shipment="{{ shipment_no }}">
   <div class="head">
-    <span class="title">{{ t('출하') }} {{ t('라벨') }}</span>
-    <span>{{ t('출하일') }} <b>{{ ship_date|dt }}</b> &nbsp; <span class="status" data-status="{{ status }}">{{ status }}</span></span>
+    <span class="title">{{ t('출하 라벨') }}</span>
+    <span>{{ t('출하일') }} <b>{{ ship_date|dt('%Y-%m-%d') }}</b> &nbsp; <span class="status" data-status="{{ status }}">{{ t(status) }}</span></span>
   </div>
   <div class="partner">{{ partner_name|txt }}<small>{{ partner_code|txt }}{% if order_no %} · {{ t('수주') }} {{ order_no }}{% endif %}</small></div>
-  <div class="body">
-    <dl class="facts">
-      <dt>{{ t('LOT 수') }}</dt><dd class="big">{{ lot_count }}</dd>
-      <dt>{{ t('수량') }}</dt><dd>{{ total_qty|num(3) if total_qty is not none else t('미수집') }} {{ unit|txt('') }}</dd>
-      <dt>{{ t('출하 LOT') }}</dt><dd class="no" style="font-size:8pt">{{ shipment_lot_no|txt }}</dd>
-    </dl>
-    <div class="code">
+  <dl class="facts">
+    <dt>{{ t('LOT 수') }}</dt><dd class="big">{{ lot_count if lot_count is not none else 0 }}</dd>
+    <dt>{{ t('수량') }}</dt><dd>{% if total_qty is not none %}{{ total_qty|num(3) }} {{ unit|txt('') }}{% else %}-{% endif %}</dd>
+    <dt>{{ t('출하 LOT') }}</dt><dd class="mono">{{ shipment_lot_no|txt }}</dd>
+  </dl>
+  <div class="code">
+    <div>
       {{ barcode_svg(shipment_no, height=45) }}
-      <div class="no">{{ shipment_no }}</div>
+      <div class="shno">{{ shipment_no }}</div>
     </div>
+    <div class="sub">{% if approved_at %}{{ t('승인') }} {{ approved_at|dt }}<br>{{ approved_by|txt }}{% else %}{{ t('승인 전') }}<br>&nbsp;{% endif %}</div>
   </div>
-  <div class="sub">{% if approved_at %}{{ t('승인') }} {{ approved_at|dt }} · {{ approved_by|txt }}{% else %}{{ t('승인 전') }}{% endif %}</div>
 </section>
 </div>
 </body>

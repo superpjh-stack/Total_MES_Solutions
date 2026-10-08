@@ -161,7 +161,7 @@
 
 > 개발3 확정: 아래 표의 키 · 형 · 목록 상한이 `app/stats.py: board()` 그대로다(`tests/test_kpi_api.py` 가 키 집합을 고정한다). 덧붙인 해석 — `production.actual_qty` = good + defect · `by_hour` 는 실적이 있는 첫 시간부터 23시까지 · `top_defects.share` = 1위 수량 대비 % · `equipment.items[].last_received_at` 은 `eqp_collect.max(ts)` 의 `HH:MM:SS` · `indicators[]` 는 `visible_yn=Y` 순서(seq) 6개 · 조건부는 합격에 세지 않는다(D-302). JSON 폴링(`Accept: application/json`)은 접근 로그를 남기지 않는다. 템플릿 `templates/kpi/board.html`(base.html 없이 · `body.ch-board`).
 
-`GET /kpi/board?device=board` 첫 렌더는 서버가 채우고, 5초마다 같은 경로를 `Accept: application/json` 으로 받아 `[data-key]` 글자만 바꾼다(`board.html` 아래 스크립트 — `static/board.js` 로 떼어도 된다). 응답은 `stats.board()` 그대로. `kpi_snapshot` 이 있으면 그것, 없으면 실시간(`source` 로 알린다).
+`GET /kpi/board?device=board` 첫 렌더는 서버가 채우고, `board_refresh_seconds`(기본 5)초마다 같은 경로를 `Accept: application/json` 으로 받아 `[data-key]` 글자만 바꾼다. **이식됨(A′)**: 폴링은 `static/board.js`(원형 스크립트에서 `[원형 전용]` 블록만 뺌) · 스타일은 `static/board.css` · 템플릿 `templates/kpi/board.html` 은 `base.html` · `app.js` 를 싣지 않는다(`app.js` 의 현황판 전체 새로고침과 겹치지 않는다 — 요청 1배). 응답은 `stats.board()` 그대로. `kpi_snapshot` 이 있으면 그것, 없으면 실시간(`source` 로 알린다).
 
 | 응답 키 | 형 | 화면 자리(`data-key`) | 비고 |
 |---|---|---|---|
@@ -319,3 +319,19 @@ Code128 · 값 = 번호 글자 그대로(`A-Z 0-9 -` · 권장 ≤ 20자) · 인
 | 간격 · 여백 | 상자 사이 10~14px · 본문 좌우 16px | 좌우 16px · 카드 사이 8px |
 | 대비 | 글자 `--c-ink` / `--c-surface` 바탕 · 상태는 **색 + 글자**(배지) — 색만으로 말하지 않는다 | 같음 |
 | 선택 | 라디오를 큰 버튼으로(`.choice`) · 체크박스 없음 | — |
+
+---
+
+## 이식 요청 (디자이너3 · 웨이브 A′ · 2026-10-09)
+
+이식한 파일: `templates/kpi/board.html` · `static/board.css` · `static/board.js`(새 파일) · `templates/print/{work_order,label_lot,label_shipment,document}.html` · `static/print.css`(새 파일) · `templates/home/main.html` · `templates/dashboard/index.html` · `templates/trc/{_cards,_trace,search}.html` · `templates/ifc/{collect,erp}.html` · `templates/kpi/{summary,indicators}.html`. 라우터가 넘기는 ctx 키 · 폼 name 은 바꾸지 않았다. 캡처 `outputs/design/{board,print,home,trc}/*.png`.
+
+| # | 대상 | 요청 | 지금 상태 |
+|---|---|---|---|
+| 1 | 디자이너1 `static/style.css` | 토큰 §1 을 `static/tokens.css` 로 **분리**해 달라. 현황판(`kpi/board.html`)과 출력물 4종은 `base.html` 을 쓰지 않는 독립 문서라 `style.css` 전체(Web 레이아웃 · `.panel` · `table.grid` · `body.ch-board`)를 실을 수 없다 | `board.css` · `print.css` 맨 위에 `TEMP-TOKENS` 블록(필요한 토큰만 · 값은 `tokens.css` 와 같다)을 임시로 두었다. `tokens.css` 가 생기면 두 파일에서 그 블록을 지우고 `<link>` 한 줄을 넣는다 |
+| 2 | 개발1 `routers/home.py: cards_for` | 카드의 "오늘 건수" `c.today` — 지금은 `None`(→ `미수집`). `stats` 의 공개 함수로 채워 달라(출처 가설은 `home/home.html` 머리 주석: bas 오늘 변경 · ord 오늘 납기 · job 오늘 지시 · mat 오늘 입고 · pop 오늘 실적 · qua 검사 대기 · eqp 고장 중 · shp 출하 대기 · kpi 측정값 이탈 · sys 오늘 로그인 · ifc 오늘 수신 거부). 집계 SQL 은 `stats` 에만 | 템플릿은 `c.today` 가 오면 그대로 보인다(숫자 · 0 도 보인다) |
+| 3 | 아키텍트 · 개발3 `decisions.md` | 현황판 **야간(다크) 전환 조건** 미확정. 템플릿은 가설로 `?theme=dark` → `html[data-theme="dark"]` 를 찍는다(그 밖은 `light` 고정 · `prefers-color-scheme` 무시). 시각 고정 · 설정값 중 하나로 확정해 달라(D-nn) | `board_dark.png` 로 모양만 확인 |
+| 4 | 개발3 `routers/dashboard.py` | 타일 링크 · 강조 링크는 템플릿이 `user.can_open` + `nav.channel_allowed` 로 판단한다(권한 없으면 링크 없는 타일). 역할별 판은 `user.role_code`(`ADMIN PROD QA FIELD`)로 고르고, 그 밖(팩 역할)은 생산 판 모양. 원형의 `recent[]`(최근 5건)는 ctx 에 없어 그리지 않았다 — 필요하면 키를 넘겨 달라 | — |
+| 5 | 디자이너2 `static/mobile.css` | `trc/_trace.html` · `trc/search.html` · `kpi/summary.html` · `ifc/collect.html` 의 모바일 카드는 `m-sec · m-card · kv · links · fold · trace · t-node` 마크업 그대로다. `body.ch-mobile .m-only` 만 보이고 `.web-only`(트리 · 표)는 숨긴다(`trc/_cards.html: styles()`). 원형의 하단 탭 4 · `.m-top` 검색 틀은 `base.html` 몫이라 넣지 않았다 | `trc/backward_mobile.png` |
+| 6 | 개발2 `printing.label_for` | 라벨 한 장의 `attrs[]` 두 줄 — 50×30 은 한 줄만 찍는다. 라벨 표시용 속성 선언이 없으면 빈 줄. 그대로 두면 된다(요청 아님 · 확인 사항) | — |
+| 7 | 검증 | `make check-terms` 는 다른 담당 파일(`style.css` 강조색 · `job/status.html` 스크롤)의 금지어로 한때 FAIL 했다가 지금은 PASS. `pytest` 는 같은 DB 를 여러 담당이 동시에 써서 `test_trc_api`(쓰기 0 검사 — `shp_shipment` 건수가 중간에 늘었다) · `test_job_work_orders` · `test_measure`(`_measure.html` 개발2/디자이너2 동시 수정)가 흔들렸다. 내 파일만으로 돌리면 통과 — 커밋 전 단독 실행 결과는 보고서 | — |
