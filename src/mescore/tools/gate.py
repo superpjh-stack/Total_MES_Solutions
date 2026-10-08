@@ -525,11 +525,14 @@ def core_gates(run_seeds: bool) -> dict[str, tuple[str, str]]:
                     except Exception as exc:  # noqa: BLE001
                         errs.append(f"{cmd}: {type(exc).__name__}")
             a15 = conn.table_counts()
-            d15 = {k: (b15.get(k), a15.get(k)) for k in sorted(set(b15) | set(a15)) if b15.get(k) != a15.get(k) and k != "sys_migration_log"}
+            targets = {t for f in contracts.batch_functions() for t in f.tables} - {"sys_migration_log"}   # B-MIG-01~04 가 쓰는 테이블만 — 다른 프로세스의 쓰기를 덜 탄다
+            d15 = {k: (b15.get(k), a15.get(k)) for k in sorted(targets) if b15.get(k) != a15.get(k)}
             n_log = a15.get("sys_migration_log", 0) - b15.get("sys_migration_log", 0)
             ok15 = bool(ok_mig) and not errs and not d15 and n_log > 0
             put("G-C15", PASS if ok15 else FAIL,
-                f"examples dry-run {len(reps)}회(명령 4 × 2) 오류 {errs or 0} · 업무 테이블 행 수 diff {d15 or 0} · sys_migration_log +{n_log} · test_migrate {'통과' if ok_mig else ('없음' if ok_mig is None else '실패')} ({ln_mig}) · {QA_SEC}")
+                f"examples dry-run {len(reps)}회(명령 4 × 2) 오류 {errs or 0} · 이관 대상 테이블 {len(targets)} 행 수 diff {d15 or 0}"
+                f"{' (같은 DB 에 다른 프로세스가 쓰는 중이면 어긋난다 — 단독 재실행)' if d15 else ''} · sys_migration_log +{n_log} · "
+                f"test_migrate {'통과' if ok_mig else ('없음' if ok_mig is None else '실패')} ({ln_mig}) · {QA_SEC}")
 
         # G-C16 — 기본 어댑터 501 D-02 · flush 가 미확정으로 남김 · 조용한 폴백 0
         if not erp:
