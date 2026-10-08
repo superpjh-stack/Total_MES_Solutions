@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ko">
+<!--
+  KPI-01 현황판 — 네 상태 한눈에 (디자이너3 · 2026-10-09)
+  board.html 을 1/2 로 줄여 iframe 네 장으로 나란히 둔다. 각 iframe 은 board.html 의 [원형 전용] 해시 #state= 로 상태를 고른다.
+  · normal : 정상 — 값이 있고 5초마다 갱신
+  · empty  : 데이터 없음 — 모든 숫자 `미수집`, 목록은 `미수집` 한 줄, 지표 목표 `미확정`. 빈 표만 두지 않는다(G-C11)
+  · stale  : 갱신 실패 — 마지막 값은 그대로, 머리글에 "갱신 실패 HH:MM, 재시도 중". DB 끊김(503)도 이 모습. 폴링은 계속
+  · night  : 야간(다크) — data-theme="dark". 같은 상태색, 면·글자색만 바뀐다. 전환 조건은 미확정 — 아래 주석 참조
+  이 파일은 검토용이다. 템플릿으로 옮기지 않는다.
+-->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>현황판 상태 4</title>
+<link rel="stylesheet" href="../tokens.css"><!-- 디자이너1 토큰. 개발: /static/tokens.css -->
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:var(--c-bg);color:var(--c-ink);font-family:var(--font-sans);padding:24px}
+h1{margin:0 0 6px;font-size:22px}
+p.lead{margin:0 0 20px;color:var(--c-ink-2);font-size:14px;max-width:1100px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:24px;max-width:2000px}
+figure{margin:0;background:var(--c-surface);border:1px solid var(--c-line);border-radius:12px;padding:14px;min-width:0}
+figcaption{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;font-size:15px}
+figcaption b{font-size:17px}
+figcaption code{font-size:12px;color:var(--c-ink-3)}
+.frame{width:100%;aspect-ratio:16/9;overflow:hidden;border:1px solid var(--c-line);border-radius:8px;background:var(--c-head)}
+.frame iframe{width:1920px;height:1080px;border:0;transform-origin:0 0;transform:scale(var(--s,.5));pointer-events:none}
+ul.notes{margin:12px 0 0;padding-left:18px;font-size:13.5px;color:var(--c-ink-2);line-height:1.6}
+@media (max-width:1100px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<h1>현황판 네 상태</h1>
+<p class="lead">같은 board.html 이다. 서버 응답과 시각에 따라 머리글과 값 자리만 달라지고, 배치는 한 번도 바뀌지 않는다 — 멀리서 보는 사람이 "뭔가 달라졌다"로 읽지 않게 한다.</p>
+
+<div class="grid">
+  <figure>
+    <figcaption><b>1. 정상</b><code>data-state="ok" · 머리글 "마지막 갱신 HH:MM:SS"</code></figcaption>
+    <div class="frame"><iframe src="board.html#state=normal" title="정상"></iframe></div>
+    <ul class="notes">
+      <li>5초마다 JSON 을 받아 숫자만 바꾼다. 갱신 시각은 응답을 받은 화면 쪽 시각이다.</li>
+      <li>상태색은 목표 대비(지표) · 0 건이 정상인 수(지연 · 고장 · 이탈)에만 붙는다.</li>
+    </ul>
+  </figure>
+
+  <figure>
+    <figcaption><b>2. 데이터 없음</b><code>값 null → 미수집 · 목록 0건 → 미수집 한 줄 · 목표 없음 → 미확정</code></figcaption>
+    <div class="frame"><iframe src="board.html#state=empty" title="데이터 없음"></iframe></div>
+    <ul class="notes">
+      <li>시드가 없는 아침 · 새 팩의 첫날 모습. 빈 표나 0 을 꾸며 넣지 않는다 — `미수집` 글자가 그 자리에 있다(G-C11).</li>
+      <li>`미수집` 은 회색 · 보통 굵기로 숫자보다 작게. 상태색은 붙지 않는다.</li>
+    </ul>
+  </figure>
+
+  <figure>
+    <figcaption><b>3. 갱신 실패</b><code>data-state="stale" · "갱신 실패 HH:MM, 재시도 중"</code></figcaption>
+    <div class="frame"><iframe src="board.html#state=stale" title="갱신 실패"></iframe></div>
+    <ul class="notes">
+      <li>503(DB 끊김) · 네트워크 끊김 · JSON 오류 전부 이 모습. 마지막으로 받은 값은 지우지 않는다(지워 버리면 "생산 0" 으로 오해한다).</li>
+      <li>머리글의 "마지막 갱신" 이 "갱신 실패 HH:MM, 재시도 중" 으로 바뀌고 점이 깜박인다. 5초 폴링은 계속 돌고, 성공하면 즉시 정상으로 돌아간다.</li>
+      <li>첫 GET 자체가 503 이면 디자이너1 의 오류 화면(`_error.html`)이 뜨되 현황판 채널에서는 meta refresh 로 다시 시도한다(api-contract.md §2).</li>
+    </ul>
+  </figure>
+
+  <figure>
+    <figcaption><b>4. 야간(다크)</b><code>html[data-theme="dark"]</code></figcaption>
+    <div class="frame"><iframe src="board.html#state=night" title="야간"></iframe></div>
+    <ul class="notes">
+      <li>면 · 글자색만 토큰으로 바뀐다. 상태색 4(good · warn · critical · accent)는 어두운 면에서도 3:1 이상이라 그대로 둔다.</li>
+      <li>전환 조건(시각 고정 · 수동 설정 · `prefers-color-scheme`)은 <b>미확정</b> — 결정 대장에 올린 뒤 `?theme=` 또는 설정값으로 `data-theme` 을 서버가 찍는다. 원형은 해시로만 바꾼다.</li>
+    </ul>
+  </figure>
+</div>
+</body>
+</html>

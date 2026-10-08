@@ -1,0 +1,216 @@
+/* ============================================================================
+   MES 표준플랫폼 — 디자인 토큰 (전 채널 공용 · 디자이너1 소유)
+   ----------------------------------------------------------------------------
+   · 관리자 Web · 현장 POP · 모바일 · 현황판 · 인쇄가 전부 이 파일 하나를 읽는다.
+     채널별 파일(web/ · pop/ · mobile/ · board/ · print/)은 여기 있는 변수만 쓰고
+     색상값을 직접 적지 않는다.
+   · 외부 폰트 · CDN 0 — 시스템 폰트 스택(한글 포함).
+   · 변수 이름에 업종어 없음. 의미(semantic) 이름만 — "초록" 이 아니라 "정상".
+   · 라이트가 기본, 다크는 prefers-color-scheme 으로 같은 이름을 다시 정의한다.
+     상태색의 **의미**는 두 테마에서 같다(README §2 상태색 의미 고정).
+   · 이식: 개발자는 이 파일을 static/tokens.css 로 그대로 복사한다.
+   ============================================================================ */
+
+:root {
+  /* ── 1. 글꼴 ─────────────────────────────────────────────────────────── */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+               "Malgun Gothic", "맑은 고딕", "Noto Sans KR", "Segoe UI", Roboto,
+               Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "D2Coding",
+               "Liberation Mono", monospace;
+
+  /* ── 2. 글자 크기 — Web 기본 ─────────────────────────────────────────── */
+  --fs-xs: 11px;      /* 보조 표기 · 배지 · 메타 */
+  --fs-sm: 12px;      /* 표 본문 · 라벨 · 메뉴 */
+  --fs-md: 13px;      /* 본문 기본 · 버튼 · 입력칸 */
+  --fs-lg: 15px;      /* 패널 제목 · 브랜드 */
+  --fs-xl: 18px;      /* 화면 제목 · 집계 수치 */
+  --fs-2xl: 24px;     /* 오류 상태코드 · 큰 수치 */
+  --lh-tight: 1.25;
+  --lh-base: 1.5;
+
+  /* ── 2b. 글자 크기 — POP(확대) · 모바일 · 현황판 (디자이너2 · 3 이 쓴다) ──
+     디자이너2 요청(README §POP) 반영: POP 본문 20 · 터치 56 · 주 버튼 80 · 스캔칸 72 · 모바일 16 */
+  --fs-pop-base: 20px;     /* POP 본문 */
+  --fs-pop-badge: 16px;    /* POP 배지 · 안내 17 은 --fs-pop-note */
+  --fs-pop-note: 17px;
+  --fs-pop-input: 20px;    /* POP 입력칸 */
+  --fs-pop-scan: 30px;     /* POP 스캔칸 글자 (고정폭) */
+  --fs-pop-alert: 28px;    /* POP 422 · 결과 배너 큰 글씨 (28~30) */
+  --fs-pop-num: 32px;      /* POP 수량 표시 */
+  --fs-pop-primary: 26px;  /* POP 주 버튼 글자 */
+  --fs-mobile-base: 16px;  /* 모바일 본문 (폭 390px) · 번호는 15 고정폭 = --fs-mobile-no */
+  --fs-mobile-no: 15px;
+  --fs-board-base: 20px;   /* 현황판 본문 */
+  --fs-board-label: 24px;  /* 현황판 지표 이름 */
+  --fs-board-num: 56px;    /* 현황판 지표 수치 */
+  --touch-min: 48px;       /* 모바일 최소 터치 높이 (44~48) */
+  --touch-pop: 56px;       /* POP 버튼 · 탭 · 표 행 최소 높이 */
+  --touch-min-pop: 56px;   /* = --touch-pop (POP 최소 터치 — 디자이너2 · 코디네이터 요청 이름) */
+  --touch-pop-choice: 64px;/* POP 선택 버튼(radio 를 버튼으로) */
+  --touch-pop-primary: 80px;/* POP 주 버튼 (한 화면 하나) */
+  --touch-pop-scan: 72px;  /* POP 스캔칸 높이 */
+  --touch-mobile-tab: 56px;/* 모바일 하단 탭 */
+
+  /* ── 3. 간격 (4px 배수) ───────────────────────────────────────────────── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  /* ── 4. 테두리 · 모서리 · 그림자 ─────────────────────────────────────── */
+  --bw: 1px;
+  --bw-strong: 2px;
+  --r-sm: 2px;       /* 배지 · 코드 */
+  --r-md: 4px;       /* 입력칸 · 버튼 · 패널 */
+  --r-lg: 6px;       /* 로그인 카드 · 토스트 */
+  --sh-1: 0 1px 2px rgba(16, 20, 24, .08);
+  --sh-2: 0 4px 14px rgba(16, 20, 24, .16);
+  --focus-ring: 0 0 0 2px var(--c-focus);
+
+  /* ── 5. 레이아웃 치수 ─────────────────────────────────────────────────── */
+  --w-page: 1280px;    /* Web 기준 폭 (1024 에서도 깨지지 않게) */
+  --w-side: 212px;     /* 좌측 메뉴 */
+  --w-side-min: 176px; /* 1024 에서의 좌측 메뉴 */
+  --w-desc: 272px;     /* 우측 계약 패널 */
+  --h-hdr: 44px;       /* 상단 헤더 */
+  --w-mobile: 390px;   /* 모바일 기준 폭 */
+  --z-hdr: 20;
+  --z-side: 15;
+  --z-toast: 40;
+
+  /* ── 6. 색 — 바탕 · 표면 · 선 · 글자 ───────────────────────────────── */
+  --c-bg: #f2f3f5;           /* 페이지 바탕 */
+  --c-surface: #ffffff;      /* 패널 · 표 · 입력칸 */
+  --c-surface-2: #eef0f2;    /* 표 머리 · 행 호버 · 비활성 입력칸 */
+  --c-surface-3: #e3e6ea;    /* 눌린 상태 · 구분띠 */
+  --c-line: #d3d7dc;         /* 기본 선 */
+  --c-line-strong: #a9b0b8;  /* 표 머리 아래 · 강조 선 */
+  --c-ink: #1b1f24;          /* 본문 글자 */
+  --c-ink-2: #5c6670;        /* 보조 글자 · 라벨 */
+  --c-ink-3: #8c959e;        /* 자리표시 · 비활성 글자 */
+  --c-ink-inverse: #ffffff;  /* 어두운 바탕 위 글자 */
+  --c-head: #23272d;         /* 상단 헤더 · 로그인 바탕 */
+  --c-head-ink: #e9ecef;
+  --c-head-ink-2: #aab2bb;
+
+  /* ── 7. 색 — 강조 (한 가지만. 팩이 바꿀 수 있다) ───────────────────── */
+  --c-accent: #1f5fa8;
+  --c-accent-hover: #184d89;
+  --c-accent-ink: #ffffff;
+  --c-accent-tint: #e6eef9;  /* 선택 행 · 현재 메뉴 · 탭 밑줄 바탕 */
+  --c-focus: #8fb4e3;        /* 포커스 링 (Web) */
+  --c-focus-pop: #ffd600;    /* 포커스 링 (POP 스캔칸 — 멀리서도 보이게 노랑 · 디자이너2 요청) */
+  --c-link: #1f5fa8;
+
+  /* ── 8. 색 — 상태 4종 (정상 · 경고 · 오류 · 정보) ────────────────────── */
+  --c-ok: #1e7b3f;      --c-ok-bg: #e4f4e9;      --c-ok-line: #9fd3b0;
+  --c-warn: #9a6200;    --c-warn-bg: #fff3d4;    --c-warn-line: #ecc77a;
+  --c-err: #b42318;     --c-err-bg: #fbe9e7;     --c-err-line: #f0a69e;
+  --c-info: #1f5fa8;    --c-info-bg: #e6eef9;    --c-info-line: #a3bfe6;
+  --c-neutral: #5c6670; --c-neutral-bg: #eceff2; --c-neutral-line: #c3c9d0;
+
+  /* ── 9. 색 — LOT 상태 (재고 · 소진 · 출하 = v_lot_state) ─────────────── */
+  --c-lot-stock: #0f6f7c;     --c-lot-stock-bg: #dff3f6;
+  --c-lot-consumed: #5c6670;  --c-lot-consumed-bg: #eceff2;
+  --c-lot-shipped: #233f8a;   --c-lot-shipped-bg: #e3e8f7;
+
+  /* ── 10. 색 — 검사 판정 (합격 · 불합격 · 조건부 · 미검사) ─────────────── */
+  --c-pass: var(--c-ok);        --c-pass-bg: var(--c-ok-bg);
+  --c-fail: var(--c-err);       --c-fail-bg: var(--c-err-bg);
+  --c-cond: var(--c-warn);      --c-cond-bg: var(--c-warn-bg);
+  --c-none: var(--c-neutral);   --c-none-bg: transparent;   /* 미검사 = 테두리만 */
+
+  /* ── 11. 색 — 설비 상태 (가동 · 정지 · 점검 · 고장) ──────────────────── */
+  --c-eq-run: var(--c-ok);      --c-eq-run-bg: var(--c-ok-bg);
+  --c-eq-stop: var(--c-neutral);--c-eq-stop-bg: var(--c-neutral-bg);
+  --c-eq-check: var(--c-info);  --c-eq-check-bg: var(--c-info-bg);
+  --c-eq-fault: var(--c-err);   --c-eq-fault-bg: var(--c-err-bg);
+
+  /* ── 12. 색 — 미확정 · 미수집 · 범위 이탈 ────────────────────────────── */
+  --c-undecided: #8a5a00;     --c-undecided-bg: #fff3d4;  --c-undecided-line: #e8cf9a;
+  --c-empty: #8c959e;         /* `미수집` 글자 */
+  --c-deviated: var(--c-warn);/* 측정값 범위 이탈 — 오류가 아니다(저장된다) */
+  --c-deviated-bg: var(--c-warn-bg);
+
+  /* ── 13. 색 — 인쇄 (디자이너3 print/ 가 쓴다) ────────────────────────── */
+  --c-print-ink: #000000;
+  --c-print-line: #000000;
+  --c-print-bg: #ffffff;
+}
+
+/* ── 다크 — 같은 이름을 다시 정의한다. 상태색은 밝기만 올리고 색상(hue)은 유지 ── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --c-bg: #15181c;
+    --c-surface: #1e2227;
+    --c-surface-2: #262b31;
+    --c-surface-3: #2f353c;
+    --c-line: #353b43;
+    --c-line-strong: #525a64;
+    --c-ink: #e6e9ec;
+    --c-ink-2: #a3acb5;
+    --c-ink-3: #6f7983;
+    --c-ink-inverse: #15181c;
+    --c-head: #0f1114;
+    --c-head-ink: #e6e9ec;
+    --c-head-ink-2: #8e98a2;
+
+    --c-accent: #6ea3e8;
+    --c-accent-hover: #8ab6ee;
+    --c-accent-ink: #0f1114;
+    --c-accent-tint: #1f2d40;
+    --c-focus: #4e7fc0;
+    --c-focus-pop: #ffd600;
+    --c-link: #8ab6ee;
+
+    --c-ok: #6dc98b;     --c-ok-bg: #16301f;     --c-ok-line: #2d6b43;
+    --c-warn: #e9b84a;   --c-warn-bg: #3a2c0c;   --c-warn-line: #7a5f1a;
+    --c-err: #f08a7f;    --c-err-bg: #3c1a16;    --c-err-line: #8a3a31;
+    --c-info: #6ea3e8;   --c-info-bg: #1b2a3f;   --c-info-line: #345a8f;
+    --c-neutral: #a3acb5;--c-neutral-bg: #262b31;--c-neutral-line: #454c55;
+
+    --c-lot-stock: #5fc3d0;    --c-lot-stock-bg: #10303a;
+    --c-lot-consumed: #a3acb5; --c-lot-consumed-bg: #262b31;
+    --c-lot-shipped: #93a9ee;  --c-lot-shipped-bg: #1c2447;
+
+    --c-undecided: #e9b84a;    --c-undecided-bg: #3a2c0c;  --c-undecided-line: #7a5f1a;
+    --c-empty: #6f7983;
+
+    --sh-1: 0 1px 2px rgba(0, 0, 0, .4);
+    --sh-2: 0 4px 14px rgba(0, 0, 0, .5);
+  }
+}
+/* 사용자가 명시적으로 고른 다크 (html[data-theme="dark"]) */
+:root[data-theme="dark"] {
+  --c-bg: #15181c; --c-surface: #1e2227; --c-surface-2: #262b31; --c-surface-3: #2f353c;
+  --c-line: #353b43; --c-line-strong: #525a64;
+  --c-ink: #e6e9ec; --c-ink-2: #a3acb5; --c-ink-3: #6f7983; --c-ink-inverse: #15181c;
+  --c-head: #0f1114; --c-head-ink: #e6e9ec; --c-head-ink-2: #8e98a2;
+  --c-accent: #6ea3e8; --c-accent-hover: #8ab6ee; --c-accent-ink: #0f1114; --c-accent-tint: #1f2d40;
+  --c-focus: #4e7fc0; --c-focus-pop: #ffd600; --c-link: #8ab6ee;
+  --c-ok: #6dc98b; --c-ok-bg: #16301f; --c-ok-line: #2d6b43;
+  --c-warn: #e9b84a; --c-warn-bg: #3a2c0c; --c-warn-line: #7a5f1a;
+  --c-err: #f08a7f; --c-err-bg: #3c1a16; --c-err-line: #8a3a31;
+  --c-info: #6ea3e8; --c-info-bg: #1b2a3f; --c-info-line: #345a8f;
+  --c-neutral: #a3acb5; --c-neutral-bg: #262b31; --c-neutral-line: #454c55;
+  --c-lot-stock: #5fc3d0; --c-lot-stock-bg: #10303a;
+  --c-lot-consumed: #a3acb5; --c-lot-consumed-bg: #262b31;
+  --c-lot-shipped: #93a9ee; --c-lot-shipped-bg: #1c2447;
+  --c-undecided: #e9b84a; --c-undecided-bg: #3a2c0c; --c-undecided-line: #7a5f1a;
+  --c-empty: #6f7983;
+  --sh-1: 0 1px 2px rgba(0, 0, 0, .4); --sh-2: 0 4px 14px rgba(0, 0, 0, .5);
+}
+
+/* ── 인쇄 — 색을 걷어낸다. 상태는 글자(배지 텍스트)로 남는다 ── */
+@media print {
+  :root {
+    --c-bg: #ffffff; --c-surface: #ffffff; --c-surface-2: #ffffff; --c-surface-3: #f2f2f2;
+    --c-line: #000000; --c-line-strong: #000000;
+    --c-ink: #000000; --c-ink-2: #333333; --c-ink-3: #666666;
+    --sh-1: none; --sh-2: none;
+  }
+}

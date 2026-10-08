@@ -1,0 +1,44 @@
+{# 미구현 화면 — HTTP 200 으로 "미구현 — 담당 개발N" 과 계약 문장을 그대로 보여 준다.
+   tools/check_routes.py 가 JSON 의 `placeholder: true`(또는 HTML 의 `class="tag"` + `미구현`)를 세어 G-C03 을 판정한다.
+   담당 개발자가 라우터에 이 경로를 등록하면 사라진다. #}
+{% extends "base.html" %}
+{% block body %}
+<section class="panel ph">
+  <div class="ph-head">
+    <span class="tag">미구현</span>
+    <h2>{{ t(item.name) }} <code>{{ screen_id }}</code></h2>
+    <span class="owner">{{ note }} · 모듈 <code>routers/{{ item.module }}.py</code> · 경로 <code>{{ item.path }}</code></span>
+  </div>
+  <p class="ph-note">이 화면은 아직 구현되지 않았다. 아래는 계약(<code>contracts/function-list.md</code>)의 문장 그대로다. 지어낸 값은 없다.</p>
+
+  <dl class="kv">
+    <dt>메뉴</dt><dd>{{ menu_name or '공통' }}</dd>
+    <dt>주로 쓰는 채널</dt><dd>{{ item.channels | join(', ') }}</dd>
+  </dl>
+
+  <h3>이 화면의 기능 <small>{{ functions | length }}줄</small></h3>
+  <div class="grid-panel">
+  <table class="grid plain">
+    <thead><tr><th>ID</th><th>기능명</th><th>유형</th><th>쓰는 테이블</th><th>권한</th><th>범위</th><th>API</th><th>훅</th></tr></thead>
+    <tbody>
+    {% for it in functions %}
+      {% set f = it.fn %}
+      <tr>
+        <td><code>{{ f.id }}</code></td>
+        <td>{{ t(f.name) }}</td>
+        <td>{{ f.kind }}</td>
+        <td>{% if f.tables %}<code>{{ f.tables | join(', ') }}</code>{% else %}쓰지 않는다{% endif %}</td>
+        <td>{% if f.is_write %}{{ f.roles | join(' · ') }}{% else %}{{ t('조회 이상') }}{% endif %}</td>
+        <td>{{ f.scope }}</td>
+        <td><code>{{ f.api }}</code></td>
+        <td>{{ f.hooks | join(', ') if f.hooks else '-' }}</td>
+      </tr>
+      <tr class="ph-text"><td></td><td colspan="7">{{ f.text }}</td></tr>
+    {% else %}
+      <tr><td colspan="8" class="empty">공통 화면 — 기능 줄은 계약에 없다</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,184 @@
+# packs/kimchi/pack.yaml — 임진강김치 MES 참조 팩 (기획자3 · 2026-10-09 · 기획 초안)
+# 규격: contracts/pack-contract.md §2 (키 전부). 근거: ../Limjingang Kimchi MES Platform/docs/design/design.json (TD3 화면 64 · TD5 테이블 67).
+# 코어 중립어 키는 spec.md §12 terms_keys 안에서만. 팩 안의 값(업종어)은 자유.
+# 임진강 산출물에 없는 값은 적지 않는다 — 주석에 (미확정) 으로 남긴다.
+
+pack: kimchi
+name: 김치 제조 MES
+company: 김치 제조 참조 사업        # 실제 회사명은 쓰지 않는다 (CLAUDE.md 작업 원칙)
+requires_core: ">=0.1,<1.0"
+env_prefix: MES_
+
+# ── E1 용어 사전 (코어 중립어 → 김치 업종어) ─────────────────────────────
+terms:
+  품목: 품목
+  BOM: 레시피BOM
+  설비: 설비·탱크
+  거래처: 거래처
+  작업자: 작업자
+  수주: 수주
+  생산계획: 생산계획
+  작업지시: 작업지시서
+  원재료 LOT: 원부자재 로트
+  생산 LOT: 배치
+  출하 LOT: 출하 로트
+  실적: 공정 실적
+  작업 시작: 작업 시작
+  작업 종료: 작업 완료
+  투입: 투입
+  측정값: 공정 조건
+  검사: 검사
+  불량: 불량
+  이상: 품질 이슈
+  출하: 출하
+  성적서: 성적서
+  추적: 로트 추적
+  현황판: 현황판
+  분할: 분할
+  합병: 혼합
+
+# ── E1 메뉴 — 임진강 메뉴 10(기준·수주·자재·공정·포장·품질·설비·POP·분석·시스템) 순서에 맞춘다 (D-507) ──
+menus:
+  hide: []                        # 숨기는 코어 메뉴 없음 (README §1.1)
+  rename:
+    bas: 기준정보
+    ord: 수주·계획
+    job: 작업지시
+    mat: 자재·재고
+    pop: POP 작업
+    qua: 품질이상
+    eqp: 설비
+    shp: 포장·출하
+    trc: 로트 추적
+    kpi: 분석·KPI
+    sys: 시스템
+    ifc: 인터페이스
+  order: [bas, ord, job, mat, cond, wsh, tank, pop, pkg, age, shp, qua, alm, eqp, trc, kpi, ifc, sys]
+  add:
+    - { code: cond, name: 공정 조건 기준, after: mat }      # 세척·절임 품목별 기준 (TD3 020·023)
+    - { code: wsh,  name: 세척 공정,     after: cond }     # 소독수 농도 로그 (TD3 021)
+    - { code: tank, name: 절임통 운영,   after: wsh }      # 절임통 8기 (TD3 024)
+    - { code: pkg,  name: 포장 실적,     after: pop }      # 테이핑기 (TD3 030)
+    - { code: age,  name: 숙성 냉장,     after: pkg }      # 숙성 재고·냉장고 입출고 (TD3 031·032)
+    - { code: alm,  name: 알람 이력,     after: qua }      # 기준 이탈 알람 6종 (TD3 standard_note 3)
+
+# ── E4 팩 화면 8 (기능은 function-list.md) ──────────────────────────────
+screens:
+  - { id: X-COND-01, name: 품목별 공정 조건 기준, module: cond, path: /cond/item-standards, channels: [web],             owner: 개발3 }
+  - { id: X-WSH-01,  name: 소독수 농도 로그,      module: wsh,  path: /wsh/sanitizer,       channels: [web, pop],        owner: 개발3 }
+  - { id: X-TANK-01, name: 절임통 운영,           module: tank, path: /tank/operations,     channels: [web, pop, board], owner: 개발3 }
+  - { id: X-TANK-02, name: 염도 추이,             module: tank, path: /tank/salinity,       channels: [web, board],      owner: 개발3 }
+  - { id: X-PKG-01,  name: 테이핑기 실적,         module: pkg,  path: /pkg/taping,          channels: [web, board],      owner: 개발3 }
+  - { id: X-AGE-01,  name: 숙성 재고,             module: age,  path: /age/stock,           channels: [web, mobile],     owner: 개발3 }
+  - { id: X-AGE-02,  name: 냉장고 입출고,         module: age,  path: /age/cold-moves,      channels: [web, mobile],     owner: 개발3 }
+  - { id: X-ALM-01,  name: 알람 이력,             module: alm,  path: /alm/alarms,          channels: [web, pop, board], owner: 개발3 }
+
+# ── E1 역할 6 — TD3 role_matrix 행 순서 (D-505). 코어 기본 4 를 대체. ADMIN 필수 ──
+roles:
+  - { code: PM,     name: 총괄 PM/경영진 }
+  - { code: PROD,   name: 생산관리 담당 }
+  - { code: QA,     name: 품질 담당 }
+  - { code: FIELD,  name: 현장 작업자 }
+  - { code: ADMIN,  name: 시스템 관리자 }
+  - { code: VENDOR, name: 외부 유지보수 }
+permissions: seed/permissions.csv          # 18 메뉴(코어 12 + 팩 6) × 6 역할 = 108 칸 전부
+
+# ── E1 채번 — 임진강은 로트번호 표준 체계 미확정(임진강 D-08) → 코어 기본형(D-10)의 접두어만 김치식. 가설 ──
+numbering:
+  ORDER:        { prefix: SO,  date: YYMMDD-, digits: 3 }
+  PLAN:         { prefix: PL,  date: YYMMDD-, digits: 3 }
+  WORK_ORDER:   { prefix: WO,  date: YYMMDD-, digits: 3 }
+  LOT_MATERIAL: { prefix: RM,  date: YYMMDD-, digits: 4 }
+  LOT_PRODUCT:  { prefix: LT,  date: YYMMDD-, digits: 4 }   # TANK · AGING 은 retag/split 로 생기므로 같은 규칙
+  SHIPMENT:     { prefix: SH,  date: YYMMDD-, digits: 3 }
+  DOCUMENT:     { prefix: CT,  date: YYMMDD-, digits: 3 }
+  ISSUE:        { prefix: IS,  date: YYMMDD-, digits: 3 }
+  ALARM:        { prefix: AL,  date: YYMMDD-, digits: 4 }   # 팩 추가 종류 — x_kimchi_env_alarm.alarm_no
+
+# ── E1 채널 — TD3 channels: 터치PC → pop · 스마트패드 → mobile · 현황판 → board. 코어 기본을 대체 ──
+channels:
+  pop:    [POP-01, POP-02, POP-03, POP-04, MAT-01, MAT-02, QUA-02, EQP-01, EQP-02, EQP-03, SHP-02, X-WSH-01, X-TANK-01, X-ALM-01]
+  mobile: [MAT-01, MAT-04, MAT-05, QUA-02, JOB-02, ORD-03, SHP-03, TRC-01, TRC-02, TRC-03, KPI-02, X-AGE-01, X-AGE-02]
+  board:  [KPI-01, JOB-02, X-TANK-01, X-TANK-02, X-PKG-01, X-ALM-01]
+
+# ── E2 표시용 속성 (검색·집계·제약에 쓰지 않는다 — pack-contract §3). 집계용은 x_kimchi_lot_ext ──
+attrs:
+  bas_item:
+    - { key: capacity_kg,  label: 용량(kg),   type: number }
+    - { key: pack_unit,    label: 포장단위,   type: select, choices: [박스, 봉, 통] }
+    - { key: ship_type,    label: 출고구분,   type: select, choices: [홈쇼핑, 일반출고] }
+  bas_bom:
+    - { key: base_qty_kg,  label: 기준생산량(kg), type: number }
+    - { key: valid_from,   label: 적용시작일, type: date }
+    - { key: valid_to,     label: 적용종료일, type: date }
+    - { key: security_lv,  label: 보안등급,   type: text }          # 열람 통제는 코어 변경 요청 C-4 (D-504)
+  bas_process:
+    - { key: ccp_yn,       label: CCP 공정,   type: bool }
+  bas_equipment:
+    - { key: equip_type,   label: 설비구분,   type: select, choices: [절임통, 냉장고, 충진기, 속넣기기계, 금속검출기, 자동테이핑기, 중량저울, 소독수공급장치, 온습도센서, 온도조절기, 염도센서, PLC제어반] }
+    - { key: comm_type,    label: 통신방식,   type: select, choices: [RS-485, "Ethernet(TCP/IP)", OPC-UA] }
+    - { key: plc_tag,      label: PLC 태그,   type: text }
+    - { key: collect_item, label: 수집 항목,  type: text }
+  bas_partner:
+    - { key: delivery_term, label: 납품조건,  type: text }
+  bas_worker:
+    - { key: join_date,    label: 입사일,     type: date }
+  bas_defect_code:
+    - { key: kpi_target_yn, label: 완제품 불량률 산정 대상, type: bool }
+  ord_order:
+    - { key: receipt_path, label: 접수경로,   type: select, choices: [카카오톡, 팩스, 직접등록] }
+    - { key: ship_type,    label: 출고구분,   type: select, choices: [홈쇼핑, 일반출고] }
+  job_work_order:
+    - { key: display_yn,   label: 현장표시,   type: bool }
+  lot:
+    - { key: expire_date,  label: 유통기한,   type: date }
+    - { key: location,     label: 보관위치,   type: select, choices: [원품냉장고, 탈수냉장고, 숙성냉장고, 자재창고] }
+    - { key: size_type,    label: 원물 크기구분, type: select, choices: ["대 (예시)", "소 (예시)"] }   # 값 미확정 (임진강 D-208)
+  qua_issue:
+    - { key: deviation_type, label: 발생구분, type: select, choices: [과절임, 절임부족] }
+    - { key: deviation_qty,  label: 발생수량(kg), type: number }
+    - { key: prevent_desc,   label: 재발방지, type: text }
+  qua_insp_plan:
+    - { key: haccp_doc_no, label: HACCP 문서번호, type: text }
+  eqp_check:
+    - { key: next_check_date, label: 차기 예정일, type: date }
+
+# ── E3 공정 측정값 · 검사 항목 ──────────────────────────────────────────
+process_params: seed/process_params.csv      # 19행 — manual 11 · collect 8
+inspection_items: seed/inspection_items.csv  # 9행 — 입고 3 · 공정 5 · 최종 1
+
+# ── E6 계보 (README §5) ───────────────────────────────────────────────
+lineage:
+  lot_kinds:
+    - { kind: TANK,  base: PRODUCT, label: 절임통 배치 }   # 절임 공정 종료 시 retag (D-501)
+    - { kind: AGING, base: PRODUCT, label: 숙성 배치 }     # 숙성 투입 시 split (D-502)
+  relations:
+    - { name: 혼합, base: 합병 }     # 절임통 배치 N → 혼합 배치 1
+    - { name: 숙성, base: 분할 }     # 포장 LOT → 숙성 배치 (부분 수량 허용)
+  states: { IN_STOCK: 재고, CONSUMED: 소진, SHIPPED: 출하 }
+
+# ── 쓰기 범위 — 팩 라우터·훅이 쓸 수 있는 코어 테이블 (pack-contract §4 R7·R8) ──
+write_scope:
+  cond:  []                         # x_kimchi_item_std 만
+  wsh:   []                         # x_kimchi_sanitizer_log 만
+  tank:  []                         # x_kimchi_tank 만 — 실적 시작·종료는 코어 POP-02 (D-501)
+  pkg:   []                         # x_kimchi_taping_log 만
+  age:   [lot, lot_genealogy]       # lineage.split(relation=숙성) 경유만 — 직접 SQL 금지
+  alm:   []                         # x_kimchi_env_alarm 만
+  hooks: [lot, pop_measure, qua_issue]   # on_result_closed(retag TANK · 손실률) · on_inspection_judged(qua_issue) · on_collect(qua_issue 없음 — env_alarm 만)
+  # validate_shipment 은 읽기만 (hooks.md §1)
+
+# ── E5 · E7 ──────────────────────────────────────────────────────────
+hooks: hooks.py                     # 사양: hooks.md
+adapters:
+  collect: adapters/collect_tags.py # 태그 ↔ bas_process_param.collect_tag 매핑 + 센서–절임통 매핑 표 (미확정 D-206 → 빈 표)
+  printing: null                    # 코어 기본(브라우저 인쇄)
+  erp: null                         # 코어 기본 501 — 더존 ERP 연계(TD4-066)는 범위 밖
+
+seeds:
+  - seed/codes.csv
+  - seed/processes.csv              # 9 공정 (design.json meta.main_processes — 정본)
+  - seed/items_example.csv          # (예시) 만
+  - seed/equipment_example.csv      # 절임통 8 · 냉장고 3 · 센서 10 · 온도조절기 4 · 소독수 IM · 금속검출기 · 저울 · 충진기 · 속넣기 · 자동포장기
+tests: tests/
+gates: gates.yaml

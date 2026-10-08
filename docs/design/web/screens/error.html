@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<!--
+  CMN-03 오류 (/error · _error.html) — 상태코드별 한 양식. 아래는 403 상태. 다른 코드는 하단 표(개발용).
+  · 헤더 · 메뉴는 그대로(로그인 상태면). 본문은 상태코드 · 메시지 · 다음 행동 버튼 하나.
+  · 현황판 채널(ch-board)은 오류 화면에서도 자동 새로고침이 이어진다(app.js data-refresh-seconds — 디자이너3 board/).
+  · 501 은 decision(D-nn) 을 같이 보여 준다. 503 은 접속 문자열 · 호스트를 싣지 않는다.
+  · 정적 원형(디자이너1). CSS: ../tokens.css + <style>. 외부 자원 0.
+-->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>403 접근 권한이 없습니다 · {{ t("시스템명") }}</title>
+<link rel="stylesheet" href="../../tokens.css">
+<style>
+/* ── 관리자 Web 레이아웃 (tokens.css 의 변수만 쓴다 · 색상값 직접 기입 0) ──
+   이식: 이 블록을 static/web.css 로 빼거나 base.html <style> 에 그대로 둔다. */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--c-bg);color:var(--c-ink);font:var(--fs-md)/var(--lh-base) var(--font-sans);min-height:100vh}
+a{color:var(--c-link);text-decoration:none}
+a:hover{text-decoration:underline}
+code,.code{font:var(--fs-sm)/1.3 var(--font-mono);background:var(--c-surface-2);padding:1px 4px;border-radius:var(--r-sm);color:var(--c-ink)}
+small{font-size:var(--fs-xs);color:var(--c-ink-2);font-weight:400}
+b{font-weight:600}
+[hidden]{display:none !important}
+:focus-visible{outline:none;box-shadow:var(--focus-ring)}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.mono{font-family:var(--font-mono)}
+.muted{color:var(--c-ink-2)}
+.inline{display:inline}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* 헤더 */
+.hdr{position:sticky;top:0;z-index:var(--z-hdr);height:var(--h-hdr);display:flex;align-items:center;justify-content:space-between;gap:var(--sp-4);
+  padding:0 var(--sp-4);background:var(--c-head);color:var(--c-head-ink)}
+.hdr-l,.hdr-r{display:flex;align-items:center;gap:var(--sp-3);min-width:0}
+.brand{color:var(--c-head-ink);font-weight:700;font-size:var(--fs-lg);white-space:nowrap}
+.brand:hover{text-decoration:none}
+.crumb{color:var(--c-head-ink-2);font-size:var(--fs-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crumb strong{color:var(--c-head-ink);font-weight:600}
+.crumb code{background:rgba(255,255,255,.12);color:var(--c-head-ink-2)}
+.hdr-r{font-size:var(--fs-sm);color:var(--c-head-ink-2)}
+.hdr-r .meta b{color:var(--c-head-ink);font-weight:600}
+.hdr-r .user em{font-style:normal;color:var(--c-head-ink);background:rgba(255,255,255,.12);padding:0 6px;border-radius:var(--r-sm);margin-left:4px}
+.hdr-btn{font:inherit;font-size:var(--fs-sm);color:var(--c-head-ink);background:transparent;border:var(--bw) solid rgba(255,255,255,.25);border-radius:var(--r-md);padding:3px 8px;cursor:pointer;line-height:1.2}
+.hdr-btn:hover{background:rgba(255,255,255,.1)}
+.hdr-btn[aria-expanded="false"]{opacity:.6}
+.btn-ghost{background:transparent;border-color:rgba(255,255,255,.3);color:var(--c-head-ink)}
+.btn-ghost:hover{background:rgba(255,255,255,.1)}
+
+/* 3단 셸: 메뉴 / 본문 / 계약 패널. 1280 기준, 1024 에서는 메뉴가 좁아지고 계약 패널이 접힌다 */
+.shell{display:grid;grid-template-columns:var(--w-side) minmax(0,1fr) var(--w-desc);gap:var(--sp-3);padding:var(--sp-3);align-items:start}
+body.side-collapsed .shell{grid-template-columns:0 minmax(0,1fr) var(--w-desc)}
+body.side-collapsed .side{display:none}
+body.desc-closed .shell{grid-template-columns:var(--w-side) minmax(0,1fr) 0}
+body.desc-closed .desc{display:none}
+body.side-collapsed.desc-closed .shell{grid-template-columns:0 minmax(0,1fr) 0}
+@media (max-width:1180px){
+  .shell{grid-template-columns:var(--w-side-min) minmax(0,1fr) 0}
+  .desc{display:none}
+  body.desc-open .desc{display:block;position:fixed;right:var(--sp-3);top:calc(var(--h-hdr) + var(--sp-3));width:var(--w-desc);max-height:calc(100vh - var(--h-hdr) - var(--sp-5));overflow:auto;box-shadow:var(--sh-2);z-index:var(--z-side)}
+}
+@media (max-width:860px){
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .side{position:static;max-height:none}
+  .main{order:-1}
+}
+
+/* 좌측 메뉴 */
+.side{position:sticky;top:calc(var(--h-hdr) + var(--sp-3));max-height:calc(100vh - var(--h-hdr) - var(--sp-5));overflow:auto;
+  background:var(--c-surface);border:var(--bw) solid var(--c-line);border-radius:var(--r-md);padding:var(--sp-1)}
+.mg{margin-bottom:1px}
+.mg-h{display:flex;width:100%;justify-content:space-between;align-items:center;gap:var(--sp-2);padding:6px 8px;
+  font:inherit;font-size:var(--fs-sm);font-weight:700;color:var(--c-ink);background:transparent;border:0;border-radius:var(--r-md);cursor:pointer;text-align:left}
+.mg-h:hover{background:var(--c-surface-2)}
+.mg-h small{background:var(--c-surface-2);color:var(--c-ink-2);border-radius:9px;padding:0 6px;font-size:var(--fs-xs);line-height:16px}
+.mg.on>.mg-h{background:var(--c-accent);color:var(--c-accent-ink)}
+.mg.on>.mg-h small{background:rgba(255,255,255,.25);color:var(--c-accent-ink)}
+.mg>ul{list-style:none;margin:0 0 var(--sp-1);padding:2px 0 0 var(--sp-2);display:none}
+.mg.open>ul{display:block}
+.mg li a{display:flex;align-items:center;gap:6px;padding:4px 8px;font-size:var(--fs-sm);color:var(--c-ink-2);border-radius:var(--r-md);border-left:var(--bw-strong) solid transparent}
+.mg li a:hover{background:var(--c-surface-2);color:var(--c-ink);text-decoration:none}
+.mg li a.cur{background:var(--c-accent-tint);color:var(--c-accent);font-weight:700;border-left-color:var(--c-accent)}
+.mg li a .ch{font-style:normal;font-size:10px;color:var(--c-ink-3);border:var(--bw) solid var(--c-line);border-radius:var(--r-sm);padding:0 3px;line-height:14px}
+
+/* 본문 · 패널 */
+.main{display:flex;flex-direction:column;gap:var(--sp-3);min-width:0}
+.panel{background:var(--c-surface);border:var(--bw) solid var(--c-line);border-radius:var(--r-md);padding:var(--sp-3) var(--sp-4)}
+.panel>h2,.panel>.ph{margin:0 0 var(--sp-2);font-size:var(--fs-md);font-weight:700;color:var(--c-ink);display:flex;align-items:baseline;gap:var(--sp-2);flex-wrap:wrap}
+.panel>h2 small{font-weight:400}
+.panel>h2 .right{margin-left:auto;display:flex;gap:var(--sp-2);align-items:center}
+.panel h3{margin:var(--sp-3) 0 var(--sp-2);font-size:var(--fs-sm);color:var(--c-ink-2);text-transform:none;letter-spacing:0}
+.panel.sub{border-style:dashed}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--sp-3)}
+@media (max-width:1100px){.two{grid-template-columns:minmax(0,1fr)}}
+
+/* 조회 조건 · 입력 폼 */
+.search-form,.form-grid{display:flex;flex-wrap:wrap;gap:var(--sp-2) var(--sp-4);align-items:flex-end}
+.form-grid.cols{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));align-items:start}
+.form-grid .wide{grid-column:span 2}
+.form-grid .full{grid-column:1/-1}
+.f{display:flex;flex-direction:column;gap:3px;font-size:var(--fs-sm);color:var(--c-ink-2);min-width:120px}
+.f>span{display:flex;justify-content:space-between;gap:var(--sp-2);line-height:var(--lh-tight)}
+.f .req{color:var(--c-err);font-style:normal;font-weight:700}
+.f .hint{color:var(--c-ink-3);font-size:var(--fs-xs);font-weight:400}
+input,select,textarea{font:inherit;color:var(--c-ink);background:var(--c-surface);border:var(--bw) solid var(--c-line);border-radius:var(--r-md);padding:4px 8px;min-height:30px;min-width:0}
+input[type="date"],input[type="number"]{font-variant-numeric:tabular-nums}
+input[type="checkbox"],input[type="radio"]{min-height:0;width:15px;height:15px;margin:0;accent-color:var(--c-accent)}
+textarea{min-height:64px;resize:vertical}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--c-accent);box-shadow:var(--focus-ring)}
+input[readonly],input:disabled,select:disabled,textarea[readonly]{background:var(--c-surface-2);color:var(--c-ink-2);cursor:default}
+input::placeholder{color:var(--c-ink-3)}
+.f.err input,.f.err select,.f.err textarea{border-color:var(--c-err);background:var(--c-err-bg)}
+.f .reason{color:var(--c-err);font-size:var(--fs-xs);font-weight:600}
+.f.check{flex-direction:row;align-items:center;gap:6px;min-height:30px;color:var(--c-ink)}
+.f.inline-unit{position:relative}
+.f .unit{position:absolute;right:8px;bottom:6px;font-size:var(--fs-xs);color:var(--c-ink-3)}
+.f.w-sm{min-width:90px;max-width:110px}
+.f.w-md{min-width:160px}
+.f.w-lg{min-width:260px;flex:1 1 260px}
+fieldset{border:var(--bw) solid var(--c-line);border-radius:var(--r-md);margin:0;padding:var(--sp-2) var(--sp-3);min-width:0}
+legend{font-size:var(--fs-xs);color:var(--c-ink-2);padding:0 var(--sp-1)}
+/* 팩 속성 폼 (ui.attrs_fields) — 코어 칸과 구분선으로 나뉜다. 팩 선언이 없으면 통째로 안 그려진다 */
+.attrs{grid-column:1/-1;border:0;border-top:var(--bw) dashed var(--c-line-strong);border-radius:0;padding:var(--sp-2) 0 0;margin-top:var(--sp-1)}
+.attrs>legend{padding:0 var(--sp-2) 0 0;color:var(--c-undecided);font-weight:700}
+.attrs .form-grid{margin-top:var(--sp-1)}
+.form-actions{display:flex;gap:var(--sp-2);align-items:center;flex-wrap:wrap;margin-top:var(--sp-3)}
+.form-actions .why{font-size:var(--fs-xs);color:var(--c-ink-2)}
+dl.kv{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:3px var(--sp-3);margin:0;font-size:var(--fs-sm)}
+dl.kv dt{color:var(--c-ink-2)}
+dl.kv dd{margin:0}
+
+/* 표 (ui.grid) */
+.grid-panel{overflow-x:auto}
+table.grid{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
+table.grid th,table.grid td{padding:5px 8px;border-bottom:var(--bw) solid var(--c-line);text-align:left;white-space:nowrap;vertical-align:middle}
+table.grid thead th{background:var(--c-surface-2);color:var(--c-ink);font-weight:700;border-bottom:var(--bw) solid var(--c-line-strong);position:sticky;top:0}
+table.grid thead th.num,table.grid td.num{text-align:right;font-variant-numeric:tabular-nums}
+table.grid thead th[aria-sort]{cursor:pointer;padding-right:18px;position:relative}
+table.grid thead th[aria-sort]::after{content:"\25B4\25BE";position:absolute;right:5px;top:5px;font-size:9px;letter-spacing:-2px;color:var(--c-ink-3);line-height:1}
+table.grid thead th[aria-sort="ascending"]::after{content:"\25B4";color:var(--c-accent);font-size:11px;letter-spacing:0}
+table.grid thead th[aria-sort="descending"]::after{content:"\25BE";color:var(--c-accent);font-size:11px;letter-spacing:0}
+table.grid tbody tr:hover{background:var(--c-surface-2)}
+table.grid tbody tr.sel{background:var(--c-accent-tint)}
+table.grid tbody tr.sel td:first-child{box-shadow:inset var(--bw-strong) 0 0 var(--c-accent)}
+table.grid tbody tr.dim td{color:var(--c-ink-3)}
+table.grid td.wrap{white-space:normal;min-width:200px}
+table.grid td.act{white-space:nowrap}
+table.grid td.act .btn,table.grid td.act details{display:inline-block;vertical-align:middle;margin-right:2px}
+table.grid td.empty{color:var(--c-empty);text-align:center;padding:var(--sp-5) var(--sp-2)}
+table.grid td.empty b{display:block;font-size:var(--fs-md);color:var(--c-ink-2);margin-bottom:2px}
+table.grid tfoot td{background:var(--c-surface-2);font-weight:700;border-top:var(--bw) solid var(--c-line-strong)}
+table.grid.compact th,table.grid.compact td{padding:3px 6px}
+table.grid tr.group td{background:var(--c-surface-3);font-weight:700;color:var(--c-ink-2)}
+table.grid tr.dtl td{background:var(--c-surface);color:var(--c-ink-2);padding-left:var(--sp-5);border-bottom-style:dashed}
+table.grid tr.dtl td:first-child::before{content:"\2514";margin-right:6px;color:var(--c-ink-3)}
+.pager{display:flex;gap:var(--sp-1);align-items:center;margin-top:var(--sp-2);font-size:var(--sp-3);font-size:var(--fs-sm);color:var(--c-ink-2);flex-wrap:wrap}
+.pager .pg{min-width:28px;padding:2px 6px;text-align:center;border:var(--bw) solid var(--c-line);border-radius:var(--r-md);background:var(--c-surface);color:var(--c-ink);font:inherit;cursor:pointer}
+.pager .pg[aria-current]{background:var(--c-accent);border-color:var(--c-accent);color:var(--c-accent-ink);font-weight:700}
+.pager .pg:disabled{opacity:.4;cursor:default}
+.pager .sum{margin-left:auto}
+.bar{display:inline-block;height:8px;background:var(--c-surface-3);border-radius:var(--r-sm);vertical-align:middle;width:72px;position:relative;overflow:hidden}
+.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--c-accent)}
+.bar.ok i{background:var(--c-ok)}.bar.warn i{background:var(--c-warn)}.bar.err i{background:var(--c-err)}
+
+/* 버튼 */
+.btn{font:inherit;font-size:var(--fs-md);line-height:1.2;padding:5px 12px;min-height:30px;border:var(--bw) solid var(--c-line-strong);border-radius:var(--r-md);
+  background:var(--c-surface);color:var(--c-ink);cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{background:var(--c-surface-2);text-decoration:none}
+.btn:disabled,.btn[aria-disabled="true"]{opacity:.45;cursor:not-allowed}
+.btn-sm{font-size:var(--fs-sm);padding:2px 8px;min-height:24px}
+.btn-primary{background:var(--c-accent);border-color:var(--c-accent);color:var(--c-accent-ink);font-weight:600}
+.btn-primary:hover{background:var(--c-accent-hover);border-color:var(--c-accent-hover)}
+.btn-err{color:var(--c-err);border-color:var(--c-err-line)}
+.btn-err:hover{background:var(--c-err-bg)}
+.btn-ok{color:var(--c-ok);border-color:var(--c-ok-line)}
+.btn-ok:hover{background:var(--c-ok-bg)}
+.btn-warn{color:var(--c-warn);border-color:var(--c-warn-line)}
+.btn-warn:hover{background:var(--c-warn-bg)}
+.actions{display:flex;gap:var(--sp-2);align-items:center;flex-wrap:wrap;justify-content:flex-end;background:var(--c-surface);border:var(--bw) solid var(--c-line);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-4)}
+.actions .why{font-size:var(--fs-xs);color:var(--c-ink-2);margin-right:auto}
+.btn-row{display:flex;gap:var(--sp-2);flex-wrap:wrap;align-items:center}
+
+/* 인라인 확인 (브라우저 confirm 금지) — <details> 하나로 끝난다. summary 가 첫 버튼, 펼치면 확인 버튼이 옆에 나온다 */
+details.confirm{display:inline-block;position:relative}
+details.confirm>summary{list-style:none;display:inline-flex}
+details.confirm>summary::-webkit-details-marker{display:none}
+details.confirm[open]>summary{background:var(--c-surface-3)}
+.confirm-box{position:absolute;z-index:var(--z-side);top:calc(100% + 4px);right:0;background:var(--c-surface);border:var(--bw) solid var(--c-err-line);border-radius:var(--r-md);
+  box-shadow:var(--sh-2);padding:var(--sp-2) var(--sp-3);display:flex;gap:var(--sp-2);align-items:center;white-space:nowrap;font-size:var(--fs-sm)}
+.confirm-box.static{position:static;box-shadow:none;margin-top:var(--sp-2)}
+.confirm-box form{display:inline}
+
+/* 배지 — 색 + 글자. 의미는 tokens.css §8~§11 에 고정 */
+.badge{display:inline-block;font-size:var(--fs-xs);font-weight:600;line-height:16px;padding:0 6px;border-radius:var(--r-sm);border:var(--bw) solid transparent;white-space:nowrap;vertical-align:middle}
+.badge-ok{color:var(--c-ok);background:var(--c-ok-bg);border-color:var(--c-ok-line)}
+.badge-warn{color:var(--c-warn);background:var(--c-warn-bg);border-color:var(--c-warn-line)}
+.badge-err{color:var(--c-err);background:var(--c-err-bg);border-color:var(--c-err-line)}
+.badge-info{color:var(--c-info);background:var(--c-info-bg);border-color:var(--c-info-line)}
+.badge-neutral{color:var(--c-neutral);background:var(--c-neutral-bg);border-color:var(--c-neutral-line)}
+.badge-stock{color:var(--c-lot-stock);background:var(--c-lot-stock-bg);border-color:var(--c-lot-stock)}
+.badge-consumed{color:var(--c-lot-consumed);background:var(--c-lot-consumed-bg);border-color:var(--c-neutral-line)}
+.badge-shipped{color:var(--c-lot-shipped);background:var(--c-lot-shipped-bg);border-color:var(--c-lot-shipped)}
+.badge-pass{color:var(--c-pass);background:var(--c-pass-bg);border-color:var(--c-ok-line)}
+.badge-fail{color:var(--c-fail);background:var(--c-fail-bg);border-color:var(--c-err-line)}
+.badge-cond{color:var(--c-cond);background:var(--c-cond-bg);border-color:var(--c-warn-line)}
+.badge-none{color:var(--c-none);background:var(--c-none-bg);border-color:var(--c-neutral-line);border-style:dashed}
+.badge-run{color:var(--c-eq-run);background:var(--c-eq-run-bg);border-color:var(--c-ok-line)}
+.badge-stop{color:var(--c-eq-stop);background:var(--c-eq-stop-bg);border-color:var(--c-neutral-line)}
+.badge-check{color:var(--c-eq-check);background:var(--c-eq-check-bg);border-color:var(--c-info-line)}
+.badge-fault{color:var(--c-eq-fault);background:var(--c-eq-fault-bg);border-color:var(--c-err-line)}
+.badge-kind{color:var(--c-ink-2);background:var(--c-surface-2);border-color:var(--c-line);font-family:var(--font-mono);font-weight:400}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:currentColor;margin-right:4px;vertical-align:1px}
+.tag{display:inline-block;font-size:10px;font-weight:700;color:var(--c-undecided);background:var(--c-undecided-bg);border:var(--bw) solid var(--c-undecided-line);border-radius:var(--r-sm);padding:0 5px;line-height:15px;vertical-align:middle}
+.undecided{display:inline-block;color:var(--c-undecided);background:var(--c-undecided-bg);border:var(--bw) solid var(--c-undecided-line);border-radius:var(--r-sm);padding:0 6px;font-size:var(--fs-xs);font-weight:600;line-height:16px;white-space:nowrap}
+.empty-inline{color:var(--c-empty);font-size:var(--fs-sm);margin:0;padding:var(--sp-2) 0}
+.deviated{color:var(--c-deviated);background:var(--c-deviated-bg);font-weight:700;padding:0 4px;border-radius:var(--r-sm)}
+.notes{margin:var(--sp-2) 0 0;padding-left:var(--sp-4);font-size:var(--fs-xs);color:var(--c-ink-2)}
+.notes li{margin-bottom:2px}
+
+/* 탭 (KPI 집계의 kind 전환 등 — 링크이지 JS 탭이 아니다) */
+.tabs{display:flex;gap:var(--sp-1);border-bottom:var(--bw) solid var(--c-line);margin:0 0 var(--sp-3);flex-wrap:wrap}
+.tabs a{padding:6px 12px;font-size:var(--fs-md);color:var(--c-ink-2);border-bottom:var(--bw-strong) solid transparent;margin-bottom:-1px}
+.tabs a:hover{color:var(--c-ink);text-decoration:none;background:var(--c-surface-2)}
+.tabs a[aria-current]{color:var(--c-accent);font-weight:700;border-bottom-color:var(--c-accent)}
+
+/* 알림 — 303 뒤 토스트 한 번 · 422 항목별 사유 목록 */
+.toast{position:fixed;top:calc(var(--h-hdr) + var(--sp-3));right:var(--sp-4);z-index:var(--z-toast);display:flex;align-items:center;gap:var(--sp-2);
+  background:var(--c-surface);color:var(--c-ink);border:var(--bw) solid var(--c-line);border-left:4px solid var(--c-ok);border-radius:var(--r-lg);box-shadow:var(--sh-2);padding:var(--sp-2) var(--sp-3);max-width:420px;font-size:var(--fs-md)}
+.toast strong{color:var(--c-ok)}
+.toast.warn{border-left-color:var(--c-warn)}.toast.warn strong{color:var(--c-warn)}
+.toast.err{border-left-color:var(--c-err)}.toast.err strong{color:var(--c-err)}
+.toast-x{margin-left:auto;font:inherit;font-size:var(--fs-lg);line-height:1;background:transparent;border:0;color:var(--c-ink-2);cursor:pointer;padding:0 2px}
+.alert{border:var(--bw) solid var(--c-err-line);border-left-width:4px;background:var(--c-err-bg);color:var(--c-ink);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);font-size:var(--fs-md)}
+.alert>strong{color:var(--c-err)}
+.alert.warn{border-color:var(--c-warn-line);background:var(--c-warn-bg)}.alert.warn>strong{color:var(--c-warn)}
+.alert.info{border-color:var(--c-info-line);background:var(--c-info-bg)}.alert.info>strong{color:var(--c-info)}
+.alert ul.fields{margin:var(--sp-1) 0 0;padding-left:var(--sp-4);font-size:var(--fs-sm)}
+.alert ul.fields li b{font-weight:600}
+.alert ul.fields li code{background:rgba(0,0,0,.06)}
+.alert .alert-x{float:right;font:inherit;font-size:var(--fs-lg);line-height:1;background:transparent;border:0;color:var(--c-ink-2);cursor:pointer}
+
+/* 계보 트리 (TRC) — 깊이 · 분기가 커져도 읽히게: 들여쓰기 + 연결선 + 가지별 접기 */
+.tree,.tree ul{list-style:none;margin:0;padding:0}
+.tree ul{padding-left:var(--sp-5);border-left:var(--bw) solid var(--c-line);margin-left:9px}
+.tree li{position:relative;padding:2px 0}
+.tree ul>li::before{content:"";position:absolute;left:calc(-1 * var(--sp-5));top:15px;width:var(--sp-4);border-top:var(--bw) solid var(--c-line)}
+.tree details>summary{list-style:none;cursor:pointer;display:inline-block}
+.tree details>summary::-webkit-details-marker{display:none}
+.node{display:inline-flex;align-items:center;gap:var(--sp-2);padding:3px 8px;border:var(--bw) solid var(--c-line);border-radius:var(--r-md);background:var(--c-surface);font-size:var(--fs-sm);max-width:100%;flex-wrap:wrap}
+.node.start{border-color:var(--c-accent);background:var(--c-accent-tint);box-shadow:inset var(--bw-strong) 0 0 var(--c-accent)}
+.node .no{font-family:var(--font-mono);font-weight:700}
+.node .qty{font-variant-numeric:tabular-nums;color:var(--c-ink-2)}
+.node .rel{font-size:var(--fs-xs);color:var(--c-ink-3)}
+.node .links{display:inline-flex;gap:4px;margin-left:var(--sp-1)}
+.node .links a{font-size:var(--fs-xs);color:var(--c-link);border:var(--bw) solid var(--c-line);border-radius:var(--r-sm);padding:0 4px;line-height:15px}
+.node .more{font-size:var(--fs-xs);color:var(--c-ink-2);cursor:pointer}
+.tree details:not([open])>summary .node::after{content:"\25B8 가지 펴기";font-size:var(--fs-xs);color:var(--c-accent);margin-left:4px}
+
+/* 집계 타일 (KPI · 대시보드) — 표의 보조. 숫자는 tabular */
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:var(--sp-2);margin-bottom:var(--sp-3)}
+.tile{border:var(--bw) solid var(--c-line);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);background:var(--c-surface)}
+.tile .l{font-size:var(--fs-xs);color:var(--c-ink-2)}
+.tile .v{font-size:var(--fs-xl);font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2}
+.tile .v small{font-size:var(--fs-sm);font-weight:400;margin-left:2px}
+.tile .s{font-size:var(--fs-xs);color:var(--c-ink-2)}
+.tile.warn{border-color:var(--c-warn-line);background:var(--c-warn-bg)}
+.tile.err{border-color:var(--c-err-line);background:var(--c-err-bg)}
+
+/* 우측 계약 패널 */
+.desc{position:sticky;top:calc(var(--h-hdr) + var(--sp-3));background:var(--c-surface);border:var(--bw) solid var(--c-line);border-radius:var(--r-md);padding:var(--sp-3) var(--sp-4);font-size:var(--fs-sm)}
+.desc h2{margin:0 0 var(--sp-2);font-size:var(--fs-md);display:flex;align-items:center;gap:var(--sp-2)}
+.desc-b{margin-bottom:var(--sp-3)}
+.desc-b h3{margin:0 0 var(--sp-1);font-size:var(--fs-sm);color:var(--c-accent);display:flex;justify-content:space-between;gap:var(--sp-2);align-items:baseline}
+.desc-b ul{margin:0;padding-left:var(--sp-4);color:var(--c-ink-2)}
+.desc-b li{margin-bottom:3px}
+.desc-b li.off{opacity:.5}
+.desc-b p{margin:0;color:var(--c-ink-2)}
+
+/* 바코드 자리 (printing.barcode_svg — Code128 인라인 SVG) */
+.barcode{display:inline-block;vertical-align:middle;line-height:0}
+.barcode svg{display:block;height:36px;width:auto}
+.barcode+.bc-text{display:block;font-family:var(--font-mono);font-size:var(--fs-xs);text-align:center;letter-spacing:1px}
+
+/* 푸터 */
+.ftr{padding:var(--sp-3) var(--sp-4);font-size:var(--fs-xs);color:var(--c-ink-2);text-align:center}
+
+/* 인쇄 — 크롬은 빼고 본문만 */
+@media print{
+  .hdr,.side,.desc,.ftr,.actions,.toast,.no-print,.form-actions{display:none !important}
+  .shell{display:block;padding:0}
+  .panel{border:0;padding:0;margin-bottom:var(--sp-3)}
+  table.grid th,table.grid td{white-space:normal}
+}
+
+.err-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;padding:var(--sp-6) var(--sp-4);text-align:center}
+.err-code{font-size:var(--fs-2xl);font-weight:700;color:var(--c-err);font-variant-numeric:tabular-nums;letter-spacing:1px}
+.err-code.warn{color:var(--c-warn)}
+.err-msg{font-size:var(--fs-xl);font-weight:700;margin:var(--sp-2) 0 var(--sp-1)}
+.err-sub{color:var(--c-ink-2);font-size:var(--fs-md);margin:0 0 var(--sp-4);max-width:560px}
+.err-sub code{font-size:var(--fs-sm)}
+.err-meta{font-size:var(--fs-xs);color:var(--c-ink-3);margin-top:var(--sp-5)}
+</style>
+</head>
+<body class="ch-web" data-device="web" data-screen="CMN-03">
+<header class="hdr">
+  <div class="hdr-l">
+    <a class="brand" href="../../web/base.html">{{ t("시스템명") }}</a>
+    <span class="crumb"><strong>오류</strong> <code>403</code></span>
+  </div>
+  <div class="hdr-r">
+    <span class="meta">갱신 <b>2026-10-09 14:05</b></span>
+    <span class="meta">채널 <b>Web</b></span>
+    <span class="meta user">김품질 <em>품질</em></span>
+    <form method="post" action="/logout" class="inline"><button type="submit" class="btn btn-ghost btn-sm">로그아웃</button></form>
+  </div>
+</header>
+
+<div class="shell" style="grid-template-columns:minmax(0,1fr)">
+  <main class="main">
+    <section class="panel">
+      <div class="err-wrap" role="alert">
+        <div class="err-code">403</div>
+        <p class="err-msg">접근 권한이 없습니다</p>
+        <p class="err-sub">품질 역할은 <b>시스템 &rsaquo; 권한 표</b> 메뉴 칸이 <code>없음</code> 이다. 필요하면 관리자가 권한 표(SYS-03)에서 연다. 요청 경로 <code>GET /sys/permissions</code></p>
+        <div class="btn-row">
+          <a class="btn btn-primary" href="../../web/base.html">메인으로</a>
+          <a class="btn" href="javascript:history.back()">이전 화면으로</a>
+        </div>
+        <p class="err-meta">2026-10-09 14:05:12 · 요청 ID <code>req-7f3a1c</code> · 이 화면은 접근 로그에 남는다</p>
+      </div>
+    </section>
+
+    <section class="panel sub" data-env="dev">
+      <h2>상태코드별 문구 · 다음 행동 <span class="tag">개발용</span> <small>api-contract.md §1 · §2 — 운영에서는 그 코드 하나만 보인다</small></h2>
+      <table class="grid compact">
+        <thead><tr><th class="num">HTTP</th><th>code</th><th>메시지</th><th>언제 이 화면인가</th><th>버튼</th></tr></thead>
+        <tbody><tr><td class="num"><b>401</b></td><td><code>unauthorized</code></td><td>로그인이 필요합니다</td><td class="wrap">GET 은 303 → /login?next=… · POST 만 이 화면</td><td>로그인으로</td></tr><tr><td class="num"><b>403</b></td><td><code>forbidden</code></td><td>접근 권한이 없습니다</td><td class="wrap">권한 없음 · 팩이 숨긴 메뉴 · 채널 허용 밖 화면</td><td>메인으로</td></tr><tr><td class="num"><b>404</b></td><td><code>not_found</code></td><td>대상을 찾을 수 없습니다</td><td class="wrap">경로의 키 · 없는 주소 (입력 · 스캔한 번호가 없으면 404 가 아니라 422)</td><td>이전 화면으로</td></tr><tr><td class="num"><b>422</b></td><td><code>validation_error</code></td><td>…(상황 문장) + 항목별 사유</td><td class="wrap">폼 POST 는 303 + 알림, 스캔 GET 은 그 화면 재렌더 — 이 화면은 그 밖 브라우저 GET 만</td><td>이전 화면으로</td></tr><tr><td class="num"><b>500</b></td><td><code>internal_error</code></td><td>예상하지 못한 오류</td><td class="wrap">핸들러가 로그에 남긴다. 접속 문자열 · 스택은 화면에 싣지 않는다</td><td>메인으로</td></tr><tr><td class="num"><b>501</b></td><td><code>undecided</code></td><td>… 미확정 (D-nn)</td><td class="wrap">사람이 아직 정하지 않은 것(ERP · 미구현 어댑터). decision 을 같이 보여 준다</td><td>이전 화면으로</td></tr><tr><td class="num"><b>503</b></td><td><code>db_unavailable</code></td><td>서비스 일시 중단</td><td class="wrap">DB 연결 실패. 잡지 않는다. 호스트 · DB 이름은 싣지 않는다</td><td>다시 시도</td></tr></tbody>
+      </table>
+      <ul class="notes">
+        <li>501 예시: <span class="err-code warn" style="font-size:var(--fs-lg)">501</span> <b>ERP 연계 미확정 (D-02)</b> — "사람이 아직 정하지 않은 것" 에만. 미구현 공용 모듈은 500.</li>
+        <li>POP 채널은 422 를 큰 글씨(<code>--fs-pop-alert</code>)로 그 화면 안에 — 오류 화면으로 보내지 않는다(디자이너2 pop/).</li>
+        <li>현황판 채널은 오류 화면에서도 <code>data-refresh-seconds</code> 로 새로고침을 이어 간다(디자이너3 board/).</li>
+      </ul>
+    </section>
+  </main>
+</div>
+<footer class="ftr">{{ t("시스템명") }} · 갱신 시각 <b>2026-10-09 14:05:12</b></footer>
+<script>
+/* 레이아웃 동작만 (이식: static/app.js 에 합친다). 데이터 · 검증 · 요청은 서버가 한다. */
+(function () {
+  var body = document.body;
+  // 좌측 메뉴 — 묶음 펴기/접기, 헤더의 ≡ 로 메뉴 전체 접기
+  document.querySelectorAll('.mg-h').forEach(function (h) {
+    h.addEventListener('click', function () {
+      var open = h.parentElement.classList.toggle('open');
+      h.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  });
+  var st = document.getElementById('side-toggle');
+  if (st) st.addEventListener('click', function () {
+    var collapsed = body.classList.toggle('side-collapsed');
+    st.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  });
+  // 우측 계약 패널 — 넓은 화면에서는 닫기, 좁은 화면(≤1180)에서는 덮개로 열기
+  var dt = document.getElementById('desc-toggle');
+  if (dt) dt.addEventListener('click', function () {
+    var narrow = window.matchMedia('(max-width: 1180px)').matches;
+    var shown = narrow ? body.classList.toggle('desc-open') : !body.classList.toggle('desc-closed');
+    dt.setAttribute('aria-expanded', shown ? 'true' : 'false');
+  });
+  // 토스트 — 닫기 · 8초 뒤 자동 닫힘(한 번만 뜬다: 서버가 flash 를 세션에서 지운다)
+  document.querySelectorAll('[data-toast-close]').forEach(function (b) {
+    b.addEventListener('click', function () { b.closest('.toast').remove(); });
+  });
+  setTimeout(function () {
+    document.querySelectorAll('.toast[data-auto]').forEach(function (t) { t.remove(); });
+  }, 8000);
+  // 422 알림 닫기
+  document.querySelectorAll('[data-alert-close]').forEach(function (b) {
+    b.addEventListener('click', function () { b.closest('.alert').remove(); });
+  });
+  // 인라인 확인 — "취소" 가 details 를 닫는다 (브라우저 confirm 금지)
+  document.querySelectorAll('[data-close-details]').forEach(function (b) {
+    b.addEventListener('click', function () { b.closest('details').removeAttribute('open'); });
+  });
+  // 원형 전용: 정적 파일이라 폼을 보내지 않는다 — 이식 때 이 블록을 지운다
+  document.addEventListener('submit', function (e) {
+    if (body.hasAttribute('data-prototype')) e.preventDefault();
+  });
+  body.setAttribute('data-prototype', '');
+})();
+
+</script>
+</body>
+</html>

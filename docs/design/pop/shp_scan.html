@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>출하 LOT 스캔 · 승인 · POP</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="pop.css">
+</head>
+<!--
+  SHP-02 출하 LOT 스캔 · 승인 — 현장 POP 원형 (디자이너2). F-SHP-05 POST /shp/scan (출하 + 생산 LOT 바코드 → lineage.ship) · F-SHP-06 취소 · F-SHP-07 승인(관리자만 활성). 출하는 먼저 고른다(터치). 승인 후 스캔 · 취소 비활성.
+  Jinja 로 옮길 때: body.ch-pop 는 templating.render 가 채널별로 붙인다 · 상단 탭은 nav.SCREENS 중 channels.pop 에 있는 화면만 ·
+  스캔칸은 ui.scan_box 하나(data-scan) · 알림은 base 의 #popup-layer + #flash-data · 문구는 전부 t() · 더미 값은 (예시).
+-->
+<body class="ch-pop" data-screen="SHP-02">
+<header class="topbar">
+  <a class="btn back" href="pop_work.html">← 뒤로</a>
+  <nav class="tabs" aria-label="작업 전환">
+    <a class="tab" href="pop_work.html">작업</a>
+    <a class="tab" href="pop_inputs.html">투입</a>
+    <a class="tab" href="pop_labels.html">라벨</a>
+    <a class="tab" href="mat_receipts_pop.html">입고</a>
+    <a class="tab" href="mat_inspections_pop.html">입고검사</a>
+    <a class="tab" href="qua_inspections_pop.html">검사</a>
+    <a class="tab on" href="shp_scan.html">출하</a>
+    <a class="tab" href="eqp_status_pop.html">설비</a>
+  </nav>
+  <div class="who" aria-label="현재 상태">
+    <span class="who-item"><small>작업자</small><b>김현장 (예시)</b></span>
+    <span class="who-item"><small>설비</small><b>EQ-001 (예시)</b></span>
+    <span class="who-item"><small>시각</small><b>10:42 (예시)</b></span>
+    <span class="who-item conn on"><small>연결</small><b>정상</b></span>
+  </div>
+</header>
+<div class="offline-bar" id="offline-bar" hidden role="alert">서비스 일시 중단 (503) — 연결이 돌아오면 스캔을 이어서 한다</div>
+<main class="pop-main">
+  <h1 class="screen-title">출하 LOT 스캔 · 승인 <small>SHP-02</small></h1>
+  <form class="scan" method="post" action="/shp/scan" autocomplete="off" data-demo>
+    <label for="scan">생산 LOT 바코드 스캔 → 출하 SH-20261009-001 에 싣는다</label>
+    <input type="hidden" name="shipment_id" value="31">
+    <div class="scan-row">
+      <input id="scan" type="text" name="lot_no" data-scan autofocus inputmode="text" autocomplete="off" placeholder="LP-…">
+      <button type="submit" class="btn btn-primary">확인</button>
+    </div>
+  </form>
+  <section class="result" role="status" id="scan-result" hidden><p class="result-msg"></p></section>
+
+  <div class="steps"><div class="step done">1 출하 선택</div><div class="step on">2 LOT 스캔</div><div class="step">3 승인</div></div>
+  <section class="panel">
+    <h2>출하 선택 <small>오늘 · 등록 상태 (예시)</small></h2>
+    <div class="cards">
+      <a class="card sel" href="#" style="text-decoration:none"><h3><code>SH-20261009-001</code> <span class="badge b-wait">등록</span></h3><dl class="kv"><dt>거래처</dt><dd>거래처 A (예시)</dd><dt>출하일</dt><dd>10-09</dd><dt>LOT</dt><dd class="num">2건 · 980 EA</dd></dl></a>
+      <a class="card" href="#" style="text-decoration:none"><h3><code>SH-20261009-002</code> <span class="badge b-wait">등록</span></h3><dl class="kv"><dt>거래처</dt><dd>거래처 B (예시)</dd><dt>출하일</dt><dd>10-09</dd><dt>LOT</dt><dd class="num">0건</dd></dl></a>
+      <a class="card" href="#" style="text-decoration:none"><h3><code>SH-20261008-004</code> <span class="badge b-off">승인</span></h3><dl class="kv"><dt>거래처</dt><dd>거래처 A (예시)</dd><dt>출하일</dt><dd>10-08</dd><dt>LOT</dt><dd class="num">5건</dd></dl></a>
+    </div>
+    <ul class="notes"><li>출하 등록(F-SHP-01)은 <a href="#">SHP-01</a> 에서. 여기서는 고르기만. 승인된 출하를 고르면 스캔칸이 비활성으로 바뀐다.</li></ul>
+  </section>
+
+  <section class="panel">
+    <h2>실은 LOT <small><code>SH-20261009-001</code> · 2건</small></h2>
+    <table class="list">
+      <thead><tr><th>시각</th><th>생산 LOT</th><th>품목</th><th>수량</th><th>검사</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>10:41</td><td><code>LP-20261009-004</code></td><td>품목 A (예시)</td><td class="num">500 EA</td><td><span class="badge b-ok">합격</span></td><td><form method="post" action="/shp/scan/cancel" data-demo style="display:inline"><button type="submit" class="btn">취소</button></form></td></tr>
+        <tr><td>10:38</td><td><code>LP-20261009-005</code></td><td>품목 A (예시)</td><td class="num">480 EA</td><td><span class="badge b-ok">합격</span></td><td><form method="post" action="/shp/scan/cancel" data-demo style="display:inline"><button type="submit" class="btn">취소</button></form></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>승인 <small>관리자만 · 승인 후 스캔 · 취소 불가</small></h2>
+    <div class="actions">
+      <button type="button" class="btn btn-ok btn-big" style="flex:1" disabled aria-disabled="true">출하 승인 <span class="sub">— 관리자 권한이 없습니다 (현재 역할: 현장)</span></button>
+    </div>
+    <div class="actions" style="margin-top:8px"><button type="button" class="btn btn-ok btn-big" style="flex:1">출하 승인 <span class="sub">(관리자로 로그인했을 때의 모양)</span></button></div>
+    <ul class="notes">
+      <li>버튼은 <code>ui.write_button('출하 승인', user.can('F-SHP-07'))</code> — 권한이 없으면 비활성 + 사유. 숨기지 않는다.</li>
+      <li>422: LOT 0건 · 훅 거부(<code>HookError</code> — 팩이 준 문장 그대로). 승인 후엔 <code>after_commit_shipment_approved</code> 로 ERP 큐.</li>
+    </ul>
+  </section>
+
+  <section class="panel">
+    <h2>스캔 422 사유 — 스캔칸 유지</h2>
+    <table class="list">
+      <tbody>
+        <tr><td>재고 아님(소진)</td><td><b style="color:var(--err)">재고 상태가 아닌 LOT 입니다</b></td></tr>
+        <tr><td>불합격</td><td><b style="color:var(--err)">불합격 LOT 은 출하할 수 없습니다</b></td></tr>
+        <tr><td>미검사</td><td><b style="color:var(--err)">검사 전 LOT 입니다</b></td></tr>
+        <tr><td>이미 출하</td><td><b style="color:var(--err)">이미 출하된 LOT 입니다 — SH-20261008-004</b></td></tr>
+        <tr><td>승인된 출하에 스캔</td><td><b style="color:var(--err)">승인된 출하에는 실을 수 없습니다</b></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="demo">
+    <h3>시연 — 템플릿에 옮기지 않는다</h3>
+    <div class="actions"><button type="button" class="btn" data-demo-popup="이미 출하된 LOT 입니다" data-title="출하 스캔" data-fields='[{"label":"생산 LOT","reason":"LP-20261008-002 (예시) → SH-20261008-004"}]'>422 이미 출하</button><button type="button" class="btn" data-demo-popup="실었습니다 — LP-20261009-006 480 EA" data-title="출하 스캔" data-kind="ok">스캔 성공</button><button type="button" class="btn" data-demo-popup="실은 LOT 이 없습니다" data-title="출하 승인">422 LOT 0건 승인</button></div>
+  </section>
+</main>
+
+<div class="popup-layer" id="popup-layer" hidden>
+  <div class="popup" role="alertdialog" aria-labelledby="popup-title" aria-describedby="popup-body">
+    <h2 id="popup-title">알림</h2>
+    <div id="popup-body"></div>
+    <p class="scan-hint">알림이 떠 있어도 바코드를 쏘면 스캔칸에 들어간다. 글자가 오면 알림은 닫힌다.</p>
+    <div class="actions"><button type="button" class="btn btn-primary" data-popup-close>확인</button></div>
+  </div>
+</div>
+<script type="application/json" id="flash-data">{}</script>
+<script src="pop.js"></script>
+</body>
+</html>

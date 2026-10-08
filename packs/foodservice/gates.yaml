@@ -1,0 +1,108 @@
+# foodservice 팩 게이트 기대값 — pack-contract.md §7 형식 (기획자1 · 2026-10-09 · 초안)
+# G-P02 규모 · G-P03 추적표 · G-P04 시나리오 · G-P05 용어. 테스트 경로는 개발1 이 tests/ 를 만들 때 맞춘다.
+# 기대값은 전부 정본(TD3 목업 · AD2) 또는 산식 검산에서 왔다. 지어낸 수치 없음.
+
+screens: 0            # 팩 화면 수 (X-) — README §4 · function-list.md
+tables: 8             # x_foodservice_ 테이블 수 — schema_ext.md §1
+functions: 0          # 팩 function-list.md 줄 수
+design_source: ../NeedsFood MES Platform/docs/design/design.json   # G-P03 — TD3 화면 49 ↔ README §2 매핑. N:1 · 1:N 허용 필요(D-508)
+design_mapping: README.md#2                                        # 산출물 ID → 코어 화면 표 (import_design.py 가 읽을 수 있게 표 형식 유지)
+
+scenarios:
+  - id: S1
+    name: 핵심 — 수주(식수) → 조리 지시 → 소요량 자동 → 배치 실적(RPM·온도) → 검식 → 출고 → 역추적 (goal.md G-P04)
+    test: tests/test_scenario_core.py::test_order_to_ship
+    steps:                       # scenarios.md §1 과 같은 순서. 전부 API(화면이 부르는 것과 같은)
+      - 기준: 메뉴 MENU-0001 (예시)제육볶음(제품 · cook_process PRC-060) · 원료 MAT-1001 돈육 · MAT-1002 양파 · 레시피 V1.0 (12.000 kg · 3.500 kg · 배치 기준인분 100) · 설비 EQ-STIR-01 (collect_yn Y) · 공정 측정값 PRC-060 RPM/STIR_TIME/TEMP (collect)
+      - 입고: 돈육 120.000 kg (유통기한 D+4) · 양파 80.000 kg → 원료 LOT 2 · 입고검사 합격 2
+      - 수주: CUS-001 · 납기 D(11:30) · 상세 MENU-0001 1,200 인분 → POST /ord/orders 200
+      - 조리 지시: MENU-0001 · PRC-060 · plan_qty 1200 인분 → POST /job/work-orders 200 → 훅 on_work_order_created
+      - 배치 실적 ×2: POST /pop/result/start (EQ-STIR-01) → POST /ifc/collect (RPM 75.0 · STIR_TIME 0/10/20/30 · TEMP 150.0~172.5 · 4점) → POST /pop/inputs (돈육 LOT 12.000 kg · 양파 3.500 kg) → POST /pop/result/{id}/end (good 100 · defect 2 / good 100 · defect 0)
+      - 검식: POST /qua/inspections (배치 LOT 1 · insp_type 최종 · measure_temp 78.5 · foreign_yn N) → POST /qua/inspections/{id}/judge 합격
+      - 출고: POST /shp/shipments (CUS-001 · 수주 연결) → POST /shp/scan (배치 LOT 1 · 2) → POST /shp/shipments/{id}/approve 200
+      - 역추적: GET /trc/backward?no=<출고 LOT>
+    expect:
+      work_orders: 1
+      mat_requirement_hook_rows: 2                  # 돈육 · 양파 (source=hook)
+      mat_requirement_required: { MAT-1001: 144.000, MAT-1002: 42.000 }   # 1,200 × 12.000/100 · × 3.500/100 = TD3-015 목업 '총 소요량'
+      mat_requirement_shortage:  { MAT-1001: 24.000, MAT-1002: 0.000 }    # 가용 120.000 · 80.000 = TD3-015 목업 '부족분'
+      job_lot_rows: 2
+      job_lot_fifo_lot_assigned: true               # 돈육 LOT 유통기한 가장 이른 것
+      work_results: 2
+      product_lots: 2
+      lot_kind: BATCH                               # kind_base PRODUCT
+      batch_nos: [B-01, B-02]
+      lot_no_pattern: "^P[0-9]{6}-[0-9]{4}$"        # P260812-0007 형식 (D-510)
+      pop_measure_rows_per_result: 3                # RPM · STIR_TIME · TEMP, source=collect
+      pop_measure_values_result1: { RPM: 73.5, STIR_TIME: 30, TEMP: 161.25 }   # avg(75,74,73,72) · max · avg(150,157.5,165,172.5) — 시나리오 입력값에서 검산
+      genealogy_rows: 6                             # 투입 4 (배치 2 × 원료 2) + 출하 2
+      inspections_final_pass: 1
+      shipment_status: 승인
+      backward_materials: 2                         # 역추적이 돈육 · 양파 LOT 에 닿는다
+      hourly_output_not_null: true                  # kpi_extra
+      defect_rate: 0.990                            # 2 ÷ (200 + 2) × 100 = 0.99% (시나리오 입력값 검산 · 소수 3자리)
+
+  - id: S2
+    name: 검식 미합격 배치 출고 금지 (validate_shipment)
+    test: tests/test_scenario_ship.py::test_block_uninspected
+    steps:
+      - S1 의 기준 · 지시 · 배치 실적 1건 (검식 없음) → 출하 등록 → 스캔 → 승인
+    expect: { status: 422, code: hook_rejected }
+
+  - id: S3
+    name: 검식 불합격 → 품질 이슈 자동 생성 (on_inspection_judged)
+    test: tests/test_scenario_inspection.py::test_issue_auto
+    steps:
+      - 배치 LOT 1 · 최종 검식 · foreign_yn Y → 판정 불합격
+    expect: { qua_issue_rows: 1, qua_issue_source: hook, qua_issue_process: PRC-060, issue_type: 이물, lot_insp_status: 불합격 }
+
+  - id: S4
+    name: 활성 레시피 없는 메뉴의 조리 지시 거부 (validate_job_work_order)
+    test: tests/test_scenario_work_order.py::test_no_active_recipe
+    steps:
+      - 메뉴 MENU-0003 (예시)시금치무침 (레시피 없음) → POST /job/work-orders
+    expect: { status: 422, code: hook_rejected, mat_requirement_hook_rows: 0 }
+
+  - id: S5
+    name: 레시피 활성 버전 2건 금지 (validate_bas_bom)
+    test: tests/test_scenario_bom.py::test_single_active
+    steps:
+      - MENU-0001 V1.0 활성 상태에서 V2.0 을 use_yn=Y 로 등록
+    expect: { status: 422, code: hook_rejected }
+
+  - id: S6
+    name: 냉장 온도조절기 이탈 기록 (on_collect)
+    test: tests/test_scenario_collect.py::test_env_alarm
+    steps:
+      - EQ-TC-05 (storage_kind 냉장 · temp_limit 5) → POST /ifc/collect PV_TEMP 7.2 → 다시 4.8
+    expect: { env_alarm_rows: 1, env_alarm_kind: 상한 초과, collect_rows: 2, http: 200 }
+
+  - id: S7
+    name: 유통기한 경과 원료 투입 거부 (validate_pop_input)
+    test: tests/test_scenario_input.py::test_expired_lot
+    steps:
+      - 유통기한 D-1 인 원료 LOT → POST /pop/inputs
+    expect: { status: 422, code: hook_rejected }
+
+  - id: S8
+    name: 권한 — 역할 6 × 메뉴 12 = 72칸 · 외부업체 pop 403 · 작업자 trc 403 · 영양사 qua 입력 · 출고 담당 shp 입력 (G-C17 팩판)
+    test: tests/test_scenario_rbac.py::test_matrix
+    expect: { permission_cells: 72, vendor_pop: 403, worker_trc: 403, nutritionist_qua_write: 200, shipping_shp_write: 200, production_sys: 403 }
+
+terms_sample: [품목, BOM, 생산 LOT, 작업지시, 실적, 검사, 출하]   # G-P05 — 이 중립어가 치환 안 된 채 화면 · 메뉴 · 라벨에 보이면 FAIL
+
+seed_counts:                 # G-C09 팩판 — make db-seed ×2 diff 0 · 아래 행 수
+  sys_role: 6
+  sys_permission: 72
+  bas_process: 9
+  bas_process_param: 7
+  qua_insp_plan: 13
+  bas_equipment: 14
+  kpi_indicator: 3
+  bas_code_pack_rows: 65
+  bas_item_example: 6
+  bas_partner_example: 4
+  bas_bom_example_rows: 2
+  x_foodservice_equipment_ext_with_limit: 1      # EQ-TC-05 만 임계가 있다
+
+template_overrides: [templates/print/work_order.html]   # check_pack WARN 목록과 같아야 한다 (README §6)

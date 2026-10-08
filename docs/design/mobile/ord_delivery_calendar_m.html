@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>납기 달력 · 모바일</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="mobile.css">
+</head>
+<!--
+  ORD-03 납기 달력 — 모바일 원형 (디자이너2). F-ORD-06 GET /ord/delivery-calendar. 월 단위 · 날짜별 납기 건수 · 출하 완료 표시. 390px 에서 월 → 주 단위로 접힘(오늘이 든 주만 open). 쓰기 0.
+  규칙: 폭 390px · 가로 넘침 0(칩 줄만 옆으로 민다) · 쓰기 버튼 0 · JS 0(접기는 details/summary) · 표를 쓰지 않고 카드로 접는다(README "모바일 접힘 규칙").
+  Jinja 로 옮길 때: body.ch-mobile 는 templating.render 가 붙인다 · 하단 탭 4 = channels.mobile 화면을 추적 · 현황 · 지시 · 재고 로 묶은 것 · 문구는 t() · 더미 값은 (예시).
+-->
+<body class="ch-mobile" data-screen="ORD-03">
+<div class="m-frame">
+<header class="m-top">
+  <div class="row"><h1>납기 달력 <small>ORD-03</small></h1><span class="who">김조회 · 조회 (예시)</span></div>
+  <form class="m-search" method="get" action="/trc/search" role="search">
+    <input type="search" name="q" placeholder="수주 · 거래처" aria-label="수주 · 거래처" autocomplete="off">
+    <button type="submit">검색</button>
+  </form>
+</header>
+<main class="m-main">
+
+  <div class="month-nav"><a href="#" aria-label="이전 달">‹</a><b>2026년 10월 <small>납기 23건 · 출하 완료 9 (예시)</small></b><a href="#" aria-label="다음 달">›</a></div>
+  <div class="stat-grid"><div class="stat"><small>이번 주 납기</small><b>7<span class="u">건</span></b></div><div class="stat"><small>지연</small><b>1<span class="u">건</span></b></div></div>
+
+  <details class="fold"><summary><span class="grow">10-01 (목) ~ 10-05 (일)</span><span class="cnt">납기 4</span><span class="badge b-ok">완료 4</span></summary>
+    <div class="body">
+      <div class="week-day"><span class="d">10-01 목</span><span class="cnt">납기 1 · 거래처 B</span><span class="done">출하 완료</span></div>
+      <div class="week-day"><span class="d">10-02 금</span><span class="cnt">납기 2 · 거래처 A · C</span><span class="done">출하 완료</span></div>
+      <div class="week-day"><span class="d">10-04 토</span><span class="cnt">납기 1 · 거래처 A</span><span class="done">출하 완료</span></div>
+    </div>
+  </details>
+
+  <details class="fold now" open><summary><span class="grow">10-06 (월) ~ 10-12 (일) <small>이번 주</small></span><span class="cnt">납기 7</span><span class="badge b-warn">지연 1</span></summary>
+    <div class="body">
+      <div class="week-day"><span class="d">10-06 월</span><span class="cnt">납기 1 · 거래처 C</span><span class="done">출하 완료</span></div>
+      <div class="week-day"><span class="d">10-07 화</span><span class="cnt">납기 1 · 거래처 A</span><span class="done">출하 완료</span></div>
+      <div class="week-day"><span class="d">10-08 수</span><span class="cnt">납기 2 · 거래처 A · B</span><span><span class="badge b-ok">완료 1</span> <span class="badge b-warn">지연 1</span></span></div>
+      <div class="week-day"><span class="d today">10-09 목</span><span class="cnt">납기 1 · 거래처 A</span><span class="badge b-wait">등록</span></div>
+      <div class="week-day"><span class="d">10-10 금</span><span class="cnt">납기 1 · 거래처 D</span><span></span></div>
+      <div class="week-day"><span class="d">10-11 토</span><span class="cnt">납기 1 · 거래처 B</span><span></span></div>
+      <div class="week-day"><span class="d sun">10-12 일</span><span class="cnt">—</span><span></span></div>
+      <details class="fold" style="margin-top:8px"><summary><span class="grow">10-08 지연 1건</span></summary><div class="body"><div class="m-card" style="margin-top:6px"><h3><code>SO-20261002-001</code> <span class="badge b-warn">지연</span></h3><dl class="kv"><dt>거래처</dt><dd>거래처 B (예시)</dd><dt>품목</dt><dd>품목 B · 600 EA</dd><dt>출하</dt><dd><code>SH-20261009-002</code> 등록 · LOT 0건</dd></dl><div class="links"><a href="shp_status_m.html">출하 현황</a></div></div></div></details>
+    </div>
+  </details>
+
+  <details class="fold"><summary><span class="grow">10-13 (월) ~ 10-19 (일)</span><span class="cnt">납기 6</span><span></span></summary>
+    <div class="body">
+      <div class="week-day"><span class="d">10-14 화</span><span class="cnt">납기 2 · 거래처 A · C</span><span></span></div>
+      <div class="week-day"><span class="d">10-16 목</span><span class="cnt">납기 3 · 거래처 A · B · D</span><span></span></div>
+      <div class="week-day"><span class="d">10-17 금</span><span class="cnt">납기 1 · 거래처 C</span><span></span></div>
+    </div>
+  </details>
+  <details class="fold"><summary><span class="grow">10-20 (월) ~ 10-26 (일)</span><span class="cnt">납기 4</span><span></span></summary><div class="body"><div class="week-day"><span class="d">10-21 화</span><span class="cnt">납기 2</span><span></span></div><div class="week-day"><span class="d">10-23 목</span><span class="cnt">납기 2</span><span></span></div></div></details>
+  <details class="fold"><summary><span class="grow">10-27 (월) ~ 10-31 (금)</span><span class="cnt">납기 2</span><span></span></summary><div class="body"><div class="week-day"><span class="d">10-29 수</span><span class="cnt">납기 2</span><span></span></div></div></details>
+
+  <ul class="notes">
+    <li>접힘 규칙: 월 = 주 5~6개의 <code>details</code>. 오늘이 든 주만 <code>open</code>(요약 줄에 「이번 주」). 주 요약 줄 = 기간 · 납기 건수 · 완료/지연 배지. 납기가 없는 날은 줄을 만들지 않는다.</li>
+    <li>관리자 Web 판(디자이너1)은 7열 달력. 390px 에서 7열 격자는 글자가 11px 이하로 떨어져 쓰지 않는다.</li>
+  </ul>
+
+</main>
+<nav class="m-tabs" aria-label="하단 탭">
+    <a href="trc_search_m.html"><span class="ico" aria-hidden="true">⌕</span>추적</a>
+    <a href="kpi_summary_m.html" class="on"><span class="ico" aria-hidden="true">▤</span>현황</a>
+    <a href="job_status_m.html"><span class="ico" aria-hidden="true">☰</span>지시</a>
+    <a href="mat_stock_m.html"><span class="ico" aria-hidden="true">▦</span>재고</a>
+</nav>
+</div>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LOT 라벨 · POP</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="pop.css">
+</head>
+<!--
+  POP-04 LOT 라벨 — 현장 POP 원형 (디자이너2). F-POP-08 GET /pop/labels?lot= → print/label_lot (출력물 양식은 디자이너3 · printing.render_print). 이 화면은 「무엇을 출력할지 고르는 안내」만.
+  Jinja 로 옮길 때: body.ch-pop 는 templating.render 가 채널별로 붙인다 · 상단 탭은 nav.SCREENS 중 channels.pop 에 있는 화면만 ·
+  스캔칸은 ui.scan_box 하나(data-scan) · 알림은 base 의 #popup-layer + #flash-data · 문구는 전부 t() · 더미 값은 (예시).
+-->
+<body class="ch-pop" data-screen="POP-04">
+<header class="topbar">
+  <a class="btn back" href="pop_work.html">← 뒤로</a>
+  <nav class="tabs" aria-label="작업 전환">
+    <a class="tab" href="pop_work.html">작업</a>
+    <a class="tab" href="pop_inputs.html">투입</a>
+    <a class="tab on" href="pop_labels.html">라벨</a>
+    <a class="tab" href="mat_receipts_pop.html">입고</a>
+    <a class="tab" href="mat_inspections_pop.html">입고검사</a>
+    <a class="tab" href="qua_inspections_pop.html">검사</a>
+    <a class="tab" href="shp_scan.html">출하</a>
+    <a class="tab" href="eqp_status_pop.html">설비</a>
+  </nav>
+  <div class="who" aria-label="현재 상태">
+    <span class="who-item"><small>작업자</small><b>김현장 (예시)</b></span>
+    <span class="who-item"><small>설비</small><b>EQ-001 (예시)</b></span>
+    <span class="who-item"><small>시각</small><b>10:42 (예시)</b></span>
+    <span class="who-item conn on"><small>연결</small><b>정상</b></span>
+  </div>
+</header>
+<div class="offline-bar" id="offline-bar" hidden role="alert">서비스 일시 중단 (503) — 연결이 돌아오면 스캔을 이어서 한다</div>
+<main class="pop-main">
+  <h1 class="screen-title">LOT 라벨 <small>POP-04</small></h1>
+  <form class="scan" method="get" action="/pop/labels" autocomplete="off" data-demo>
+    <label for="scan">LOT 번호 스캔 → 그 LOT 라벨</label>
+    <div class="scan-row">
+      <input id="scan" type="text" name="lot" data-scan autofocus inputmode="text" autocomplete="off" placeholder="LP-… / LM-…">
+      <button type="submit" class="btn btn-primary">확인</button>
+    </div>
+  </form>
+  <section class="result" role="status" id="scan-result" hidden><p class="result-msg"></p></section>
+
+  <section class="panel">
+    <h2>방금 만든 생산 LOT <small>이 설비 · 오늘 (예시)</small></h2>
+    <div class="cards">
+      <article class="card sel">
+        <h3><code>LP-20261009-005</code> <span class="badge b-ok">재고</span></h3>
+        <dl class="kv"><dt>품목</dt><dd>품목 A (예시)</dd><dt>수량</dt><dd class="num">480 EA</dd><dt>실적</dt><dd>#17 · 10:42 종료</dd></dl>
+        <div class="actions"><a class="btn btn-primary btn-big" href="#" title="GET /pop/labels?lot=LP-20261009-005 → 인쇄 화면">라벨 출력</a></div>
+      </article>
+      <article class="card">
+        <h3><code>LP-20261009-004</code> <span class="badge b-ok">재고</span></h3>
+        <dl class="kv"><dt>품목</dt><dd>품목 A (예시)</dd><dt>수량</dt><dd class="num">500 EA</dd><dt>실적</dt><dd>#16 · 09:50 종료</dd></dl>
+        <div class="actions"><a class="btn btn-primary" href="#">라벨 출력</a><span class="badge b-off">출력 2회</span></div>
+      </article>
+      <article class="card">
+        <h3><code>LP-20261009-004-1</code> <span class="badge b-ok">재고</span></h3>
+        <dl class="kv"><dt>품목</dt><dd>품목 A (예시)</dd><dt>수량</dt><dd class="num">250 EA</dd><dt>관계</dt><dd>분할 ← LP-20261009-004</dd></dl>
+        <div class="actions"><a class="btn btn-primary" href="#">라벨 출력</a></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>출력 안내</h2>
+    <div class="notice" style="font-weight:400">라벨 양식 · 바코드는 <code>templates/print/label_lot.html</code>(디자이너3 · <code>printing.barcode_svg</code>)다. 이 화면은 양식을 그리지 않는다. 「라벨 출력」은 인쇄용 화면을 새 창으로 열고 브라우저 인쇄를 부른다(기본 <code>PrintAdapter</code> — 프린터로 보내지 않는다).</div>
+    <ul class="notes">
+      <li>분할 · 합병 LOT 도 같은 양식. 바코드 = <code>lot_no</code>. 라벨을 스캔칸에 쏘면 그 LOT 이 열린다(G-C14 왕복).</li>
+      <li>출력 횟수는 안내일 뿐 막지 않는다. 라벨 재출력에 권한을 따로 두지 않는다(조회 이상).</li>
+      <li>없는 번호 스캔 → 이 화면 422 재렌더 「없는 번호입니다」.</li>
+    </ul>
+  </section>
+
+</main>
+
+<div class="popup-layer" id="popup-layer" hidden>
+  <div class="popup" role="alertdialog" aria-labelledby="popup-title" aria-describedby="popup-body">
+    <h2 id="popup-title">알림</h2>
+    <div id="popup-body"></div>
+    <p class="scan-hint">알림이 떠 있어도 바코드를 쏘면 스캔칸에 들어간다. 글자가 오면 알림은 닫힌다.</p>
+    <div class="actions"><button type="button" class="btn btn-primary" data-popup-close>확인</button></div>
+  </div>
+</div>
+<script type="application/json" id="flash-data">{}</script>
+<script src="pop.js"></script>
+</body>
+</html>

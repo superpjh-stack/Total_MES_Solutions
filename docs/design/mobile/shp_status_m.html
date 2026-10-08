@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>출하 현황 · 모바일</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="mobile.css">
+</head>
+<!--
+  SHP-03 출하 현황 — 모바일 원형 (디자이너2). F-SHP-08 GET /shp/status. 오늘 · 이번 주 출하 · 납기 대비. 쓰기 0 — 등록 · 승인은 POP · 관리자 Web.
+  규칙: 폭 390px · 가로 넘침 0(칩 줄만 옆으로 민다) · 쓰기 버튼 0 · JS 0(접기는 details/summary) · 표를 쓰지 않고 카드로 접는다(README "모바일 접힘 규칙").
+  Jinja 로 옮길 때: body.ch-mobile 는 templating.render 가 붙인다 · 하단 탭 4 = channels.mobile 화면을 추적 · 현황 · 지시 · 재고 로 묶은 것 · 문구는 t() · 더미 값은 (예시).
+-->
+<body class="ch-mobile" data-screen="SHP-03">
+<div class="m-frame">
+<header class="m-top">
+  <div class="row"><h1>출하 현황 <small>SHP-03</small></h1><span class="who">김조회 · 조회 (예시)</span></div>
+  <form class="m-search" method="get" action="/trc/search" role="search">
+    <input type="search" name="q" placeholder="출하 · LOT 번호" aria-label="출하 · LOT 번호" autocomplete="off">
+    <button type="submit">검색</button>
+  </form>
+</header>
+<main class="m-main">
+
+  <div class="chips"><a class="chip on" href="#">오늘</a><a class="chip" href="#">이번 주</a><a class="chip" href="#">승인 전</a><a class="chip" href="#">지연</a></div>
+  <div class="stat-grid"><div class="stat"><small>오늘 출하</small><b>3<span class="u">건</span></b></div><div class="stat"><small>승인</small><b>1<span class="u">건</span></b></div><div class="stat"><small>납기 준수</small><b>67<span class="u">%</span></b></div><div class="stat"><small>지연</small><b>1<span class="u">건</span></b></div></div>
+  <section class="m-sec">
+    <h2>출하 <small>2026-10-09 (예시)</small></h2>
+    <div class="m-card">
+      <h3><code>SH-20261009-001</code> <span class="badge b-wait">등록</span></h3>
+      <dl class="kv"><dt>거래처</dt><dd>거래처 A (예시)</dd><dt>수주</dt><dd><code>SO-20261001-003</code> · 납기 10-09</dd><dt>LOT</dt><dd class="num">2건 · 980 EA</dd><dt>납기 대비</dt><dd><span class="badge b-ok">당일</span></dd></dl>
+      <details class="fold" style="margin-top:8px"><summary><span class="grow">실은 LOT 2건</span></summary><div class="body"><dl class="kv" style="margin-top:6px"><dt><code>LP-20261009-004</code></dt><dd>500 EA · 합격</dd><dt><code>LP-20261009-005</code></dt><dd>480 EA · 미검사</dd></dl></div></details>
+    </div>
+    <div class="m-card">
+      <h3><code>SH-20261009-002</code> <span class="badge b-wait">등록</span> <span class="badge b-warn">지연</span></h3>
+      <dl class="kv"><dt>거래처</dt><dd>거래처 B (예시)</dd><dt>수주</dt><dd><code>SO-20261002-001</code> · 납기 <span style="color:var(--err)">10-08</span></dd><dt>LOT</dt><dd class="num">0건</dd><dt>납기 대비</dt><dd><span class="badge b-warn">1일 지남</span></dd></dl>
+    </div>
+    <div class="m-card">
+      <h3><code>SH-20261008-004</code> <span class="badge b-off">승인</span></h3>
+      <dl class="kv"><dt>거래처</dt><dd>거래처 A (예시)</dd><dt>승인</dt><dd>10-08 16:30 · 관리자</dd><dt>LOT</dt><dd class="num">5건 · 2,250 EA</dd><dt>납기 대비</dt><dd><span class="badge b-ok">1일 앞</span></dd></dl>
+      <details class="fold" style="margin-top:8px"><summary><span class="grow">실은 LOT 5건</span></summary><div class="body"><dl class="kv" style="margin-top:6px"><dt><code>LP-20261008-002</code></dt><dd>500 EA</dd><dt><code>LP-20261008-003-1</code></dt><dd>250 EA</dd><dt><code>LP-20261008-005</code></dt><dd>500 EA</dd><dt><code>LP-20261008-006</code></dt><dd>500 EA</dd><dt><code>LP-20261008-008</code></dt><dd>500 EA</dd></dl><div class="links"><a href="trc_backward_m.html">출하 LOT 역추적</a></div></div></details>
+    </div>
+    <ul class="notes"><li>납기 대비 = 출하일 − 수주 납기. 수주 없는 출하는 「—」.</li><li>LOT 목록은 접힘(3건 초과 규칙). 승인 전 출하는 LOT 이 바뀔 수 있어 「기준 시각」을 상단에.</li></ul>
+  </section>
+
+</main>
+<nav class="m-tabs" aria-label="하단 탭">
+    <a href="trc_search_m.html"><span class="ico" aria-hidden="true">⌕</span>추적</a>
+    <a href="kpi_summary_m.html" class="on"><span class="ico" aria-hidden="true">▤</span>현황</a>
+    <a href="job_status_m.html"><span class="ico" aria-hidden="true">☰</span>지시</a>
+    <a href="mat_stock_m.html"><span class="ico" aria-hidden="true">▦</span>재고</a>
+</nav>
+</div>
+</body>
+</html>

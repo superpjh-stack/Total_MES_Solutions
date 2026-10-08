@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>검사 결과 · POP</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="pop.css">
+</head>
+<!--
+  QUA-02 검사 결과 — 현장 POP 원형 (디자이너2). F-QUA-04 POST /qua/inspections (LOT 스캔 → 계획 항목 값 → 저장, judgement NULL) · F-QUA-05 판정 (합격/불합격/조건부 · 불합격이면 불량코드 · 수량) · F-QUA-06 조회. 권한 품질. 출하된 LOT 422.
+  Jinja 로 옮길 때: body.ch-pop 는 templating.render 가 채널별로 붙인다 · 상단 탭은 nav.SCREENS 중 channels.pop 에 있는 화면만 ·
+  스캔칸은 ui.scan_box 하나(data-scan) · 알림은 base 의 #popup-layer + #flash-data · 문구는 전부 t() · 더미 값은 (예시).
+-->
+<body class="ch-pop" data-screen="QUA-02">
+<header class="topbar">
+  <a class="btn back" href="pop_work.html">← 뒤로</a>
+  <nav class="tabs" aria-label="작업 전환">
+    <a class="tab" href="pop_work.html">작업</a>
+    <a class="tab" href="pop_inputs.html">투입</a>
+    <a class="tab" href="pop_labels.html">라벨</a>
+    <a class="tab" href="mat_receipts_pop.html">입고</a>
+    <a class="tab" href="mat_inspections_pop.html">입고검사</a>
+    <a class="tab on" href="qua_inspections_pop.html">검사</a>
+    <a class="tab" href="shp_scan.html">출하</a>
+    <a class="tab" href="eqp_status_pop.html">설비</a>
+  </nav>
+  <div class="who" aria-label="현재 상태">
+    <span class="who-item"><small>작업자</small><b>김현장 (예시)</b></span>
+    <span class="who-item"><small>설비</small><b>EQ-001 (예시)</b></span>
+    <span class="who-item"><small>시각</small><b>10:42 (예시)</b></span>
+    <span class="who-item conn on"><small>연결</small><b>정상</b></span>
+  </div>
+</header>
+<div class="offline-bar" id="offline-bar" hidden role="alert">서비스 일시 중단 (503) — 연결이 돌아오면 스캔을 이어서 한다</div>
+<main class="pop-main">
+  <h1 class="screen-title">검사 결과 <small>QUA-02</small></h1>
+  <form class="scan" method="get" action="/qua/inspections" autocomplete="off" data-demo>
+    <label for="scan">생산 LOT 바코드 스캔</label>
+    <div class="scan-row">
+      <input id="scan" type="text" name="no" data-scan autofocus inputmode="text" autocomplete="off" placeholder="LP-…">
+      <button type="submit" class="btn btn-primary">확인</button>
+    </div>
+  </form>
+  <section class="result ok" role="status" id="scan-result">
+    <p class="result-msg">LOT <code>LP-20261009-005</code> 을 열었습니다 — 검사 계획 「공정 검사 (예시)」</p>
+  </section>
+
+  <div class="steps"><div class="step done">1 LOT 스캔</div><div class="step on">2 항목 값</div><div class="step">3 판정</div></div>
+  <section class="panel">
+    <h2>LOT <small><code>LP-20261009-005</code> · <span class="badge b-wait">미검사</span></small></h2>
+    <dl class="kv"><dt>품목</dt><dd>품목 A (예시)</dd><dt>수량</dt><dd class="num">480 EA</dd><dt>실적</dt><dd>#17 · WO-20261009-001 · 10:42 종료</dd><dt>측정값</dt><dd>온도 71 ℃ · 무게 12.8 kg <span class="badge b-warn">이탈</span> (예시)</dd></dl>
+  </section>
+
+  <form method="post" action="/qua/inspections" data-demo>
+    <input type="hidden" name="lot_id" value="505"><input type="hidden" name="plan_id" value="2">
+    <section class="panel">
+      <h2>검사 항목 <small>계획 항목에서 자동 · 기준 이탈은 저장 + 표시</small></h2>
+      <div class="measure">
+        <div class="m-field"><div class="lbl">치수 <span class="unit">mm</span> <span class="badge b-err">필수</span></div><div class="range">기준 99.5 ~ 100.5</div><input type="number" name="q_dim" inputmode="decimal" step="any" required placeholder="숫자"></div>
+        <div class="m-field deviated"><div class="lbl">무게 <span class="unit">g</span> <span class="badge b-warn">이탈</span></div><div class="range">기준 245 ~ 255</div><input type="number" name="q_wt" inputmode="decimal" step="any" value="258"></div>
+        <div class="m-field"><div class="lbl">외관 <span class="badge b-err">필수</span></div><div class="choice c2"><label class="ok"><input type="radio" name="q_look" value="OK" required><span>양호</span></label><label class="err"><input type="radio" name="q_look" value="NG"><span>불량</span></label></div></div>
+        <div class="m-field"><div class="lbl">표시 사항</div><div class="choice c2"><label class="ok"><input type="radio" name="q_mark" value="OK"><span>정상</span></label><label class="err"><input type="radio" name="q_mark" value="NG"><span>누락</span></label></div></div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-big" style="margin-top:10px">항목 저장 (판정은 아직)</button>
+    </section>
+  </form>
+
+  <form method="post" action="/qua/inspections/77/judge" data-demo>
+    <section class="panel">
+      <h2>판정 <small>검사 #77 · 품질 권한</small></h2>
+      <div class="choice c3">
+        <label class="ok"><input type="radio" name="judgement" value="합격" required><span style="min-height:80px;font-size:26px">합격</span></label>
+        <label class="warn"><input type="radio" name="judgement" value="조건부"><span style="min-height:80px;font-size:26px">조건부</span></label>
+        <label class="err"><input type="radio" name="judgement" value="불합격" checked><span style="min-height:80px;font-size:26px">불합격</span></label>
+      </div>
+      <div class="panel" style="margin:10px 0 0;border-color:var(--err)">
+        <h2 style="font-size:19px">불합격이면 — 불량코드 · 수량 <small>N줄 (qua_defect)</small></h2>
+        <table class="list">
+          <thead><tr><th>불량코드</th><th>수량</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><div class="choice" style="grid-template-columns:repeat(4,1fr)"><label><input type="radio" name="d1_code" value="1" checked><span>외관</span></label><label><input type="radio" name="d1_code" value="2"><span>치수</span></label><label><input type="radio" name="d1_code" value="3"><span>이물</span></label><label><input type="radio" name="d1_code" value="4"><span>파손</span></label></div></td><td class="num" style="width:180px"><input type="number" name="d1_qty" inputmode="decimal" step="any" value="12" style="width:100%;min-height:56px;font-size:24px;text-align:right;border:2px solid var(--fg);border-radius:6px"></td><td><button type="button" class="btn">줄 추가</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <button type="submit" class="btn btn-primary btn-big" style="margin-top:10px">판정 저장 → lot.insp_status</button>
+      <ul class="notes"><li>판정 뒤 수정은 새 검사로. 「조건부」도 투입 · 출하 가능(<code>lineage.assert_usable</code>).</li><li>422: 출하된 LOT · 불합격인데 불량 줄 0.</li></ul>
+    </section>
+  </form>
+  <section class="demo">
+    <h3>시연 — 템플릿에 옮기지 않는다</h3>
+    <div class="actions"><button type="button" class="btn" data-demo-popup="이미 출하된 LOT 은 검사할 수 없습니다" data-title="검사" data-fields='[{"label":"생산 LOT","reason":"LP-20261008-002 (예시) → SH-20261008-004"}]'>422 출하된 LOT</button><button type="button" class="btn" data-demo-popup="불합격으로 판정했습니다 — LP-20261009-005 · 불량 12 EA" data-title="검사 판정" data-kind="ok">판정 성공</button></div>
+  </section>
+</main>
+
+<div class="popup-layer" id="popup-layer" hidden>
+  <div class="popup" role="alertdialog" aria-labelledby="popup-title" aria-describedby="popup-body">
+    <h2 id="popup-title">알림</h2>
+    <div id="popup-body"></div>
+    <p class="scan-hint">알림이 떠 있어도 바코드를 쏘면 스캔칸에 들어간다. 글자가 오면 알림은 닫힌다.</p>
+    <div class="actions"><button type="button" class="btn btn-primary" data-popup-close>확인</button></div>
+  </div>
+</div>
+<script type="application/json" id="flash-data">{}</script>
+<script src="pop.js"></script>
+</body>
+</html>

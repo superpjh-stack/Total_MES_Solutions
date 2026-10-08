@@ -1,0 +1,99 @@
+# printfilm 이관 매핑 — 엘컴화인 테이블 30(+sales_order) → 표준 Import 4종 (migration-files.md §6) (기획자2 · 2026-10-09)
+# 흐름: 엘컴화인 DB(복제본) → packs/printfilm/migrate_export.py 가 아래 소스 테이블에서 표준 파일(01_…~34_…)을 뽑는다 → `uv run python -m mescore.migrate basics|orders|lots|history --dir <폴더>`
+#      → check_data 로 행 수 · 계보 10행 대조. 운영 DB 는 건드리지 않는다(spec.md §13). 실제 실행은 범위 밖 — 경로만.
+# 엘컴화인 쪽 파일 규격은 ../lcomFine MES/contracts/migration-files.md §3 (16개 · 업무 키). 여기 `rename` 의 왼쪽은 그 파일의 열 이름이다.
+
+rename:                      # 기존 시스템 헤더 → 표준 헤더 (파일별로 겹치지 않는 것만 — 같은 이름은 적지 않는다)
+  # 01_items  ← item.csv
+  # (item_code · item_name · item_type · spec · unit · use_yn 전부 같다)
+  # 02_partners ← customer.csv (+ material_lot.supplier_name 을 distinct 로 뽑아 partner_type=공급 행 생성 — D-507)
+  customer_code: partner_code
+  customer_name: partner_name
+  # 03_processes ← process.csv
+  sort_no: seq
+  process_type: attrs.process_type        # 표준 밖 헤더 → attrs (bas_process)
+  # 05_equipment ← equipment.csv
+  equipment_code: equip_code
+  equipment_name: equip_name
+  # 08_defect_codes ← defect_code.csv
+  defect_group: attrs.defect_group
+  # 11_orders ← sales_order (EXT)
+  customer_po: attrs.customer_po
+  order_qty: qty
+  qty_unit: unit
+  # 12_work_orders ← job.csv
+  job_no: work_order_no
+  # 21_lots ← material_lot.csv · roll.csv · shipment.csv (세 파일을 한 21 로 합친다 — kind 는 아래)
+  roll_no: lot_no
+  shipment_no: lot_no
+  received_qty: qty
+  received_at: made_at
+  produced_at: made_at
+  supplier_lot_no: attrs.supplier_lot_no
+  length_m: attrs.length_m
+  width_mm: attrs.width_mm
+  # 22_genealogy ← roll_genealogy.csv
+  parent_no: parent_lot_no
+  child_no: child_lot_no
+  created_at: linked_at
+  # 31_work_results ← work_result
+  output_qty: good_qty
+  # 33_inspections ← inspection(+inspection_defect)
+  result: judgement
+  delta_e: item_value            # item_key=delta_e 행으로 (한 검사 = 항목 행 1 이상)
+  # 34_shipments ← shipment
+
+kinds:                        # 기존 구분값 → lot.kind
+  원재료:  MATERIAL           # material_lot 전부
+  인쇄:    ROLL               # roll.process_type
+  후가공:  ROLL
+  슬리팅:  ROLL
+  출하:    SHIPMENT           # shipment 전부
+
+relations:                    # 기존 관계명 → 코어/팩 relation (이름이 같아도 적는다 — 등록 목록 검증용)
+  투입:    투입
+  후가공:  후가공             # base 합병 (D-511)
+  splice:  splice             # base 합병
+  슬리팅:  슬리팅             # base 분할
+  출하:    출하
+
+status:                       # 기존 상태값 → 코어 상태값
+  job: { 등록: 대기, 완료: 마감, 취소: 취소 }
+  material_lot.insp_status: { 대기: 미검사, 합격: 합격, 불합격: 불합격 }
+  shipment: { 등록: 등록, 승인: 승인, 취소: 취소 }
+  sales_order: { 등록: 등록, 취소: 취소 }
+
+ext:                          # 표준 밖 헤더 → 확장 테이블 컬럼 (attrs 대신 — 검색 · FK 용)
+  lot:
+    process_type: x_printfilm_lot_ext.process_type     # roll.process_type (kinds 로 ROLL 판정에도 쓴다)
+    slit_seq:     x_printfilm_lot_ext.slit_seq
+    equipment_code: x_printfilm_lot_ext.equipment_id    # 코드 → id
+  job_work_order:
+    plate_code:  x_printfilm_job_work_order_ext.plate_id        # 코드 → id
+    anilox_code: x_printfilm_job_work_order_ext.anilox_id
+    ink_code:    x_printfilm_job_work_order_ext.ink_formula_id
+
+# 표준 Import 4종에 없는 팩 테이블 — 코어 변경 요청 CR-6 (README §3) 전까지 팩 스크립트가 같은 규칙(멱등 · 오류 리포트)으로 적재한다
+pack_files:
+  - { file: p1_plates.csv,          table: x_printfilm_plate,                 key: plate_code,           source: plate_spec }
+  - { file: p2_anilox.csv,          table: x_printfilm_anilox,                key: anilox_code,          source: anilox }
+  - { file: p3_inks.csv,            table: x_printfilm_ink_formula,           key: ink_code,             source: ink_formula }
+  - { file: p4_ink_components.csv,  table: x_printfilm_ink_formula_component, key: "ink_code + seq_no",  source: ink_formula_component }
+  - { file: p5_color_records.csv,   table: x_printfilm_color_record,          key: "work_order_no + color_name + seq_no", source: color_record }
+  - { file: p6_color_record_mix.csv, table: x_printfilm_color_record_mix,     key: "work_order_no + color_name + seq_no + mix_seq_no", source: color_record_mix }
+  # 순서: basics → pack_files p1~p4 → orders → lots → history → pack_files p5~p6 (조색은 Job 이 있어야 한다)
+
+# 옮기지 않는 것 — 사유
+skip:
+  job_lot:            "코어 job_lot 과 뜻이 다르다 (CR-1 · D-503). 생산 LOT 번호는 roll 의 attrs.job_lot_no 로만 보존한다"
+  shipment.coa_no:    "shp_document 로 — 34_shipments 뒤 승인 출하마다 document 1행을 팩 스크립트가 만든다(번호는 파일 값 그대로 · 스냅샷은 그 시점 검사 값)"
+  inspection_defect:  "33_inspections 에 항목 행(defect_position)과 qua_defect(불량코드 · position)로 나눠 뽑는다 — 엘컴화인 규격에 파일이 없어(§5-3) 복제본 DB 에서 직접 뽑는다"
+  work_stop.stop_reason: "글자 → STOP_REASON 코드 매핑표가 없다 → 전부 ETC + attrs.stop_reason_text 에 원문 (D-507)"
+  sys_user.password_hash: "옮기지 않는다 — 계정은 새로 만든다(G-C19)"
+  sys_access_log:     "옮기지 않는다"
+
+# 대조 기대값 (check_data · 복제본 기준으로 이관 뒤 채운다)
+expect:
+  genealogy_rows_equal_source: true       # roll_genealogy 행 수 = lot_genealogy 행 수
+  lots: "material_lot + roll + shipment 행 수 = lot 행 수"
+  scenario_g06: "엘컴화인 tests/test_lineage_scenario.py 의 10행이 lot_genealogy 에서도 10행 (relation 이름 그대로)"

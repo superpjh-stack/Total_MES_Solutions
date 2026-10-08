@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>역방향 추적 · 모바일</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="mobile.css">
+</head>
+<!--
+  TRC-02 역방향 추적 — 모바일 원형 (디자이너2). F-TRC-02 GET /trc/backward?no= → lineage.trace_backward. 출하 LOT → 생산 LOT → 원재료 LOT. 좁은 폭에서 계보를 세로 단계로 — 깊이마다 한 단, 분기는 details 로 접는다. 쓰기 0.
+  규칙: 폭 390px · 가로 넘침 0(칩 줄만 옆으로 민다) · 쓰기 버튼 0 · JS 0(접기는 details/summary) · 표를 쓰지 않고 카드로 접는다(README "모바일 접힘 규칙").
+  Jinja 로 옮길 때: body.ch-mobile 는 templating.render 가 붙인다 · 하단 탭 4 = channels.mobile 화면을 추적 · 현황 · 지시 · 재고 로 묶은 것 · 문구는 t() · 더미 값은 (예시).
+-->
+<body class="ch-mobile" data-screen="TRC-02">
+<div class="m-frame">
+<header class="m-top">
+  <div class="row"><h1>역방향 추적 <small>TRC-02</small></h1><span class="who">김조회 · 조회 (예시)</span></div>
+  <form class="m-search" method="get" action="/trc/backward" role="search">
+    <input type="search" name="no" placeholder="추적할 번호" aria-label="추적할 번호" autocomplete="off" value="SL-20261008-004">
+    <button type="submit">검색</button>
+  </form>
+</header>
+<main class="m-main">
+
+  <div class="chips"><a class="chip" href="#">정방향</a><a class="chip on" href="#">역방향</a><a class="chip" href="trc_search_m.html">번호 검색</a></div>
+  <section class="m-sec">
+    <h2>출발 <small>깊이 3 · 노드 7 · 분기 2 (예시)</small></h2>
+    <div class="trace">
+      <div class="t-node start">
+        <div class="m-card" style="border-color:var(--primary)">
+          <h3><code>SL-20261008-004</code> <span class="badge b-off">출하</span></h3>
+          <dl class="kv"><dt>종류</dt><dd>출하 LOT</dd><dt>출하</dt><dd><code>SH-20261008-004</code> · 거래처 A (예시)</dd><dt>일시</dt><dd>10-08 16:30</dd></dl>
+          <div class="links"><a href="shp_status_m.html">출하</a></div>
+        </div>
+      </div>
+
+      <div class="t-node">
+        <div class="depth">깊이 1 · 출하 ← 생산 LOT 2건</div>
+        <details class="fold" open>
+          <summary><span class="grow">생산 LOT 2건</span><span class="badge b-off">펼침</span></summary>
+          <div class="body">
+            <div class="m-card">
+              <h3><code>LP-20261008-002</code> <span class="badge b-off">출하</span></h3>
+              <dl class="kv"><dt>품목</dt><dd>품목 A (예시)</dd><dt>수량</dt><dd class="num">500 EA</dd><dt>지시</dt><dd><code>WO-20261008-001</code></dd><dt>실적</dt><dd>#12 · 10-08 14:02 종료</dd><dt>측정값</dt><dd>온도 71 ℃ · 무게 11.6 kg</dd><dt>검사</dt><dd><span class="badge b-ok">합격</span> 10-08</dd></dl>
+              <div class="links"><a href="job_status_m.html">지시</a><a href="#">실적</a><a href="#">측정값</a><a href="#">검사</a></div>
+              <details class="fold" open>
+                <summary><span class="grow">깊이 2 · 투입 원재료 LOT 2건</span></summary>
+                <div class="body">
+                  <div class="m-card"><h3><code>LM-20261007-002</code> <span class="badge b-ok">재고</span></h3><dl class="kv"><dt>품목</dt><dd>원재료 X (예시)</dd><dt>투입</dt><dd class="num">40 kg</dd><dt>공급처</dt><dd>공급처 1</dd><dt>입고검사</dt><dd><span class="badge b-ok">합격</span> 10-07</dd></dl><div class="links"><a href="#">입고</a><a href="#">검사</a></div></div>
+                  <div class="m-card"><h3><code>LM-20261006-001</code> <span class="badge b-off">소진</span></h3><dl class="kv"><dt>품목</dt><dd>원재료 Y (예시)</dd><dt>투입</dt><dd class="num">5 kg</dd><dt>공급처</dt><dd>공급처 2</dd><dt>입고검사</dt><dd><span class="badge b-warn">조건부</span> 10-06</dd></dl><div class="links"><a href="#">입고</a><a href="#">검사</a></div></div>
+                </div>
+              </details>
+            </div>
+            <div class="m-card">
+              <h3><code>LP-20261008-003-1</code> <span class="badge b-off">출하</span></h3>
+              <dl class="kv"><dt>품목</dt><dd>품목 A (예시)</dd><dt>수량</dt><dd class="num">250 EA</dd><dt>관계</dt><dd>분할 ← <code>LP-20261008-003</code></dd></dl>
+              <div class="links"><a href="#">실적</a><a href="#">검사</a></div>
+              <details class="fold">
+                <summary><span class="grow">깊이 2 · 분할 원본 1건</span><span class="badge b-off">접힘</span></summary>
+                <div class="body">
+                  <div class="m-card"><h3><code>LP-20261008-003</code> <span class="badge b-off">분할됨</span></h3><dl class="kv"><dt>수량</dt><dd class="num">500 EA</dd><dt>지시</dt><dd><code>WO-20261008-002</code></dd></dl>
+                    <details class="fold"><summary><span class="grow">깊이 3 · 투입 원재료 LOT 2건</span><span class="badge b-off">접힘</span></summary><div class="body"><div class="m-card"><h3><code>LM-20261007-002</code> <span class="badge b-ok">재고</span></h3><dl class="kv"><dt>투입</dt><dd class="num">38 kg</dd></dl></div><div class="m-card"><h3><code>LM-20261007-005</code> <span class="badge b-off">소진</span></h3><dl class="kv"><dt>투입</dt><dd class="num">6 kg</dd></dl></div></div></details>
+                  </div>
+                </div>
+              </details>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+  <section class="m-sec">
+    <h2>원재료 LOT 전부 <small>중복 없이 3건</small></h2>
+    <div class="m-card"><dl class="kv"><dt><code>LM-20261007-002</code></dt><dd>원재료 X · 공급처 1 · 합격</dd><dt><code>LM-20261006-001</code></dt><dd>원재료 Y · 공급처 2 · 조건부</dd><dt><code>LM-20261007-005</code></dt><dd>원재료 X · 공급처 1 · 합격</dd></dl></div>
+    <ul class="notes">
+      <li>접힘 규칙: 깊이 1 은 펼침, 깊이 2 부터 접힘(출발점과 바로 붙은 것만 먼저 본다). 분기(형제)가 3건을 넘으면 그 단도 접힘 — 요약 줄에 건수.</li>
+      <li>같은 LOT 이 두 가지로 나와도(분기 합류) 카드는 그 자리마다 그린다 — 「원재료 LOT 전부」 가 중복을 걷어 보여 준다(<code>Trace.materials()</code>).</li>
+      <li>없는 번호 → 이 화면 422 재렌더 + 빨간 배너. 관리자 Web 판(디자이너1)은 가로 그래프, 여기선 세로 단계만.</li>
+    </ul>
+  </section>
+
+</main>
+<nav class="m-tabs" aria-label="하단 탭">
+    <a href="trc_search_m.html" class="on"><span class="ico" aria-hidden="true">⌕</span>추적</a>
+    <a href="kpi_summary_m.html"><span class="ico" aria-hidden="true">▤</span>현황</a>
+    <a href="job_status_m.html"><span class="ico" aria-hidden="true">☰</span>지시</a>
+    <a href="mat_stock_m.html"><span class="ico" aria-hidden="true">▦</span>재고</a>
+</nav>
+</div>
+</body>
+</html>

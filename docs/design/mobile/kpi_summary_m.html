@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>집계 · 모바일</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="mobile.css">
+</head>
+<!--
+  KPI-02 집계 — 모바일 원형 (디자이너2). F-KPI-02~05 GET /kpi/summary?kind=production|quality|delivery|equipment → stats.*. 표를 카드로 접는 규칙의 기준 화면. 쓰기 0.
+  규칙: 폭 390px · 가로 넘침 0(칩 줄만 옆으로 민다) · 쓰기 버튼 0 · JS 0(접기는 details/summary) · 표를 쓰지 않고 카드로 접는다(README "모바일 접힘 규칙").
+  Jinja 로 옮길 때: body.ch-mobile 는 templating.render 가 붙인다 · 하단 탭 4 = channels.mobile 화면을 추적 · 현황 · 지시 · 재고 로 묶은 것 · 문구는 t() · 더미 값은 (예시).
+-->
+<body class="ch-mobile" data-screen="KPI-02">
+<div class="m-frame">
+<header class="m-top">
+  <div class="row"><h1>집계 <small>KPI-02</small></h1><span class="who">김조회 · 조회 (예시)</span></div>
+  <form class="m-search" method="get" action="/trc/search" role="search">
+    <input type="search" name="q" placeholder="품목 · 공정 · 설비" aria-label="품목 · 공정 · 설비" autocomplete="off">
+    <button type="submit">검색</button>
+  </form>
+</header>
+<main class="m-main">
+
+  <div class="chips"><a class="chip on" href="#">생산</a><a class="chip" href="#">품질</a><a class="chip" href="#">납기</a><a class="chip" href="#">설비</a></div>
+  <div class="chips"><a class="chip on" href="#">오늘</a><a class="chip" href="#">이번 주</a><a class="chip" href="#">이번 달</a><a class="chip" href="#">품목별</a><a class="chip" href="#">공정별</a><a class="chip" href="#">설비별</a></div>
+
+  <section class="m-sec">
+    <h2>생산 · 오늘 <small>stats.production(by=item) · 10:42 기준 (예시)</small></h2>
+    <div class="stat-grid">
+      <div class="stat"><small>계획</small><b>2,100<span class="u">EA</span></b></div>
+      <div class="stat"><small>실적</small><b>1,650<span class="u">EA</span></b></div>
+      <div class="stat"><small>달성</small><b>79<span class="u">%</span></b></div>
+      <div class="stat"><small>양품률</small><b>98.2<span class="u">%</span></b></div>
+    </div>
+    <!-- 표 1행 = 카드 1장. 열 순서: 키 열 → 제목 · 상태 열 → 배지 · 수치 열 → kv(단위 포함) · 비율 열 → 막대 -->
+    <div class="m-card">
+      <h3>품목 A <small>FG-001</small> <span class="badge b-ok">79%</span></h3>
+      <dl class="kv"><dt>계획</dt><dd class="num">1,500 EA</dd><dt>실적</dt><dd class="num">1,180 EA</dd><dt>양품/불량</dt><dd class="num">1,160 / 20</dd><dt>양품률</dt><dd class="num">98.3 %</dd></dl>
+      <div class="bar"><span style="width:79%"></span></div>
+    </div>
+    <div class="m-card">
+      <h3>품목 B <small>FG-002</small> <span class="badge b-warn">25%</span></h3>
+      <dl class="kv"><dt>계획</dt><dd class="num">600 EA</dd><dt>실적</dt><dd class="num">150 EA</dd><dt>양품/불량</dt><dd class="num">147 / 3</dd><dt>양품률</dt><dd class="num">98.0 %</dd></dl>
+      <div class="bar"><span style="width:25%"></span></div>
+    </div>
+    <div class="m-card">
+      <h3>품목 C <small>FG-003</small> <span class="badge b-off">계획 없음</span></h3>
+      <dl class="kv"><dt>계획</dt><dd class="num">—</dd><dt>실적</dt><dd class="num">320 EA</dd><dt>양품률</dt><dd class="num">100 %</dd></dl>
+    </div>
+  </section>
+
+  <section class="m-sec">
+    <h2>품질 · 측정값 <small>stats.measure_series(key="온도", by=day) (예시)</small></h2>
+    <details class="fold"><summary><span class="grow">온도 (℃) · 7일</span><span class="badge b-warn">이탈 2</span></summary>
+      <div class="body">
+        <div class="week-day"><span class="d">10-03</span><span class="cnt">평균 71.2 · n=12</span><span class="done"></span></div>
+        <div class="week-day"><span class="d">10-04</span><span class="cnt">평균 70.8 · n=10</span><span class="done"></span></div>
+        <div class="week-day"><span class="d">10-06</span><span class="cnt">평균 72.9 · n=14</span><span class="badge b-warn">이탈 1</span></div>
+        <div class="week-day"><span class="d">10-07</span><span class="cnt">평균 71.5 · n=11</span><span class="done"></span></div>
+        <div class="week-day"><span class="d">10-08</span><span class="cnt">평균 73.4 · n=13</span><span class="badge b-warn">이탈 1</span></div>
+        <div class="week-day"><span class="d today">10-09</span><span class="cnt">평균 71.0 · n=4</span><span class="done"></span></div>
+      </div>
+    </details>
+    <ul class="notes">
+      <li><b>표 → 카드 접기 규칙</b>: ① 첫 열(키)이 카드 제목, ② 상태 · 비율 열은 제목 오른쪽 배지, ③ 수치 열은 kv 두 열(라벨 84px · 값 우측 정렬 아님 — 좌측 정렬 고정폭 숫자), ④ 열이 6개를 넘으면 뒤의 열은 <code>details</code> 「더 보기」, ⑤ 합계 행은 카드 위 stat 타일 2×2, ⑥ 날짜 시계열은 week-day 줄(날짜 · 값 · 배지).</li>
+      <li>그래프를 그리지 않는다(외부 라이브러리 0 · 숫자가 곧 답). 막대 하나는 비율 1개에만.</li>
+    </ul>
+  </section>
+
+</main>
+<nav class="m-tabs" aria-label="하단 탭">
+    <a href="trc_search_m.html"><span class="ico" aria-hidden="true">⌕</span>추적</a>
+    <a href="kpi_summary_m.html" class="on"><span class="ico" aria-hidden="true">▤</span>현황</a>
+    <a href="job_status_m.html"><span class="ico" aria-hidden="true">☰</span>지시</a>
+    <a href="mat_stock_m.html"><span class="ico" aria-hidden="true">▦</span>재고</a>
+</nav>
+</div>
+</body>
+</html>

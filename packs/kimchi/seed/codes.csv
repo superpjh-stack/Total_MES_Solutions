@@ -1,0 +1,49 @@
+group_code,code,code_name,seq,use_yn,note
+SHIP_TYPE,홈쇼핑,홈쇼핑,1,Y,TD5 BAS_ITEM.SHIP_TYPE
+SHIP_TYPE,일반출고,일반출고,2,Y,TD5 BAS_ITEM.SHIP_TYPE
+PACK_UNIT,박스,박스,1,Y,TD5 BAS_ITEM.PACK_UNIT
+PACK_UNIT,봉,봉,2,Y,TD5 BAS_ITEM.PACK_UNIT
+PACK_UNIT,통,통,3,Y,TD5 BAS_ITEM.PACK_UNIT
+LOCATION_CD,원품냉장고,원품냉장고,1,Y,TD5 MAT_STOCK.LOCATION_CD
+LOCATION_CD,탈수냉장고,탈수냉장고,2,Y,TD5 MAT_STOCK.LOCATION_CD
+LOCATION_CD,숙성냉장고,숙성냉장고,3,Y,TD5 MAT_STOCK.LOCATION_CD
+LOCATION_CD,자재창고,자재창고,4,Y,TD3 016 목업 (예시)
+RECEIPT_PATH,카카오톡,카카오톡,1,Y,TD5 ORD_ORDER.RECEIPT_PATH
+RECEIPT_PATH,팩스,팩스,2,Y,TD5 ORD_ORDER.RECEIPT_PATH
+RECEIPT_PATH,직접등록,직접등록,3,Y,TD5 ORD_ORDER.RECEIPT_PATH
+SIZE_TYPE,대,대 (예시),1,Y,TD5 SLT_STD.SIZE_TYPE — 값 미확정 (임진강 D-208)
+SIZE_TYPE,소,소 (예시),2,Y,(예시)
+TANK_STATUS,투입,투입,1,Y,TD5 SLT_TANK_OPR.TANK_STATUS
+TANK_STATUS,진행,진행,2,Y,TD5 SLT_TANK_OPR.TANK_STATUS
+TANK_STATUS,완료,완료,3,Y,TD5 SLT_TANK_OPR.TANK_STATUS
+DEVIATION_TYPE,과절임,과절임,1,Y,TD5 SLT_DEVIATION.DEVIATION_TYPE
+DEVIATION_TYPE,절임부족,절임부족,2,Y,TD5 SLT_DEVIATION.DEVIATION_TYPE
+COLD_TRX_TYPE,입고,입고,1,Y,TD5 PKG_COLD_STOCK.TRX_TYPE
+COLD_TRX_TYPE,출고,출고,2,Y,TD5 PKG_COLD_STOCK.TRX_TYPE
+ALARM_KIND,손실률 20% 초과,손실률 20% 초과,1,Y,TD3 standard_note 3 (qua_issue 로 간다 — 표시용)
+ALARM_KIND,소독수 10ppm 미달,소독수 10ppm 미달,2,Y,TD3 standard_note 3
+ALARM_KIND,절임 염도 이탈,절임 염도 이탈,3,Y,TD3 standard_note 3
+ALARM_KIND,냉장고 온도 이탈,냉장고 온도 이탈,4,Y,TD3 standard_note 3
+ALARM_KIND,냉장고 습도 이탈,냉장고 습도 이탈,5,Y,TD5 AGE_ENV_ALARM.ALARM_ITEM 습도
+ALARM_KIND,금속검출 NG,금속검출 NG,6,Y,TD3 standard_note 3 (qua_issue 로 간다 — 표시용)
+ALARM_KIND,중량 미달,중량 미달,7,Y,TD3 standard_note 3 (qua_issue 로 간다 — 표시용)
+ALARM_STATUS,발생,발생,1,Y,x_kimchi_env_alarm.status
+ALARM_STATUS,확인,확인,2,Y,x_kimchi_env_alarm.status
+ALARM_STATUS,해제,해제,3,Y,x_kimchi_env_alarm.status
+EQUIP_TYPE,절임통,절임통,1,Y,TD5 BAS_EQUIP.EQUIP_NAME 설명
+EQUIP_TYPE,냉장고,냉장고,2,Y,〃
+EQUIP_TYPE,충진기,충진기,3,Y,〃
+EQUIP_TYPE,속넣기기계,속넣기기계,4,Y,〃
+EQUIP_TYPE,금속검출기,금속검출기,5,Y,〃
+EQUIP_TYPE,자동테이핑기,자동테이핑기,6,Y,〃
+EQUIP_TYPE,중량저울,중량 저울,7,Y,〃
+EQUIP_TYPE,소독수공급장치,소독수 공급장치,8,Y,〃
+EQUIP_TYPE,온습도센서,온습도센서,9,Y,〃
+EQUIP_TYPE,온도조절기,온도조절기,10,Y,〃
+EQUIP_TYPE,염도센서,염도센서,11,Y,〃
+EQUIP_TYPE,PLC제어반,PLC Control Panel,12,Y,TD2 hardware
+COMM_TYPE,RS-485,RS-485,1,Y,TD5 BAS_EQUIP.COMM_TYPE
+COMM_TYPE,Ethernet(TCP/IP),Ethernet(TCP/IP),2,Y,TD5 BAS_EQUIP.COMM_TYPE
+COMM_TYPE,OPC-UA,OPC-UA,3,Y,TD5 BAS_EQUIP.COMM_TYPE
+STOP_REASON,세척 (예시),세척 (예시),1,Y,코어 그룹에 값 추가 — 임진강 비가동 사유 코드값 미확정 (D-208) · (예시)
+STOP_REASON,고장 (예시),고장 (예시),2,Y,(예시)

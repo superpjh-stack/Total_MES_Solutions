@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>입고 등록 · POP</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="pop.css">
+</head>
+<!--
+  MAT-01 입고 등록 — 현장 POP 원형 (디자이너2). F-MAT-01 POST /mat/receipts (품목 · 공급처 · 수량 · 단위 · 입고일 → mat_receipt + 원재료 LOT(미검사) + 재고 거래) · F-MAT-03 조회. POP 판 — 관리자 Web 판은 디자이너1.
+  Jinja 로 옮길 때: body.ch-pop 는 templating.render 가 채널별로 붙인다 · 상단 탭은 nav.SCREENS 중 channels.pop 에 있는 화면만 ·
+  스캔칸은 ui.scan_box 하나(data-scan) · 알림은 base 의 #popup-layer + #flash-data · 문구는 전부 t() · 더미 값은 (예시).
+-->
+<body class="ch-pop" data-screen="MAT-01">
+<header class="topbar">
+  <a class="btn back" href="pop_work.html">← 뒤로</a>
+  <nav class="tabs" aria-label="작업 전환">
+    <a class="tab" href="pop_work.html">작업</a>
+    <a class="tab" href="pop_inputs.html">투입</a>
+    <a class="tab" href="pop_labels.html">라벨</a>
+    <a class="tab on" href="mat_receipts_pop.html">입고</a>
+    <a class="tab" href="mat_inspections_pop.html">입고검사</a>
+    <a class="tab" href="qua_inspections_pop.html">검사</a>
+    <a class="tab" href="shp_scan.html">출하</a>
+    <a class="tab" href="eqp_status_pop.html">설비</a>
+  </nav>
+  <div class="who" aria-label="현재 상태">
+    <span class="who-item"><small>작업자</small><b>김현장 (예시)</b></span>
+    <span class="who-item"><small>설비</small><b>EQ-001 (예시)</b></span>
+    <span class="who-item"><small>시각</small><b>10:42 (예시)</b></span>
+    <span class="who-item conn on"><small>연결</small><b>정상</b></span>
+  </div>
+</header>
+<div class="offline-bar" id="offline-bar" hidden role="alert">서비스 일시 중단 (503) — 연결이 돌아오면 스캔을 이어서 한다</div>
+<main class="pop-main">
+  <h1 class="screen-title">입고 등록 <small>MAT-01</small></h1>
+  <form class="scan" method="get" action="/mat/receipts" autocomplete="off" data-demo>
+    <label for="scan">품목 바코드 스캔 (있으면) — 없으면 아래에서 고른다</label>
+    <div class="scan-row">
+      <input id="scan" type="text" name="item_code" data-scan autofocus inputmode="text" autocomplete="off" placeholder="품목 코드">
+      <button type="submit" class="btn btn-primary">확인</button>
+    </div>
+  </form>
+  <section class="result" role="status" id="scan-result" hidden><p class="result-msg"></p></section>
+
+  <form method="post" action="/mat/receipts" data-demo>
+    <section class="panel">
+      <h2>입고 1건</h2>
+      <div class="form-grid">
+        <div class="field"><span class="lbl">품목 <span class="badge b-err">필수</span></span>
+          <div class="actions"><input type="text" name="item_code" value="RM-001 원재료 X (예시)" readonly style="flex:1"><button type="button" class="btn">찾기</button></div>
+          <span class="hint">「찾기」 = 공용 팝업 CMN-05 (kind=item)</span></div>
+        <div class="field"><span class="lbl">공급처 <span class="badge b-err">필수</span></span>
+          <div class="actions"><input type="text" name="partner_id" value="공급처 1 (예시)" readonly style="flex:1"><button type="button" class="btn">찾기</button></div></div>
+        <div class="field"><label for="r_qty">수량 <span class="unit">kg</span> <span class="badge b-err">필수</span></label><input id="r_qty" type="number" name="qty" inputmode="decimal" step="any" min="0" required placeholder="0"></div>
+        <div class="field"><label for="r_date">입고일</label><input id="r_date" type="date" name="received_on" value="2026-10-09"></div>
+        <div class="field"><label for="r_note">비고</label><input id="r_note" type="text" name="note" maxlength="100"></div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-big" style="margin-top:12px">입고 등록 → 원재료 LOT 발번</button>
+      <ul class="notes"><li>성공 → 303 + 알림 「입고했습니다 — LOT LM-20261009-003」 + 라벨 출력 안내(F-MAT-07). LOT 은 <code>insp_status=미검사</code> 로 시작한다.</li><li>팩 속성(<code>ui.attrs_fields("mat_receipt")</code>)이 있으면 이 폼 아래에 같은 모양으로 붙는다.</li></ul>
+    </section>
+  </form>
+
+  <section class="panel">
+    <h2>오늘 입고 <small>3건 (예시)</small></h2>
+    <table class="list">
+      <thead><tr><th>시각</th><th>원재료 LOT</th><th>품목</th><th>공급처</th><th>수량</th><th>검사</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>10:30</td><td><code>LM-20261009-003</code></td><td>원재료 X (예시)</td><td>공급처 1</td><td class="num">200 kg</td><td><span class="badge b-wait">미검사</span></td><td><a class="btn" href="#">라벨</a> <a class="btn" href="mat_inspections_pop.html">검사</a></td></tr>
+        <tr><td>09:10</td><td><code>LM-20261009-002</code></td><td>원재료 Y (예시)</td><td>공급처 2</td><td class="num">50 kg</td><td><span class="badge b-ok">합격</span></td><td><a class="btn" href="#">라벨</a></td></tr>
+        <tr><td>08:40</td><td><code>LM-20261009-001</code></td><td>원재료 X (예시)</td><td>공급처 1</td><td class="num">200 kg</td><td><span class="badge b-err">불합격</span></td><td><a class="btn" href="#">라벨</a></td></tr>
+      </tbody>
+    </table>
+    <ul class="notes"><li>수량 수정(F-MAT-02)은 관리자 Web 에서. 투입된 LOT 의 수정은 422.</li></ul>
+  </section>
+  <section class="demo">
+    <h3>시연 — 템플릿에 옮기지 않는다</h3>
+    <div class="actions"><button type="button" class="btn" data-demo-popup="입고했습니다 — 원재료 LOT LM-20261009-003 (예시)" data-title="입고" data-kind="ok">입고 성공</button><button type="button" class="btn" data-demo-popup="수량을 넣어 주세요" data-title="입고" data-fields='[{"label":"수량","reason":"필수"}]'>422 수량 누락</button></div>
+  </section>
+</main>
+
+<div class="popup-layer" id="popup-layer" hidden>
+  <div class="popup" role="alertdialog" aria-labelledby="popup-title" aria-describedby="popup-body">
+    <h2 id="popup-title">알림</h2>
+    <div id="popup-body"></div>
+    <p class="scan-hint">알림이 떠 있어도 바코드를 쏘면 스캔칸에 들어간다. 글자가 오면 알림은 닫힌다.</p>
+    <div class="actions"><button type="button" class="btn btn-primary" data-popup-close>확인</button></div>
+  </div>
+</div>
+<script type="application/json" id="flash-data">{}</script>
+<script src="pop.js"></script>
+</body>
+</html>

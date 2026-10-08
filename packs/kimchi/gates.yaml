@@ -1,0 +1,61 @@
+# packs/kimchi/gates.yaml — 팩 게이트 기대값 (pack-contract.md §7) · 기획자3 2026-10-09
+screens: 8            # X-COND-01 X-WSH-01 X-TANK-01 X-TANK-02 X-PKG-01 X-AGE-01 X-AGE-02 X-ALM-01
+tables: 7             # x_kimchi_item_std tank sanitizer_log taping_log env_alarm lot_ext cold_move
+functions: 24         # function-list.md 줄 수
+design_source: ../Limjingang Kimchi MES Platform/docs/design/design.json   # G-P03 — TD3 64 ↔ README §1 매핑표 (범위 밖 13 은 매핑표에 '범위 밖' 으로 적혀 고아가 아니다)
+design_mapping: README.md#1-코어-매핑표   # import_design.py 가 읽는 매핑 근거
+
+scenarios:
+  - id: S1
+    name: 입고 → 절임통 투입(염도) → 혼합 → 금속검출 합격 → 포장 → 출하 → 역추적
+    test: tests/test_scenario_chain.py::test_s1_chain
+    steps:   # scenarios.md §1 — 전부 코어 API + 팩 API 로 재현
+      - 입고 3 (배추 M1 · 고춧가루 M2 · 마늘 M3)  → lot kind MATERIAL 3 · 입고검사 합격
+      - P02 전처리 실적 R1 : 투입 M1 → 종료(in 1000 · out 850) → P1 PRODUCT
+      - P03 절임 실적 R2(TK-01) : 투입 P1 500 → X-TANK-01 투입 등록(기준 9% · 48h) → POST /ifc/collect SS-01 salinity_pct → 완료 → 종료 → T1 kind TANK
+      - P03 절임 실적 R3(TK-02) : 투입 P1 350 → … → T2 kind TANK
+      - P06 혼합 실적 R4 : 투입 M2 · M3 → 종료(합병 옵션 parents [T1,T2] relation 혼합) → X1 PRODUCT
+      - P07 금속검출 검사 on X1 : metal_detect OK · 판정 합격
+      - P08 포장 실적 R5 : 투입 X1 → 종료 → K1 PRODUCT · 최종 검사 pack_weight 합격
+      - 출하 : SHP-01 등록 → SHP-02 스캔 K1 → 승인(validate_shipment 통과) → S1 SHIPMENT
+      - 역추적 : GET /trc/backward?no=S1
+    expect:
+      genealogy_rows: 9              # 투입 1 + 투입 2 + 혼합 2 + 투입 2 + 투입 1 + 출하 1
+      backward_materials: 3          # M1 M2 M3
+      backward_depth: 5              # S1 ← K1 ← X1 ← T1 ← P1 ← M1
+      tank_lots: 2                   # kind TANK
+      tank_state: 소진               # 혼합(합병 base) 뒤 T1 T2 v_lot_state
+      salinity_measure_rows: 2       # pop_measure salinity_pct (R2 R3, collect · last)
+      p1_remain_qty: 150             # P1 1000 → 850 양품 중 500 + 350 투입 → v_lot_stock.remain 150 (재고)
+      shipment_status: 승인
+
+  - id: S2
+    name: 금속검출 미통과 배치 출하 승인 금지
+    test: tests/test_scenario_ship.py::test_s2_block_metal_ng
+    steps:
+      - S1 의 X1 대신 X2 (금속검출 NG 판정 · qua_issue source=hook +1) → 포장 K2 → SHP-02 스캔 K2 → 승인
+    expect: { status: 422, code: hook_rejected, qua_issue_hook_rows: 1, shipment_status: 등록, genealogy_delta: 0 }
+
+  - id: S3
+    name: 염도 · 온습도 센서 메시지 임계 초과 → 알람 1건 (재전송 · 반복 이탈은 합침)
+    test: tests/test_scenario_collect.py::test_s3_alarm
+    steps:
+      - 픽스처가 P09 temp_c max · 절임 조건 tolerance 를 임시로 넣는다 (시드에는 없음 — 미확정)
+      - POST /ifc/collect TC-01 {temp_c: max+1} → x_kimchi_env_alarm +1 (status 발생)
+      - 같은 메시지 resend → +0 (코어 멱등 duplicate)
+      - 다른 ts 로 다시 초과 → 행 +0 · count 2 (D-512)
+      - X-ALM-01 확인 → 해제(조치 필수) → 다시 초과 → 행 +1
+      - SS-01 salinity_pct = 목표 ± tolerance 밖 (진행 중 TANK 배치 매핑 픽스처) → 절임 염도 이탈 +1 · lot_id = T1
+    expect: { env_alarm_rows: 3, first_alarm_count: 2, salinity_alarm_lot_kind: TANK, qua_issue_delta: 0 }
+
+  - id: S4
+    name: 숙성 투입 → AGING 배치 → 예정일 전 출하 거부 → 완료 후 출하 → 역추적
+    test: tests/test_scenario_aging.py::test_s4_aging
+    steps:
+      - S1 의 K1(1000) → X-AGE-01 숙성 투입 600 (CR-02) → A1 kind AGING · relation 숙성 · due = +21
+      - SHP-02 스캔 A1 → 승인 → 422 hook_rejected (숙성 미완료)
+      - X-AGE-01 완료 처리 → 승인 → 통과
+      - GET /trc/backward?no=S(A1)
+    expect: { genealogy_delta: 2, aging_lot_kind: AGING, aging_lot_kind_base: PRODUCT, k1_remain_qty: 400, backward_materials: 3, first_approve_status: 422 }
+
+terms_sample: [생산 LOT, 측정값, 합병, 원재료 LOT, BOM, 이상]   # G-P05 — 치환 안 된 중립어 노출 0

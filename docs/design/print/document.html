@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="ko">
+<!--
+  성적서 — print/document.html 정적 원형 (디자이너3 · 2026-10-09)
+  SHP-04 · F-SHP-10 `GET /shp/documents/{id}/print` → printing.render_print(request, "document", data, screen_id="SHP-04"). 담당 개발3.
+  A4 세로. 화면에서는 "인쇄" 버튼 하나만 더 보인다.
+
+  ★ 이 양식은 발행 시점 스냅샷(shp_document.snapshot jsonb)만 그린다. 검사가 나중에 바뀌어도 발행본은 변하지 않는다(F-SHP-10).
+    라우터는 lot · qua_* 를 다시 읽지 않는다 — 전부 snapshot 에서. 재발행은 새 발행 번호.
+  ★ 팩이 같은 이름(templates/print/document.html)으로 이 양식을 덮어쓸 수 있다(E7). 코어 양식은 중립어만 쓴다.
+
+  데이터(가설 — F-SHP-09 가 만드는 snapshot 의 모양. 개발3 이 확정하면 README "출력물" 절도 같이 고친다)
+    doc       : document_no doc_type(성적서/거래명세서) issued_at issued_by
+    snapshot.shipment : shipment_no partner_code partner_name ship_date order_no approved_at approved_by
+    snapshot.columns  : [{item_key label unit standard min_value max_value}]   ← 그 출하 LOT 들의 검사 계획 항목 합집합. 열 순서 = seq
+    snapshot.lots     : [{lot_no item_code item_name qty unit
+                          inspection: null | {insp_type inspected_at inspector judgement values:{item_key:{value deviated item_judgement}}}}]
+                        ← LOT 별 **최신 검사 1건**(F-SHP-09). 검사가 없으면 inspection=null → 줄 전체 `미수집`
+    snapshot.summary  : {lot_count passed failed conditional uninspected judgement}  ← judgement: 불합격 1건이라도 있으면 불합격, 미수집이 있으면 `미확정`, 아니면 합격/조건부
+    barcode : printing.barcode_svg(doc.document_no) ← 발행 번호. 성적서 목록(SHP-04) 검색칸에 넣으면 이 발행본이 열린다
+  열이 8개를 넘으면 가로(A4 landscape)로 바꾸거나 표를 둘로 나눈다 — 이 원형은 5열.
+  빈 값은 `-`, 검사 없음은 `미수집`. 범위 이탈 값은 ▲ 표시 + 굵게(색만으로 뜻을 주지 않는다). 더미는 (예시).
+-->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>성적서</title>
+<link rel="stylesheet" href="../tokens.css"><!-- 디자이너1 토큰. 개발: /static/tokens.css -->
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:var(--c-bg);color:var(--c-ink);font-family:var(--font-sans);font-size:10.5pt;line-height:1.4}
+.toolbar{max-width:210mm;margin:16px auto 8px;display:flex;justify-content:flex-end;padding:0 16px}
+.btn{font:inherit;font-size:14px;padding:8px 18px;border:1px solid var(--c-accent);background:var(--c-accent);color:var(--c-ink-inverse);border-radius:8px;cursor:pointer}
+
+.sheet{background:var(--c-surface);width:210mm;min-height:297mm;margin:0 auto 24px;padding:14mm 12mm 16mm;box-shadow:var(--sh-2)}
+.sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8mm;border-bottom:2px solid var(--c-ink);padding-bottom:3mm;margin-bottom:4mm}
+.sheet-head h1{margin:0 0 1.5mm;font-size:22pt;letter-spacing:.14em}
+.sheet-head h1 small{font-size:10pt;letter-spacing:0;color:var(--c-ink-2);margin-left:3mm;font-weight:400}
+.no{font-size:10pt;color:var(--c-ink-2);margin:0}
+.no strong{font-family:var(--font-mono);font-size:13pt;color:var(--c-ink);margin-left:2mm}
+.code{text-align:center;width:58mm}
+.code .barcode{width:58mm;height:12mm;display:block}
+.code .barcode rect{fill:#000}
+.code .txt{font-family:var(--font-mono);font-size:9.5pt;letter-spacing:.06em;margin-top:1mm}
+.code .cap{font-size:8pt;color:var(--c-ink-3)}
+
+h2{font-size:11pt;margin:5mm 0 1.5mm;display:flex;justify-content:space-between;align-items:baseline}
+h2 small{font-weight:400;color:var(--c-ink-3);font-size:8.5pt}
+table{width:100%;border-collapse:collapse;font-size:9.5pt}
+th,td{border:1px solid var(--c-line);padding:1.5mm 1.8mm;text-align:left;vertical-align:top}
+th{background:var(--c-surface-2);font-weight:600}
+table.kv th{width:22mm;color:var(--c-ink-2);white-space:nowrap}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.c,th.c{text-align:center}
+td.mono{font-family:var(--font-mono);white-space:nowrap}
+td.empty{color:var(--c-ink-3);text-align:center}
+td.dev{font-weight:700;color:var(--c-deviated)}
+td.dev::before{content:"▲ ";font-size:8pt}
+.judge{font-weight:700}
+.judge[data-j="불합격"]{color:var(--c-err)}
+.judge[data-j="조건부"]{text-decoration:underline}
+.judge[data-j="미확정"],.judge[data-j="미수집"]{color:var(--c-ink-3);font-weight:400}
+tr.std td{background:var(--c-surface-2);color:var(--c-ink-2);font-size:8.5pt}
+
+.verdict{display:grid;grid-template-columns:1fr auto;gap:4mm;align-items:center;margin-top:6mm;border:2px solid var(--c-ink);padding:3mm 4mm;page-break-inside:avoid}
+.verdict .sum{font-size:9.5pt;color:var(--c-ink-2)}
+.verdict .sum b{color:var(--c-ink)}
+.verdict .big{font-size:20pt;font-weight:700;letter-spacing:.1em}
+.verdict .big[data-j="불합격"]{color:var(--c-err)}
+.verdict .big[data-j="미확정"]{color:var(--c-ink-3);font-size:14pt;font-weight:400}
+
+.issue{display:grid;grid-template-columns:1fr 1fr 44mm;gap:3mm;margin-top:6mm;page-break-inside:avoid;font-size:9.5pt}
+.issue div{border:1px solid var(--c-line);padding:2mm 3mm;min-height:22mm;position:relative}
+.issue div h3{margin:0 0 1mm;font-size:8.5pt;color:var(--c-ink-2);font-weight:600}
+.issue .seal{display:flex;align-items:center;justify-content:center;color:var(--c-ink-3);font-size:8.5pt}
+.foot{margin-top:5mm;font-size:8.5pt;color:var(--c-ink-3);display:flex;justify-content:space-between;gap:4mm}
+
+@media print{
+  @page{size:A4 portrait;margin:14mm 12mm 16mm}
+  body{background:var(--c-print-bg);font-size:10pt}
+  .no-print{display:none!important}
+  .sheet{width:auto;min-height:0;margin:0;padding:0;box-shadow:none}
+  th,tr.std td{background:var(--c-print-bg)}
+  thead{display:table-header-group}
+  tr{page-break-inside:avoid}
+  h2{page-break-after:avoid}
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar no-print"><button class="btn" type="button" onclick="window.print()">인쇄</button></div>
+
+<article class="sheet" data-print="document" data-no="DOC-20261009-0002">
+  <header class="sheet-head">
+    <div>
+      <h1>성적서 <small>검사 결과 증명</small></h1>
+      <p class="no">발행 번호 <strong>DOC-20261009-0002</strong></p>
+      <p class="no" style="margin-top:1mm;font-size:9pt">발행 2026-10-09 15:20 · 관리자 (예시)</p>
+    </div>
+    <div class="code">
+      <!-- printing.barcode_svg(doc.document_no) 자리 — 더미 막대 -->
+      <svg class="barcode" viewBox="0 0 242 100" preserveAspectRatio="none" shape-rendering="crispEdges" aria-label="DOC-20261009-0002"><rect x="10" width="2" height="100"/><rect x="13" width="1" height="100"/><rect x="18" width="1" height="100"/><rect x="21" width="1" height="100"/><rect x="28" width="1" height="100"/><rect x="30" width="1" height="100"/><rect x="32" width="1" height="100"/><rect x="34" width="6" height="100"/><rect x="41" width="1" height="100"/><rect x="43" width="6" height="100"/><rect x="50" width="1" height="100"/><rect x="52" width="1" height="100"/><rect x="54" width="3" height="100"/><rect x="58" width="1" height="100"/><rect x="61" width="1" height="100"/><rect x="65" width="1" height="100"/><rect x="72" width="1" height="100"/><rect x="74" width="1" height="100"/><rect x="76" width="6" height="100"/><rect x="83" width="1" height="100"/><rect x="85" width="1" height="100"/><rect x="87" width="1" height="100"/><rect x="89" width="6" height="100"/><rect x="96" width="1" height="100"/><rect x="98" width="1" height="100"/><rect x="100" width="6" height="100"/><rect x="107" width="1" height="100"/><rect x="109" width="1" height="100"/><rect x="111" width="1" height="100"/><rect x="118" width="1" height="100"/><rect x="120" width="6" height="100"/><rect x="127" width="1" height="100"/><rect x="129" width="1" height="100"/><rect x="131" width="1" height="100"/><rect x="133" width="1" height="100"/><rect x="135" width="6" height="100"/><rect x="142" width="1" height="100"/><rect x="144" width="1" height="100"/><rect x="146" width="6" height="100"/><rect x="153" width="1" height="100"/><rect x="155" width="1" height="100"/><rect x="157" width="6" height="100"/><rect x="164" width="6" height="100"/><rect x="171" width="1" height="100"/><rect x="173" width="1" height="100"/><rect x="175" width="6" height="100"/><rect x="182" width="1" height="100"/><rect x="184" width="1" height="100"/><rect x="186" width="3" height="100"/><rect x="190" width="2" height="100"/><rect x="194" width="2" height="100"/><rect x="197" width="1" height="100"/><rect x="199" width="1" height="100"/><rect x="201" width="1" height="100"/><rect x="208" width="1" height="100"/><rect x="215" width="1" height="100"/><rect x="217" width="1" height="100"/><rect x="219" width="2" height="100"/><rect x="224" width="3" height="100"/><rect x="228" width="1" height="100"/><rect x="230" width="2" height="100"/></svg>
+      <div class="txt">DOC-20261009-0002</div>
+      <div class="cap">발행 번호 바코드 · Code128</div>
+    </div>
+  </header>
+
+  <table class="kv">
+    <tbody>
+      <tr><th>출하 번호</th><td class="mono">SHP-20261009-0003</td><th>출하일</th><td>2026-10-09</td></tr>
+      <tr><th>거래처</th><td><span style="font-family:var(--font-mono)">PRT-0001</span> 거래처 A (예시)</td><th>수주</th><td class="mono">ORD-20261007-0003</td></tr>
+      <tr><th>출하 승인</th><td>2026-10-09 15:10 · 관리자 (예시)</td><th>LOT 수</th><td><b>4</b> (합격 3 · 조건부 1 · 불합격 0 · 미수집 0)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>출하 LOT <small>snapshot.lots — 발행 시점 값</small></h2>
+  <table>
+    <thead><tr><th class="c" style="width:7mm">#</th><th style="width:40mm">LOT 번호</th><th>품목</th><th class="num" style="width:22mm">수량</th><th style="width:32mm">검사 일시</th><th style="width:18mm">검사자</th><th class="c" style="width:16mm">판정</th></tr></thead>
+    <tbody>
+      <tr><td class="c">1</td><td class="mono">LOT-20261009-0005</td><td>품목 A (예시)</td><td class="num">480 EA</td><td>2026-10-09 13:50</td><td>품질 (예시)</td><td class="c judge" data-j="합격">합격</td></tr>
+      <tr><td class="c">2</td><td class="mono">LOT-20261009-0006</td><td>품목 A (예시)</td><td class="num">480 EA</td><td>2026-10-09 14:05</td><td>품질 (예시)</td><td class="c judge" data-j="합격">합격</td></tr>
+      <tr><td class="c">3</td><td class="mono">LOT-20261009-0007</td><td>품목 A (예시)</td><td class="num">480 EA</td><td>2026-10-09 14:40</td><td>품질 (예시)</td><td class="c judge" data-j="조건부">조건부</td></tr>
+      <tr><td class="c">4</td><td class="mono">LOT-20261009-0009</td><td>품목 A (예시)</td><td class="num">320 EA</td><td>2026-10-09 15:02</td><td>품질 (예시)</td><td class="c judge" data-j="합격">합격</td></tr>
+      <!-- 검사 없는 LOT: <tr><td class="c">5</td><td class="mono">LOT-…</td><td>…</td><td class="num">…</td><td class="empty" colspan="3">미수집 — 검사 기록 없음</td></tr> -->
+    </tbody>
+  </table>
+
+  <h2>LOT 별 검사 항목 값 <small>snapshot.columns × snapshot.lots · 최신 검사 1건 · ▲ = 기준 이탈</small></h2>
+  <table>
+    <thead>
+      <tr><th style="width:40mm">LOT 번호</th><th class="c">항목 1 (예시)<br><small style="font-weight:400">℃</small></th><th class="c">항목 2 (예시)<br><small style="font-weight:400">%</small></th><th class="c">항목 3 (예시)<br><small style="font-weight:400">mm</small></th><th class="c">항목 4 (예시)<br><small style="font-weight:400">-</small></th><th class="c">항목 5 (예시)<br><small style="font-weight:400">회</small></th></tr>
+      <tr class="std"><td>기준</td><td class="c">60.0 ~ 80.0</td><td class="c">1.8 ~ 2.4</td><td class="c">≤ 0.5</td><td class="c">양호</td><td class="c">≥ 3</td></tr>
+    </thead>
+    <tbody>
+      <tr><td class="mono">LOT-20261009-0005</td><td class="num c">72.4</td><td class="num c">2.1</td><td class="num c">0.3</td><td class="c">양호</td><td class="num c">3</td></tr>
+      <tr><td class="mono">LOT-20261009-0006</td><td class="num c">71.0</td><td class="num c">2.0</td><td class="num c">0.4</td><td class="c">양호</td><td class="num c">3</td></tr>
+      <tr><td class="mono">LOT-20261009-0007</td><td class="num c">74.1</td><td class="num c dev">2.6</td><td class="num c">0.5</td><td class="c">양호</td><td class="num c">3</td></tr>
+      <tr><td class="mono">LOT-20261009-0009</td><td class="num c">70.2</td><td class="num c">2.2</td><td class="num c">0.2</td><td class="c">-</td><td class="num c">4</td></tr>
+      <!-- 검사 없는 LOT: <tr><td class="mono">LOT-…</td><td class="empty" colspan="5">미수집</td></tr>
+           계획에 없는 항목(다른 품목의 LOT): 그 칸은 `-` -->
+    </tbody>
+  </table>
+
+  <div class="verdict">
+    <div class="sum">종합 판정 — LOT <b>4</b> 건 중 합격 <b>3</b> · 조건부 <b>1</b> · 불합격 <b>0</b> · 검사 없음 <b>0</b><br>
+      <small>불합격이 1건이라도 있으면 불합격, 검사 없는 LOT 이 있으면 미확정으로 표시한다.</small></div>
+    <div class="big judge" data-j="조건부">조건부 합격</div>
+  </div>
+
+  <div class="issue">
+    <div><h3>발행</h3>관리자 (예시)<br>2026-10-09 15:20</div>
+    <div><h3>확인</h3>&nbsp;</div>
+    <div class="seal">직인 · 서명란 — 양식은 팩이 정한다</div>
+  </div>
+
+  <footer class="foot">
+    <span>이 문서는 발행 시점의 검사 결과 스냅샷이다. 재발행은 새 발행 번호로 한다.</span>
+    <span>DOC-20261009-0002 · 1 / 1</span>
+  </footer>
+</article>
+
+</body>
+</html>

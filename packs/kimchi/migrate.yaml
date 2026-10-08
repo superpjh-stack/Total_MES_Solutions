@@ -1,0 +1,137 @@
+# packs/kimchi/migrate.yaml — 임진강 테이블 67 → 표준 Import 파일 4종 매핑 초안 (migration-files.md §6) · 기획자3 2026-10-09
+# 실행 순서: packs/kimchi/migrate_export.py(이관 단계에 작성) 가 임진강 DB 복제본에서 01~34 CSV 를 뽑는다 → `migrate basics/orders/lots/history` → check_data 행 수·계보 대조.
+# 아래 주석 블록이 "어느 임진강 테이블이 어느 파일로 가는가" 의 정본이고, 규격 키(rename · kinds · relations · ext)는 로더가 읽는다.
+#
+# ── 임진강 테이블 → 표준 파일 (B-MIG-01 basics) ─────────────────────────────
+#   BAS_ITEM                  → 01_items.csv       (CAPACITY·PACK_UNIT·SHIP_TYPE 은 모르는 헤더 → attrs)
+#   BAS_PARTNER               → 02_partners.csv
+#   BAS_PROCESS               → 03_processes.csv   (CCP_YN·COLLECT_CYCLE → attrs)
+#   BAS_CCP_STD(냉장 온도·소독수·손실률) → 04_process_params.csv (범위) ; BAS_CCP_STD(금속·CCP·중량) → 검사 항목은 팩 seed/inspection_items.csv 로 (Import 밖)
+#   WSH_STD · SLT_STD         → x_kimchi_item_std  — 표준 파일 없음. migrate_export.py 가 팩 전용 41_item_std.csv 를 뽑고 팩 배치(B-X-MIG-01, 이관 단계) 가 적재
+#   BAS_EQUIP                 → 05_equipment.csv   (EQUIP_TYPE·PLC_TAG·COMM_TYPE·COLLECT_ITEM → attrs ; COLLECT_YN 은 PLC_TAG 유무로)
+#   BAS_BOM · BAS_BOM_DTL     → 06_bom.csv
+#   BAS_WORKER                → 07_workers.csv
+#   QUA_DEFECT_TYPE           → 08_defect_codes.csv (KPI_TARGET_YN → attrs)
+#   BAS_CODE_GRP · BAS_CODE_DTL → 09_codes.csv
+# ── B-MIG-02 orders ────────────────────────────────────────────────────────
+#   ORD_ORDER · ORD_ORDER_DTL → 11_orders.csv      (RECEIPT_PATH·SHIP_TYPE → attrs ; SHIP_QTY·REMAIN_QTY·PROGRESS_RATE 버림 — 계산값)
+#   ORD_WORK_ORDER            → 12_work_orders.csv (WO_STATUS 대기/진행/완료 → 대기/진행/마감)
+#   ORD_PLAN · ORD_ORDER_HIST → 표준 파일 없음 (이관 범위 밖 · 필요하면 D-번호)
+# ── B-MIG-03 lots ──────────────────────────────────────────────────────────
+#   MAT_RECEIPT.LOT_NO                      → 21_lots.csv kind MATERIAL (EXPIRE_DATE → attrs)
+#   RCV_PRETREAT.LOT_NO(전처리 산출)         → 21_lots.csv kind PRODUCT
+#   SLT_TANK_OPR(절임통 배치 · 번호 없음)    → 21_lots.csv kind TANK  — lot_no 는 export 가 `TK-<작업지시번호>-<절임통>` 로 생성 (임진강에 배치 번호가 없다 — 이관 D-번호 필요)
+#   MIX_WEIGHING.BATCH_NO(혼합 배치)         → 21_lots.csv kind PRODUCT
+#   PKG_SHIP.LOT_NO(포장 완제품)             → 21_lots.csv kind PRODUCT
+#   AGE_STOCK.LOT_NO                        → 21_lots.csv kind AGING
+#   PKG_SHIP.SHIP_NO                        → 21_lots.csv kind SHIPMENT (+ 34_shipments.csv)
+#   계보(22_genealogy.csv) — 임진강에 계보 표가 없다. export 가 문자열 키로 **재구성**한다:
+#     MAT_RECEIPT.LOT_NO → RCV_PRETREAT.LOT_NO         : 투입   (같은 작업지시 · 입고 로트)
+#     RCV_PRETREAT.LOT_NO → SLT_TANK_OPR 배치          : 투입
+#     SLT_TANK_OPR 배치 → MIX BATCH_NO                 : 혼합   (같은 작업지시 계열)
+#     MAT_RECEIPT(양념).LOT_NO → MIX BATCH_NO           : 투입   (MAT_REQUIRE · MIX_WEIGHING 자품목)
+#     MIX BATCH_NO → PKG_SHIP.LOT_NO                   : 투입
+#     PKG_SHIP.LOT_NO → AGE_STOCK.LOT_NO               : 숙성
+#     PKG_SHIP.LOT_NO | AGE_STOCK.LOT_NO → SHIP_NO     : 출하
+#     연결 키가 없는 행(작업지시 미기재)은 그 줄 오류 — 지어 잇지 않는다
+# ── B-MIG-04 history ───────────────────────────────────────────────────────
+#   POP_PROGRESS · RCV_PRETREAT · WSH_RESULT · SLT_TANK_OPR → 31_work_results.csv
+#   32_measures.csv 로 가는 로그 (실적당 1값):
+#     RCV_PRETREAT.INPUT_WEIGHT/OUTPUT_WEIGHT/LOSS_RATE → input_weight_kg / output_weight_kg / loss_rate_pct
+#     WSH_RESULT.WASH_TIME/WASH_VOLUME/PROCESS_WEIGHT   → wash_time_min / wash_volume_l / wash_weight_kg
+#     SLT_SALINITY_LOG 의 배치별 **마지막** 값             → salinity_pct   (시계열 본체는 아래 eqp_collect)
+#   팩 테이블 · eqp_collect 로 가는 로그 (표준 파일 없음 — 팩 전용 export):
+#     SLT_SALINITY_LOG(전체) · AGE_ENV_LOG · MIX_FILLER_LOG · PKG_TAPING_LOG · WSH_SANITIZER_LOG(센서분) · IF_SENSOR_RAW → 42_collect.csv → `POST /ifc/collect` 재생(멱등) 또는 eqp_collect 직접 적재(이관 배치)
+#     WSH_SANITIZER_LOG(수기분)  → 43_sanitizer_log.csv → x_kimchi_sanitizer_log
+#     PKG_TAPING_LOG(집계)       → 44_taping_log.csv    → x_kimchi_taping_log
+#     AGE_ENV_ALARM              → 45_env_alarm.csv     → x_kimchi_env_alarm
+#     PKG_COLD_STOCK             → 46_cold_move.csv     → x_kimchi_cold_move
+#     SLT_TANK_OPR(ext 부분)     → 47_tank.csv          → x_kimchi_tank (31 의 실적과 작업지시번호+시작시각으로 연결)
+#     AGE_STOCK(ext 부분)        → 48_lot_ext.csv       → x_kimchi_lot_ext
+#   33_inspections.csv 로 가는 것:
+#     RCV_INSPECT     → insp_type 입고 · item_key foreign_matter/decay/appearance
+#     MIX_CCP_RESULT  → 공정 · mix_ccp
+#     QUA_METAL_LOG   → 공정 · metal_detect / inspect_qty / ng_qty   (lot_no = QUA_METAL_LOG.LOT_NO)
+#     PKG_WEIGHT_INSP → 최종 · pack_weight_kg
+#   PKG_SHIP → 34_shipments.csv
+#   SLT_DEVIATION · QUA_ISSUE → qua_issue — 표준 파일 없음 (이관 단계 D-번호)
+#   QUA_DEFECT → qua_defect/pop_scrap — 표준 파일 없음 (이관 단계 D-번호)
+#   EQP_RUN_LOG · EQP_CHECK · EQP_FAULT · KPI_* · SYS_* · AGT_* · DSH_* · POP_LINE · POP_RECEIPT · POP_SHIP_ORDER · IF_ERP_LINK → 이관하지 않음 (범위 밖 또는 운영 중 재생성)
+
+rename:                       # 임진강 헤더 → 표준 헤더
+  ITEM_CODE: item_code
+  ITEM_NAME: item_name
+  ITEM_TYPE: item_type
+  PARTNER_CODE: partner_code
+  PARTNER_NAME: partner_name
+  PARTNER_TYPE: partner_type
+  PROCESS_CODE: process_code
+  PROCESS_NAME: process_name
+  PROCESS_SEQ: seq
+  EQUIP_CODE: equip_code
+  EQUIP_NAME: equip_name
+  WORKER_CODE: worker_code
+  WORKER_NAME: worker_name
+  DEFECT_CODE: defect_code
+  DEFECT_NAME: defect_name
+  CODE_GRP_CODE: group_code
+  CODE_VALUE: code
+  CODE_NAME: code_name
+  SORT_SEQ: seq
+  ORDER_NO: order_no
+  ORDER_DATE: order_date
+  DUE_DATE: due_date
+  ORDER_QTY: qty
+  WORK_ORDER_NO: work_order_no
+  PLAN_DATE: plan_date
+  WO_STATUS: status
+  LOT_NO: lot_no
+  BATCH_NO: lot_no
+  SHIP_NO: shipment_no
+  RECEIPT_QTY: qty
+  RECEIPT_DATE: made_at
+  START_DT: started_at
+  END_DT: ended_at
+  RESULT_QTY: good_qty
+  INSPECT_DT: inspected_at
+  JUDGE_RESULT: judgement
+  DETECT_RESULT: item_value
+  MEASURE_VALUE: item_value
+  MEASURE_WEIGHT: item_value
+  CONFIRM_DT: approved_at
+  USE_YN: use_yn
+
+values:                       # 임진강 값 → 코어 값 (로더가 지원하면 쓰고, 아니면 export 가 바꾼다)
+  item_type: { 완제품: 제품, 원부자재: 원재료 }
+  partner_type: { 고객사: 고객, 공급사: 공급 }
+  status: { 완료: 마감 }                      # ORD_WORK_ORDER.WO_STATUS
+  judgement: { 적합: 합격, 이탈: 불합격, OK: 합격, NG: 불합격, 미달: 불합격, 초과: 불합격 }
+
+kinds:                        # 기존 구분값 → lot.kind
+  원부자재: MATERIAL
+  전처리: PRODUCT
+  절임통: TANK
+  혼합: PRODUCT
+  완제품: PRODUCT
+  숙성: AGING
+  출하: SHIPMENT
+
+relations:                    # 기존 관계명 → 코어/팩 relation (export 가 재구성한 계보의 라벨)
+  투입: 투입
+  혼합: 혼합
+  숙성: 숙성
+  출하: 출하
+
+ext:                          # 표준 밖 헤더 → 확장 테이블 컬럼 (attrs 대신)
+  lot:
+    AGE_START_DATE: x_kimchi_lot_ext.aging_start_date
+    AGE_END_DATE: x_kimchi_lot_ext.aging_due_date
+    SHIPPABLE_YN: x_kimchi_lot_ext.shippable_yn
+    COLD_EQUIP_CODE: x_kimchi_lot_ext.location_equipment_id    # export 가 PKG_COLD_STOCK 마지막 입고 냉장고를 넣는다
+    TANK_EQUIP_CODE: x_kimchi_lot_ext.tank_equipment_id
+  pop_work_result:
+    TANK_EQUIP_CODE: x_kimchi_tank.equipment_id
+    STD_SALINITY: x_kimchi_tank.target_salinity_pct
+    STD_HOURS: x_kimchi_tank.target_hours
+    PLAN_END_DT: x_kimchi_tank.plan_end_at
+    TANK_STATUS: x_kimchi_tank.status

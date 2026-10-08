@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>번호 검색 · 모바일</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="mobile.css">
+</head>
+<!--
+  TRC-03 번호 검색 — 모바일 원형 (디자이너2). F-TRC-03 GET /trc/search?q= → lineage.search(text, limit=50). 번호 일부 · 품목으로. 결과에서 정/역방향.
+  규칙: 폭 390px · 가로 넘침 0(칩 줄만 옆으로 민다) · 쓰기 버튼 0 · JS 0(접기는 details/summary) · 표를 쓰지 않고 카드로 접는다(README "모바일 접힘 규칙").
+  Jinja 로 옮길 때: body.ch-mobile 는 templating.render 가 붙인다 · 하단 탭 4 = channels.mobile 화면을 추적 · 현황 · 지시 · 재고 로 묶은 것 · 문구는 t() · 더미 값은 (예시).
+-->
+<body class="ch-mobile" data-screen="TRC-03">
+<div class="m-frame">
+<header class="m-top">
+  <div class="row"><h1>번호 검색 <small>TRC-03</small></h1><span class="who">김조회 · 조회 (예시)</span></div>
+  <form class="m-search" method="get" action="/trc/search" role="search">
+    <input type="search" name="q" placeholder="번호 일부 · 품목" aria-label="번호 일부 · 품목" autocomplete="off" value="2026100">
+    <button type="submit">검색</button>
+  </form>
+</header>
+<main class="m-main">
+
+  <div class="chips"><a class="chip on" href="#">전부</a><a class="chip" href="#">원재료 LOT</a><a class="chip" href="#">생산 LOT</a><a class="chip" href="#">출하 LOT</a></div>
+  <section class="m-sec">
+    <h2>결과 <small>「2026100」 · 4건 (예시)</small></h2>
+    <div class="m-card">
+      <h3><code>LP-20261009-005</code> <span class="badge b-ok">재고</span></h3>
+      <dl class="kv"><dt>종류</dt><dd>생산 LOT</dd><dt>품목</dt><dd>품목 A (예시)</dd><dt>수량</dt><dd class="num">480 EA</dd></dl>
+      <div class="links"><a class="primary" href="trc_backward_m.html">역추적</a><a href="#">정추적</a></div>
+    </div>
+    <div class="m-card">
+      <h3><code>LM-20261009-003</code> <span class="badge b-wait">미검사</span></h3>
+      <dl class="kv"><dt>종류</dt><dd>원재료 LOT</dd><dt>품목</dt><dd>원재료 X (예시)</dd><dt>수량</dt><dd class="num">200 kg</dd></dl>
+      <div class="links"><a class="primary" href="#">정추적</a><a href="trc_backward_m.html">역추적</a></div>
+    </div>
+    <div class="m-card">
+      <h3><code>SL-20261008-004</code> <span class="badge b-off">출하</span></h3>
+      <dl class="kv"><dt>종류</dt><dd>출하 LOT</dd><dt>출하</dt><dd><code>SH-20261008-004</code> · 거래처 A</dd></dl>
+      <div class="links"><a class="primary" href="trc_backward_m.html">역추적</a></div>
+    </div>
+    <div class="m-card">
+      <h3><code>LP-20261008-003-1</code> <span class="badge b-off">출하</span></h3>
+      <dl class="kv"><dt>종류</dt><dd>생산 LOT (분할)</dd><dt>품목</dt><dd>품목 A (예시)</dd><dt>수량</dt><dd class="num">250 EA</dd></dl>
+      <div class="links"><a class="primary" href="trc_backward_m.html">역추적</a><a href="#">정추적</a></div>
+    </div>
+    <ul class="notes"><li>결과 0건이면 「없습니다 — 번호 일부를 더 넣어 본다」. 50건을 넘으면 「더 좁혀 주세요」 + 50건만.</li><li>원재료 LOT 은 정방향이 기본, 출하 LOT 은 역방향이 기본(주 버튼).</li></ul>
+  </section>
+
+</main>
+<nav class="m-tabs" aria-label="하단 탭">
+    <a href="trc_search_m.html" class="on"><span class="ico" aria-hidden="true">⌕</span>추적</a>
+    <a href="kpi_summary_m.html"><span class="ico" aria-hidden="true">▤</span>현황</a>
+    <a href="job_status_m.html"><span class="ico" aria-hidden="true">☰</span>지시</a>
+    <a href="mat_stock_m.html"><span class="ico" aria-hidden="true">▦</span>재고</a>
+</nav>
+</div>
+</body>
+</html>

@@ -1,0 +1,10 @@
+process_code,process_name,seq,use_yn,ccp_yn,note
+P01,입고/보관,1,Y,N,design.json meta.main_processes (정본)
+P02,절단/전처리,2,Y,N,정본
+P03,세척/절임,3,Y,N,정본 — 절임통 8기
+P04,세척/선별,4,Y,N,정본
+P05,탈수,5,Y,N,정본
+P06,혼합(버무림),6,Y,Y,정본 — CCP (임진강 D-09)
+P07,금속검출,7,Y,Y,정본 — CCP (임진강 D-09)
+P08,포장/출고,8,Y,N,정본
+P09,냉장·숙성,9,Y,Y,정본 — CCP (임진강 D-09)

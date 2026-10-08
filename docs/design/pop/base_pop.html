@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POP 기본 레이아웃 · POP</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="pop.css">
+</head>
+<!--
+  base POP 기본 레이아웃 — 현장 POP 원형 (디자이너2). 레이아웃 원형 — templates/base.html 의 POP 채널 분기(개발자: 아키텍트 base 에 ch-pop 블록으로 합친다).
+  Jinja 로 옮길 때: body.ch-pop 는 templating.render 가 채널별로 붙인다 · 상단 탭은 nav.SCREENS 중 channels.pop 에 있는 화면만 ·
+  스캔칸은 ui.scan_box 하나(data-scan) · 알림은 base 의 #popup-layer + #flash-data · 문구는 전부 t() · 더미 값은 (예시).
+-->
+<body class="ch-pop" data-screen="base">
+<header class="topbar">
+  <a class="btn back" href="pop_work.html">← 뒤로</a>
+  <nav class="tabs" aria-label="작업 전환">
+    <a class="tab" href="pop_work.html">작업</a>
+    <a class="tab" href="pop_inputs.html">투입</a>
+    <a class="tab" href="pop_labels.html">라벨</a>
+    <a class="tab" href="mat_receipts_pop.html">입고</a>
+    <a class="tab" href="mat_inspections_pop.html">입고검사</a>
+    <a class="tab" href="qua_inspections_pop.html">검사</a>
+    <a class="tab" href="shp_scan.html">출하</a>
+    <a class="tab" href="eqp_status_pop.html">설비</a>
+  </nav>
+  <div class="who" aria-label="현재 상태">
+    <span class="who-item"><small>작업자</small><b>김현장 (예시)</b></span>
+    <span class="who-item"><small>설비</small><b>EQ-001 (예시)</b></span>
+    <span class="who-item"><small>시각</small><b>10:42 (예시)</b></span>
+    <span class="who-item conn on"><small>연결</small><b>정상</b></span>
+  </div>
+</header>
+<div class="offline-bar" id="offline-bar" hidden role="alert">서비스 일시 중단 (503) — 연결이 돌아오면 스캔을 이어서 한다</div>
+<main class="pop-main">
+  <h1 class="screen-title">POP 기본 레이아웃 <small>base</small></h1>
+  <form class="scan" method="get" action="#" autocomplete="off" data-demo>
+    <label for="scan">스캔칸 (data-scan 하나 — 이 화면의 포커스 주인)</label>
+    <div class="scan-row">
+      <input id="scan" type="text" name="no" data-scan autofocus inputmode="text" autocomplete="off" placeholder="바코드 → 글자 → Enter">
+      <button type="submit" class="btn btn-primary">확인</button>
+    </div>
+  </form>
+  <section class="result " role="status" id="scan-result">
+    <p class="result-msg">결과 배너 — 처리 결과 · 422 사유가 여기 큰 글씨로 남는다 (알림이 닫혀도 남는다)</p>
+  </section>
+
+  <section class="panel">
+    <h2>레이아웃 규칙</h2>
+    <ol class="notes" style="font-size:19px;color:var(--fg)">
+      <li><b>좌측 메뉴 없음.</b> 상단 = 「뒤로」 + 작업 전환 탭(이 채널에 허용된 화면만 — <code>channels.pop</code>) + 작업자 · 설비 · 시각 · 연결 상태.</li>
+      <li><b>스캔칸 하나.</b> <code>data-scan</code> 은 화면에 하나. 열리면 포커스, 빈 곳을 눌러도 포커스 복귀, 알림이 떠 있어도 스캔 글자는 스캔칸으로.</li>
+      <li><b>한 화면 한 작업.</b> 스캔 → 결과 배너 → 큰 버튼 하나. 표는 행 높이 56px 이상, 글자 20px 이상.</li>
+      <li><b>422 는 그 화면 재렌더.</b> 스캔 진입 GET(<code>?no=</code>)의 없는 번호는 오류 화면으로 가지 않고 이 레이아웃을 422 로 다시 그린다 — 결과 배너가 빨강 · 스캔칸 유지.</li>
+      <li><b>폼 POST 의 422 · 쓰기 성공</b>은 303 → 같은 화면 + 알림 팝업(<code>#flash-data</code>). 알림은 큰 글씨, 「확인」 · 바깥 · Esc · 빈 스캔칸 Enter 로 닫히고 포커스는 스캔칸으로.</li>
+      <li><b>503(DB 끊김)</b> 은 빨간 띠 + 연결 「끊김」 + 스캔칸 비활성. 오프라인 저장은 하지 않는다 — 연결이 돌아오면 다시 스캔한다.</li>
+      <li><b>터치 기준.</b> 버튼 · 탭 · 선택 56px 이상, 주 버튼 80px, 스캔칸 72px. 색만으로 상태를 말하지 않는다(글자 + 배지).</li>
+    </ol>
+  </section>
+  <section class="panel">
+    <h2>상태 배지 · 버튼 모음</h2>
+    <p><span class="badge b-wait">대기</span> <span class="badge b-ok">진행</span> <span class="badge b-ok">합격</span> <span class="badge b-warn">조건부</span> <span class="badge b-err">불합격</span> <span class="badge b-off">완료</span> <span class="badge b-off">소진</span> <span class="badge b-off">출하</span> <span class="badge b-warn">이탈</span> <span class="badge b-off">미수집</span> <span class="badge b-err">필수</span></p>
+    <div class="actions" style="margin-top:10px">
+      <button type="button" class="btn">기본 56px</button>
+      <button type="button" class="btn btn-primary">주 동작</button>
+      <button type="button" class="btn btn-ok">합격 · 가동</button>
+      <button type="button" class="btn btn-warn">조건부 · 정지</button>
+      <button type="button" class="btn btn-danger">불합격 · 고장</button>
+      <button type="button" class="btn" disabled>권한 없음 (비활성)</button>
+    </div>
+    <button type="button" class="btn btn-primary btn-big" style="margin-top:10px">한 화면의 주 버튼 — 80px</button>
+  </section>
+  <section class="demo">
+    <h3>시연 — 템플릿에 옮기지 않는다</h3>
+    <div class="actions"><button type="button" class="btn" data-demo-popup="불합격 LOT 입니다 — 투입할 수 없습니다" data-title="투입 스캔" data-fields='[{"label":"원재료 LOT","reason":"LM-20261008-004 (예시) 불합격"}]'>422 알림 보기</button><button type="button" class="btn" data-demo-popup="작업을 시작했습니다" data-title="작업 시작" data-kind="ok">쓰기 성공 알림</button><button type="button" class="btn" onclick="document.getElementById('offline-bar').hidden=!document.getElementById('offline-bar').hidden">503 띠 켜기/끄기</button></div>
+  </section>
+</main>
+
+<div class="popup-layer" id="popup-layer" hidden>
+  <div class="popup" role="alertdialog" aria-labelledby="popup-title" aria-describedby="popup-body">
+    <h2 id="popup-title">알림</h2>
+    <div id="popup-body"></div>
+    <p class="scan-hint">알림이 떠 있어도 바코드를 쏘면 스캔칸에 들어간다. 글자가 오면 알림은 닫힌다.</p>
+    <div class="actions"><button type="button" class="btn btn-primary" data-popup-close>확인</button></div>
+  </div>
+</div>
+<script type="application/json" id="flash-data">{}</script>
+<script src="pop.js"></script>
+</body>
+</html>

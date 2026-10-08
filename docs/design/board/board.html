@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="ko" data-theme="light" data-state="ok">
+<!--
+  KPI-01 현황판 — 정적 원형 (디자이너3 · 2026-10-09)
+  개발자(개발3)가 templates/kpi/board.html(Jinja) 로 그대로 옮긴다.
+
+  규칙
+  · 1920×1080 벽걸이 기준. 조작 요소 0 (링크 · 버튼 · 입력 없음). 20m 밖에서 읽히는 숫자.
+  · 첫 렌더는 서버가 stats.board() 로 채운다. 그 뒤 5초마다 같은 경로를 Accept: application/json 으로 받아
+    [data-key] 의 글자만 바꾼다 (전체 새로고침 없음). 키 ↔ data-key 대응은 docs/design/README.md "현황판" 절.
+  · 폴링 실패(503 · 네트워크)여도 화면은 남고 머리글에 "갱신 실패 HH:MM, 재시도 중" 이 붙는다. 폴링은 멈추지 않는다
+    (api-contract.md §2: 현황판은 오류 화면에서도 자동 새로고침 유지).
+  · 값이 null 이면 `미수집`, 지표 목표값이 없으면 `미확정`. 색은 상태 의미(good · warn · critical)로만 쓴다.
+  · 차트는 인라인 SVG 막대뿐. 외부 CDN · 웹폰트 · 라이브러리 0.
+  · 더미 숫자는 전부 (예시). 사용자 문구는 Jinja 로 옮길 때 {{ t("…") }} 를 거친다.
+  · [원형 전용] 로 표시한 블록(데모 JSON · #state= 해시 처리)은 템플릿으로 옮길 때 지운다.
+-->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920">
+<title>현황판</title>
+<link rel="stylesheet" href="../tokens.css"><!-- 디자이너1 토큰. 개발: /static/tokens.css -->
+<style>
+
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--c-bg);color:var(--c-ink);font-family:var(--font-sans);width:1920px;height:1080px;overflow:hidden;
+  display:grid;grid-template-rows:96px 1fr;user-select:none;cursor:none}
+b,strong{font-weight:700}
+
+/* 머리글 */
+.head{display:flex;align-items:center;justify-content:space-between;padding:0 32px;border-bottom:1px solid var(--c-line);background:var(--c-surface)}
+.head h1{margin:0;font-size:40px;font-weight:700;letter-spacing:-.01em}
+.head h1 small{font-size:26px;font-weight:400;color:var(--c-ink-2);margin-left:16px}
+.stamp{display:flex;align-items:center;gap:20px;font-size:28px;color:var(--c-ink-2)}
+.stamp b{color:var(--c-ink);font-variant-numeric:tabular-nums}
+.stamp .src{font-size:20px;color:var(--c-ink-3)}
+.alert{display:none;align-items:center;gap:12px;padding:8px 20px;border-radius:999px;background:var(--c-err);color:var(--c-ink-inverse);font-size:26px;font-weight:700}
+.alert::before{content:"";width:18px;height:18px;border-radius:50%;background:var(--c-ink-inverse);animation:blink 1s step-start infinite}
+:root[data-state="stale"] .alert{display:flex}
+:root[data-state="stale"] .stamp .live{display:none}
+@keyframes blink{50%{opacity:.2}}
+
+/* 본문 2×3 */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(2,1fr);gap:20px;padding:20px;min-height:0}
+.panel{background:var(--c-surface);border-radius:var(--radius);padding:20px 28px;display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden;
+  border:1px solid var(--c-line)}
+.panel h2{margin:0 0 12px;font-size:30px;font-weight:600;color:var(--c-ink-2);display:flex;justify-content:space-between;align-items:baseline}
+.panel h2 small{font-size:22px;font-weight:400;color:var(--c-ink-3)}
+
+/* 대표 숫자 */
+.hero{display:flex;align-items:baseline;gap:14px;line-height:1}
+.hero .v{font-size:112px;font-weight:700;letter-spacing:-.03em}
+.hero .of{font-size:44px;color:var(--c-ink-3);font-weight:400}
+.hero .u{font-size:32px;color:var(--c-ink-2)}
+.hero[data-status="good"] .v{color:var(--c-ok)}
+.hero[data-status="warn"] .v{color:var(--c-warn)}
+.hero[data-status="critical"] .v{color:var(--c-err)}
+.sub{display:flex;gap:36px;margin-top:12px}
+.sub .k{display:flex;flex-direction:column;gap:4px}
+.sub .k .l{font-size:22px;color:var(--c-ink-3)}
+.sub .k b{font-size:46px;line-height:1.05;white-space:nowrap}
+.sub .k[data-status="good"] b{color:var(--c-ok)}
+.sub .k[data-status="warn"] b{color:var(--c-warn)}
+.sub .k[data-status="critical"] b{color:var(--c-err)}
+.target{font-size:20px;color:var(--c-ink-3)}
+.is-empty{color:var(--c-empty)!important;font-weight:400!important}
+.state b.is-empty{font-size:30px;line-height:64px}
+em.u{font-style:normal}
+.is-empty+em.u{display:none}
+.hero .v.is-empty{font-size:72px}
+
+/* 달성 막대 (meter) */
+.meter{height:20px;border-radius:10px;background:var(--c-accent-tint);overflow:hidden;margin-top:10px}
+.meter i{display:block;height:100%;width:0;background:var(--c-accent);border-radius:11px;transition:width .4s}
+.meter[data-status="warn"] i{background:var(--c-warn)}
+.meter[data-status="critical"] i{background:var(--c-err)}
+
+/* 인라인 SVG 막대 */
+.chart{margin-top:auto}
+.chart svg{display:block;width:100%;height:104px}
+.chart rect{fill:var(--c-accent)}
+.chart rect.now{fill:var(--c-ink)}
+.chart text{font-size:20px;fill:var(--c-ink-3);font-family:var(--font-sans)}
+.chart line{stroke:var(--c-line);stroke-width:2}
+.chart .cap{font-size:20px;color:var(--c-ink-3);margin-bottom:6px}
+
+/* 가로 막대 목록 (불량 상위) */
+.bars{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.bars li{display:grid;grid-template-columns:240px 1fr 90px;align-items:center;gap:16px;font-size:26px}
+.bars li>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bars li i{display:block;height:24px;border-radius:4px;background:var(--c-accent);min-width:4px}
+.bars li b{text-align:right;font-variant-numeric:tabular-nums}
+.bars.is-empty::after{content:"미수집";color:var(--c-ink-3);font-size:28px}
+
+/* 설비 상태 카드 */
+.states{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.state{border-radius:12px;padding:10px 16px;border:2px solid var(--c-line);display:flex;flex-direction:column}
+.state span{font-size:24px;color:var(--c-ink-2)}
+.state b{font-size:64px;line-height:1}
+.state[data-kind="run"]{border-color:var(--c-eq-run)} .state[data-kind="run"] b{color:var(--c-eq-run)}
+.state[data-kind="stop"]{border-color:var(--c-eq-stop)} .state[data-kind="stop"] b{color:var(--c-eq-stop)}
+.state[data-kind="check"]{border-color:var(--c-eq-check)} .state[data-kind="check"] b{color:var(--c-eq-check)}
+.state[data-kind="fault"]{border-color:var(--c-eq-fault)} .state[data-kind="fault"] b{color:var(--c-eq-fault)}
+
+/* 표 (설비 수신 · 작업지시) */
+table{width:100%;border-collapse:collapse;font-size:26px;margin-top:10px}
+th{font-weight:500;color:var(--c-ink-3);text-align:left;font-size:22px;padding:4px 8px;border-bottom:1px solid var(--c-line)}
+td{padding:6px 8px;border-bottom:1px solid var(--c-line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+tr[data-state="진행"] td:first-child{color:var(--c-ok)}
+tr[data-state="대기"] td:first-child{color:var(--c-ink-3)}
+tr[data-state="고장"] td{color:var(--c-err)}
+td .dot{display:inline-block;width:16px;height:16px;border-radius:50%;margin-right:10px;background:var(--c-ink-3);vertical-align:middle}
+tr[data-state="가동"] .dot{background:var(--c-eq-run)}
+tr[data-state="정지"] .dot{background:var(--c-eq-stop)}
+tr[data-state="고장"] .dot{background:var(--c-eq-fault)}
+tbody.is-empty::after{content:"미수집";display:table-cell;padding:16px 8px;color:var(--c-ink-3);font-size:28px}
+
+/* 지표 목록 */
+.inds{list-style:none;margin:14px 0 0;padding:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 24px}
+.inds li{display:flex;justify-content:space-between;align-items:baseline;gap:10px;border-bottom:1px solid var(--c-line);padding:6px 0;font-size:24px;white-space:nowrap}
+.inds li{min-width:0}
+.inds li>span:first-child{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.inds li>span:last-child{flex:none}
+.inds li b{font-size:36px}
+.inds li small{color:var(--c-ink-3);font-size:18px;margin-left:6px}
+.inds li[data-status="good"] b{color:var(--c-ok)}
+.inds li[data-status="warn"] b{color:var(--c-warn)}
+.inds li[data-status="critical"] b{color:var(--c-err)}
+.inds.is-empty::after{content:"미수집";color:var(--c-ink-3);font-size:26px}
+</style>
+</head>
+<body>
+
+<header class="head">
+  <h1>현황판 <small data-key="today">2026-10-09</small></h1>
+  <div class="stamp">
+    <span class="alert"><span>갱신 실패 <b data-key="_failed_at">14:05</b>, 재시도 중</span></span>
+    <span class="live">마지막 갱신 <b data-key="_as_of">14:05:12</b></span>
+    <span class="src">5초마다 자동 갱신 · <span data-key="source">실시간</span></span>
+  </div>
+</header>
+
+<main class="grid">
+
+  <!-- 1. 오늘 생산 — production.* -->
+  <section class="panel">
+    <h2>오늘 생산 <small>계획 대비 실적</small></h2>
+    <div class="hero" data-status-key="production.achieve_rate" data-good="95" data-warn="80">
+      <span class="v" data-key="production.actual_qty" data-digits="0">1,240</span>
+      <span class="of">/ <span data-key="production.plan_qty" data-digits="0">1,500</span></span>
+      <span class="u" data-key="production.unit">EA</span>
+    </div>
+    <div class="meter" data-width-key="production.achieve_rate" data-status-key="production.achieve_rate" data-good="95" data-warn="80"><i style="width:82.7%"></i></div>
+    <div class="sub">
+      <div class="k"><span class="l">달성률</span><b><span data-key="production.achieve_rate" data-digits="1">82.7</span><em class="u">%</em></b></div>
+      <div class="k" data-status-key="production.good_rate" data-target-key="production.good_rate_target">
+        <span class="l">양품률</span><b><span data-key="production.good_rate" data-digits="1">98.2</span><em class="u">%</em></b>
+        <span class="target">목표 <span data-key="production.good_rate_target" data-digits="1" data-empty="미확정">99.0</span><em class="u">%</em></span>
+      </div>
+      <div class="k"><span class="l">불량</span><b><span data-key="production.defect_qty" data-digits="0">23</span></b></div>
+    </div>
+    <div class="chart">
+      <div class="cap">시간대별 실적 (예시)</div>
+      <!-- 막대는 JS 가 production.by_hour[{hour, qty}] 로 다시 그린다. 막대 하나 = 한 시간. 현재 시간은 진한색 -->
+      <svg viewBox="0 0 560 150" data-bars="production.by_hour" aria-label="시간대별 실적">
+        <line x1="0" y1="126" x2="560" y2="126"/>
+        <g class="b">
+          <rect x="4"   y="86" width="36" height="40" rx="4"/><rect x="50"  y="56" width="36" height="70" rx="4"/>
+          <rect x="96"  y="46" width="36" height="80" rx="4"/><rect x="142" y="66" width="36" height="60" rx="4"/>
+          <rect x="188" y="36" width="36" height="90" rx="4"/><rect x="234" y="41" width="36" height="85" rx="4"/>
+          <rect x="280" y="96" width="36" height="30" rx="4"/><rect x="326" y="31" width="36" height="95" rx="4"/>
+          <rect x="372" y="26" width="36" height="100" rx="4"/><rect x="418" y="51" width="36" height="75" rx="4"/>
+          <rect x="464" y="61" width="36" height="65" rx="4" class="now"/><rect x="510" y="126" width="36" height="0" rx="4"/>
+        </g>
+        <g class="t">
+          <text x="22" y="148" text-anchor="middle">08</text><text x="206" y="148" text-anchor="middle">12</text>
+          <text x="390" y="148" text-anchor="middle">16</text><text x="528" y="148" text-anchor="middle">19</text>
+        </g>
+      </svg>
+    </div>
+  </section>
+
+  <!-- 2. 품질 — quality.* -->
+  <section class="panel">
+    <h2>품질 <small>오늘 검사</small></h2>
+    <div class="hero" data-status-key="quality.pass_rate" data-target-key="quality.pass_rate_target">
+      <span class="v"><span data-key="quality.pass_rate" data-digits="1">96.5</span><em class="u">%</em></span>
+      <span class="u">합격률</span>
+    </div>
+    <div class="sub">
+      <div class="k"><span class="l">검사</span><b><span data-key="quality.inspection_count" data-digits="0">42</span><em class="u"> 건</em></b></div>
+      <div class="k" data-status-key="quality.fail_count" data-zero-good><span class="l">불합격</span><b><span data-key="quality.fail_count" data-digits="0">3</span><em class="u"> 건</em></b></div>
+      <div class="k"><span class="l">목표</span><b class="target" style="font-size:40px"><span data-key="quality.pass_rate_target" data-digits="1" data-empty="미확정">98.0</span><em class="u">%</em></b></div>
+    </div>
+    <h2 style="margin-top:18px;font-size:24px">불량 상위 <small>수량</small></h2>
+    <!-- data-list: quality.top_defects[{defect_name, qty, share}] 최대 3줄 -->
+    <ul class="bars" data-list="quality.top_defects" data-max="3">
+      <template><li><span data-key="defect_name"></span><i data-width-key="share"></i><b data-key="qty" data-digits="0"></b></li></template>
+      <li data-row><span>치수 불량 (예시)</span><i style="width:100%"></i><b>11</b></li>
+      <li data-row><span>외관 불량 (예시)</span><i style="width:64%"></i><b>7</b></li>
+      <li data-row><span>포장 불량 (예시)</span><i style="width:36%"></i><b>4</b></li>
+    </ul>
+  </section>
+
+  <!-- 3. 납기 — delivery.* -->
+  <section class="panel">
+    <h2>납기 <small>오늘 출하</small></h2>
+    <div class="hero">
+      <span class="v" data-key="delivery.shipped_count" data-digits="0">18</span>
+      <span class="of">/ <span data-key="delivery.due_count" data-digits="0">21</span></span>
+      <span class="u">건 출하</span>
+    </div>
+    <div class="meter" data-width-key="delivery.on_time_rate"><i style="width:85.7%"></i></div>
+    <div class="sub">
+      <div class="k" data-status-key="delivery.late_count" data-zero-good>
+        <span class="l">지연</span><b><span data-key="delivery.late_count" data-digits="0">2</span><em class="u"> 건</em></b>
+      </div>
+      <div class="k"><span class="l">미출하</span><b><span data-key="delivery.pending_count" data-digits="0">3</span><em class="u"> 건</em></b></div>
+      <div class="k"><span class="l">준수율</span><b><span data-key="delivery.on_time_rate" data-digits="1">85.7</span><em class="u">%</em></b></div>
+    </div>
+    <h2 style="margin-top:18px;font-size:24px">지연 수주 <small>납기 지남 · 미출하</small></h2>
+    <!-- data-list: delivery.late_orders[{order_no, partner_name, item_name, due_date}] 최대 2줄 (품목은 생략) -->
+    <table>
+      <thead><tr><th style="width:56%">수주 번호</th><th>거래처</th><th style="width:16%">납기</th></tr></thead>
+      <tbody data-list="delivery.late_orders" data-max="2">
+        <template><tr><td data-key="order_no"></td><td data-key="partner_name"></td><td data-key="due_date"></td></tr></template>
+        <tr data-row><td>ORD-20261007-0003</td><td>거래처 A (예시)</td><td>10-08</td></tr>
+        <tr data-row><td>ORD-20261008-0011</td><td>거래처 C (예시)</td><td>10-09</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 4. 설비 — equipment.* -->
+  <section class="panel">
+    <h2>설비 <small>현재 상태</small></h2>
+    <div class="states">
+      <div class="state" data-kind="run"><span>가동</span><b data-key="equipment.run" data-digits="0">6</b></div>
+      <div class="state" data-kind="stop"><span>정지</span><b data-key="equipment.stop" data-digits="0">2</b></div>
+      <div class="state" data-kind="check"><span>점검</span><b data-key="equipment.check" data-digits="0">1</b></div>
+      <div class="state" data-kind="fault"><span>고장</span><b data-key="equipment.fault" data-digits="0">1</b></div>
+    </div>
+    <!-- data-list: equipment.items[{equip_code, equip_name, state, collect_yn, last_received_at}] — 수집 설비는 마지막 수신, 아니면 `미수집`. 최대 5줄 — 고장 · 정지 먼저 -->
+    <table>
+      <thead><tr><th>설비</th><th style="width:22%">상태</th><th style="width:34%">마지막 수신</th></tr></thead>
+      <tbody data-list="equipment.items" data-max="5">
+        <template><tr data-state-key="state"><td><span class="dot"></span><span data-key="equip_name"></span></td><td data-key="state"></td><td data-key="last_received_at" data-empty="미수집"></td></tr></template>
+        <tr data-row data-state="가동"><td><span class="dot"></span>설비 1호 (예시)</td><td>가동</td><td>14:05:08</td></tr>
+        <tr data-row data-state="가동"><td><span class="dot"></span>설비 2호 (예시)</td><td>가동</td><td>14:05:10</td></tr>
+        <tr data-row data-state="정지"><td><span class="dot"></span>설비 3호 (예시)</td><td>정지</td><td>13:52:41</td></tr>
+        <tr data-row data-state="고장"><td><span class="dot"></span>설비 5호 (예시)</td><td>고장</td><td>11:20:03</td></tr>
+        <tr data-row data-state="가동"><td><span class="dot"></span>설비 7호 (예시)</td><td>가동</td><td class="is-empty">미수집</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 5. 진행 중 작업지시 — work_orders[] -->
+  <section class="panel">
+    <h2>진행 중 작업지시 <small><span data-key="work_orders_count" data-digits="0">7</span> 건</small></h2>
+    <!-- data-list: work_orders[{work_order_no, item_name, process_name, equipment_name, plan_qty, actual_qty, achieve_rate, status}] 최대 7줄 (공정 · 설비는 JSON 에 있지만 벽걸이에서는 생략) -->
+    <table>
+      <thead><tr><th style="width:52%">지시 번호</th><th>품목</th><th style="width:26%">실적 / 계획</th></tr></thead>
+      <tbody data-list="work_orders" data-max="7">
+        <template><tr data-state-key="status"><td data-key="work_order_no"></td><td data-key="item_name"></td>
+          <td class="num"><span data-key="actual_qty" data-digits="0"></span> / <span data-key="plan_qty" data-digits="0"></span></td></tr></template>
+        <tr data-row data-state="진행"><td>WO-20261009-0001</td><td>품목 A (예시)</td><td class="num">420 / 500</td></tr>
+        <tr data-row data-state="진행"><td>WO-20261009-0002</td><td>품목 B (예시)</td><td class="num">300 / 300</td></tr>
+        <tr data-row data-state="진행"><td>WO-20261009-0003</td><td>품목 C (예시)</td><td class="num">180 / 400</td></tr>
+        <tr data-row data-state="진행"><td>WO-20261009-0004</td><td>품목 D (예시)</td><td class="num">220 / 200</td></tr>
+        <tr data-row data-state="대기"><td>WO-20261009-0005</td><td>품목 A (예시)</td><td class="num">0 / 100</td></tr>
+        <tr data-row data-state="대기"><td>WO-20261009-0006</td><td>품목 E (예시)</td><td class="num">0 / 250</td></tr>
+        <tr data-row data-state="진행"><td>WO-20261009-0007</td><td>품목 F (예시)</td><td class="num">120 / 150</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 6. 측정값 이탈 + 지표 — measure.* · indicators[] -->
+  <section class="panel">
+    <h2>측정값 이탈 <small>오늘 · 범위 밖 기록</small></h2>
+    <div class="hero" data-status-key="measure.deviated_count" data-zero-good>
+      <span class="v" data-key="measure.deviated_count" data-digits="0">2</span>
+      <span class="of">/ <span data-key="measure.measured_count" data-digits="0">318</span></span>
+      <span class="u">건</span>
+    </div>
+    <h2 style="margin-top:24px;font-size:24px">지표 <small>kpi_indicator · 목표 대비</small></h2>
+    <!-- data-list: indicators[{indicator_key, name, unit, value, target_value, status}] — 목표 없으면 `미확정`. visible_yn=Y 만. 최대 6줄 -->
+    <ul class="inds" data-list="indicators" data-max="6">
+      <template><li data-status-key="status"><span data-key="name"></span><span><b data-key="value" data-digits="1"></b><small>/ <span data-key="target_value" data-digits="1" data-empty="미확정"></span> <span data-key="unit"></span></small></span></li></template>
+      <li data-row data-status="good"><span>양품률 (예시)</span><span><b>98.2</b><small>/ 99.0 %</small></span></li>
+      <li data-row data-status="warn"><span>계획 달성률 (예시)</span><span><b>82.7</b><small>/ 95.0 %</small></span></li>
+      <li data-row data-status="good"><span>납기 준수율 (예시)</span><span><b>85.7</b><small>/ 85.0 %</small></span></li>
+      <li data-row data-status="critical"><span>설비 가동률 (예시)</span><span><b>60.0</b><small>/ 80.0 %</small></span></li>
+      <li data-row><span>검사 합격률 (예시)</span><span><b>96.5</b><small>/ <span class="is-empty">미확정</span> %</small></span></li>
+      <li data-row><span>팩 지표 (예시)</span><span><b class="is-empty">미수집</b><small>/ <span class="is-empty">미확정</span></small></span></li>
+    </ul>
+  </section>
+
+</main>
+
+<!-- [원형 전용] stats.board() 응답 모양 (가설 — 개발3 이 실제 키로 확정하면 README "현황판" 절도 같이 고친다). 전부 (예시) -->
+<script type="application/json" id="demo">
+{
+ "normal": {
+  "today": "2026-10-09", "source": "실시간",
+  "production": { "plan_qty": 1500, "actual_qty": 1240, "achieve_rate": 82.7, "good_qty": 1217, "defect_qty": 23, "good_rate": 98.2, "good_rate_target": 99.0, "unit": "EA",
+    "by_hour": [ {"hour":"08","qty":40},{"hour":"09","qty":70},{"hour":"10","qty":80},{"hour":"11","qty":60},{"hour":"12","qty":90},{"hour":"13","qty":85},{"hour":"14","qty":30},{"hour":"15","qty":95},{"hour":"16","qty":100},{"hour":"17","qty":75},{"hour":"18","qty":65},{"hour":"19","qty":0} ] },
+  "quality": { "inspection_count": 42, "pass_count": 39, "fail_count": 3, "pass_rate": 96.5, "pass_rate_target": 98.0,
+    "top_defects": [ {"defect_code":"D01","defect_name":"치수 불량 (예시)","qty":11,"share":100},{"defect_code":"D02","defect_name":"외관 불량 (예시)","qty":7,"share":64},{"defect_code":"D03","defect_name":"포장 불량 (예시)","qty":4,"share":36},{"defect_code":"D99","defect_name":"기타 (예시)","qty":1,"share":9} ] },
+  "delivery": { "due_count": 21, "shipped_count": 18, "late_count": 2, "pending_count": 3, "on_time_rate": 85.7,
+    "late_orders": [ {"order_no":"ORD-20261007-0003","partner_name":"거래처 A (예시)","item_name":"품목 A (예시)","due_date":"10-08"},{"order_no":"ORD-20261008-0011","partner_name":"거래처 C (예시)","item_name":"품목 F (예시)","due_date":"10-09"} ] },
+  "equipment": { "run": 6, "stop": 2, "check": 1, "fault": 1,
+    "items": [ {"equip_code":"EQ-001","equip_name":"설비 1호 (예시)","state":"가동","collect_yn":"Y","last_received_at":"14:05:08"},{"equip_code":"EQ-002","equip_name":"설비 2호 (예시)","state":"가동","collect_yn":"Y","last_received_at":"14:05:10"},{"equip_code":"EQ-003","equip_name":"설비 3호 (예시)","state":"정지","collect_yn":"Y","last_received_at":"13:52:41"},{"equip_code":"EQ-005","equip_name":"설비 5호 (예시)","state":"고장","collect_yn":"Y","last_received_at":"11:20:03"},{"equip_code":"EQ-007","equip_name":"설비 7호 (예시)","state":"가동","collect_yn":"N","last_received_at":null} ] },
+  "work_orders_count": 7,
+  "work_orders": [ {"work_order_no":"WO-20261009-0001","item_name":"품목 A (예시)","process_name":"공정 1","equipment_name":"설비 1호","plan_qty":500,"actual_qty":420,"achieve_rate":84,"status":"진행"},{"work_order_no":"WO-20261009-0002","item_name":"품목 B (예시)","process_name":"공정 2","equipment_name":"설비 2호","plan_qty":300,"actual_qty":300,"achieve_rate":100,"status":"진행"},{"work_order_no":"WO-20261009-0003","item_name":"품목 C (예시)","process_name":"공정 1","equipment_name":"설비 3호","plan_qty":400,"actual_qty":180,"achieve_rate":45,"status":"진행"},{"work_order_no":"WO-20261009-0004","item_name":"품목 D (예시)","process_name":"공정 3","equipment_name":"설비 4호","plan_qty":200,"actual_qty":220,"achieve_rate":100,"status":"진행"},{"work_order_no":"WO-20261009-0005","item_name":"품목 A (예시)","process_name":"공정 2","equipment_name":null,"plan_qty":100,"actual_qty":0,"achieve_rate":0,"status":"대기"},{"work_order_no":"WO-20261009-0006","item_name":"품목 E (예시)","process_name":"공정 1","equipment_name":null,"plan_qty":250,"actual_qty":0,"achieve_rate":0,"status":"대기"},{"work_order_no":"WO-20261009-0007","item_name":"품목 F (예시)","process_name":"공정 3","equipment_name":"설비 6호","plan_qty":150,"actual_qty":120,"achieve_rate":80,"status":"진행"} ],
+  "measure": { "measured_count": 318, "deviated_count": 2 },
+  "indicators": [ {"indicator_key":"production.good_rate","name":"양품률 (예시)","unit":"%","value":98.2,"target_value":99.0,"status":"good"},{"indicator_key":"production.achieve_rate","name":"계획 달성률 (예시)","unit":"%","value":82.7,"target_value":95.0,"status":"warn"},{"indicator_key":"delivery.on_time_rate","name":"납기 준수율 (예시)","unit":"%","value":85.7,"target_value":85.0,"status":"good"},{"indicator_key":"equipment.run_rate","name":"설비 가동률 (예시)","unit":"%","value":60.0,"target_value":80.0,"status":"critical"},{"indicator_key":"quality.pass_rate","name":"검사 합격률 (예시)","unit":"%","value":96.5,"target_value":null,"status":null},{"indicator_key":"pack:extra","name":"팩 지표 (예시)","unit":"","value":null,"target_value":null,"status":null} ]
+ },
+ "empty": {
+  "today": "2026-10-09", "source": "실시간",
+  "production": { "plan_qty": null, "actual_qty": null, "achieve_rate": null, "good_qty": null, "defect_qty": null, "good_rate": null, "good_rate_target": null, "unit": null, "by_hour": [] },
+  "quality": { "inspection_count": null, "pass_count": null, "fail_count": null, "pass_rate": null, "pass_rate_target": null, "top_defects": [] },
+  "delivery": { "due_count": null, "shipped_count": null, "late_count": null, "pending_count": null, "on_time_rate": null, "late_orders": [] },
+  "equipment": { "run": null, "stop": null, "check": null, "fault": null, "items": [] },
+  "work_orders_count": null, "work_orders": [],
+  "measure": { "measured_count": null, "deviated_count": null },
+  "indicators": []
+ }
+}
+</script>
+
+<script>
+/* 현황판 폴링 — 숫자만 바꾼다. 외부 라이브러리 0.
+   서버: GET nav.path_of("KPI-01") + "?device=board", Accept: application/json → stats.board() 그대로.
+   아래 '원형 전용' 두 곳만 빼면 그대로 static/board.js 로 쓸 수 있다. */
+(function () {
+  var URL = location.pathname + '?device=board';           // 개발: 템플릿에서 nav.path_of("KPI-01") 을 넣는다
+  var INTERVAL = 5000;                                      // spec.md §11 현황판 폴링 5초
+  var EMPTY = '미수집';
+  var root = document.documentElement;
+  var last = null;
+
+  function get(o, p) { return p.split('.').reduce(function (a, k) { return a == null ? undefined : a[k]; }, o); }
+  function hhmm(d, s) { var z = function (n) { return (n < 10 ? '0' : '') + n; }; return z(d.getHours()) + ':' + z(d.getMinutes()) + (s ? ':' + z(d.getSeconds()) : ''); }
+  function fmt(v, el) {
+    if (v == null || v === '') return el.dataset.empty || EMPTY;
+    if (typeof v === 'number') { var d = el.dataset.digits == null ? 1 : +el.dataset.digits; return v.toLocaleString('ko-KR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+    return String(v);
+  }
+  /* 상태 판정: 목표값(data-target-key) 이 있으면 값 ≥ 목표 → good, 목표의 95% 이상 → warn, 그 밖 critical.
+     data-good/data-warn 고정 문턱도 같은 규칙. data-zero-good 은 0 이면 good, 1 이상이면 critical(건수형). 목표가 없으면 상태색 없음. */
+  function status(el, scope) {
+    var v = get(scope, el.dataset.statusKey);
+    if (v == null) { el.removeAttribute('data-status'); return; }
+    if (el.hasAttribute('data-zero-good')) { el.dataset.status = v > 0 ? 'critical' : 'good'; return; }
+    var tgt = el.dataset.targetKey ? get(scope, el.dataset.targetKey) : (el.dataset.good != null ? +el.dataset.good : null);
+    if (tgt == null) { if (typeof v === 'string') el.dataset.status = v; else el.removeAttribute('data-status'); return; }
+    var warn = el.dataset.warn != null ? +el.dataset.warn : tgt * 0.95;
+    el.dataset.status = v >= tgt ? 'good' : v >= warn ? 'warn' : 'critical';
+  }
+  function fill(scope, data) {
+    scope.querySelectorAll('[data-key]').forEach(function (el) {
+      if (el.dataset.key.charAt(0) === '_') return;          // _as_of · _failed_at 는 화면 쪽 시각
+      var v = get(data, el.dataset.key);
+      el.textContent = fmt(v, el); el.classList.toggle('is-empty', v == null);
+    });
+    scope.querySelectorAll('[data-width-key]').forEach(function (el) {
+      var v = get(data, el.dataset.widthKey); var t = el.tagName === 'I' ? el : el.querySelector('i');
+      if (t) t.style.width = (v == null ? 0 : Math.max(0, Math.min(100, v))) + '%';
+    });
+    scope.querySelectorAll('[data-status-key]').forEach(function (el) { status(el, data); });
+    scope.querySelectorAll('[data-state-key]').forEach(function (el) { var v = get(data, el.dataset.stateKey); if (v == null) el.removeAttribute('data-state'); else el.dataset.state = v; });
+  }
+  function lists(data) {
+    document.querySelectorAll('[data-list]').forEach(function (box) {
+      var rows = get(data, box.dataset.list) || [], tpl = box.querySelector('template');
+      box.querySelectorAll('[data-row]').forEach(function (r) { r.remove(); });
+      rows.slice(0, +(box.dataset.max || 99)).forEach(function (row) {
+        var n = tpl.content.firstElementChild.cloneNode(true); n.setAttribute('data-row', ''); fill(n, row); box.appendChild(n);
+      });
+      box.classList.toggle('is-empty', rows.length === 0);
+    });
+  }
+  function bars(data) {                                       // 인라인 SVG 막대 — 시간대별 실적
+    document.querySelectorAll('svg[data-bars]').forEach(function (svg) {
+      var rows = get(data, svg.dataset.bars) || [], g = svg.querySelector('g.b'), t = svg.querySelector('g.t');
+      var W = 560, H = 126, n = Math.max(rows.length, 1), slot = W / n, bw = Math.max(8, slot - 10), max = rows.reduce(function (m, r) { return Math.max(m, r.qty || 0); }, 0) || 1;
+      var nowH = new Date().getHours(); g.innerHTML = ''; t.innerHTML = '';
+      rows.forEach(function (r, i) {
+        var h = Math.round((r.qty || 0) / max * 100), x = Math.round(i * slot + (slot - bw) / 2);
+        g.insertAdjacentHTML('beforeend', '<rect x="' + x + '" y="' + (H - h) + '" width="' + Math.round(bw) + '" height="' + h + '" rx="4"' + (+r.hour === nowH ? ' class="now"' : '') + '/>');
+        if (i % 4 === 0 || i === rows.length - 1) t.insertAdjacentHTML('beforeend', '<text x="' + Math.round(x + bw / 2) + '" y="148" text-anchor="middle">' + r.hour + '</text>');
+      });
+    });
+  }
+  function apply(data) {
+    last = data; fill(document, data); lists(data); bars(data);
+    root.dataset.state = 'ok';
+    document.querySelector('[data-key="_as_of"]').textContent = hhmm(new Date(), true);
+  }
+  function fail() {                                           // 화면은 남긴다. 마지막 값 유지 + 실패 시각 표시. 폴링은 계속
+    root.dataset.state = 'stale';
+    document.querySelector('[data-key="_failed_at"]').textContent = hhmm(new Date());
+  }
+  function tick() {
+    fetch(URL, { headers: { 'Accept': 'application/json' }, cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(apply).catch(fail)
+      .then(function () { setTimeout(tick, INTERVAL); });
+  }
+
+  /* ── [원형 전용] 데모 데이터 · #state= 해시. 템플릿으로 옮길 때 이 블록을 지우고 tick() 만 남긴다 ── */
+  var demo = JSON.parse(document.getElementById('demo').textContent);
+  var state = (location.hash.match(/state=(\w+)/) || [])[1] || 'normal';
+  if (state === 'night') root.dataset.theme = 'dark';
+  if (state === 'empty') apply(demo.empty); else apply(demo.normal);
+  if (state === 'stale') { setTimeout(fail, 300); }
+  if (location.protocol === 'file:') return;                  // 파일로 열었을 때는 폴링하지 않는다
+  /* ── [/원형 전용] ── */
+
+  setTimeout(tick, INTERVAL);
+})();
+</script>
+
+</body>
+</html>

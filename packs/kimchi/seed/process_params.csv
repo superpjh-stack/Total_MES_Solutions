@@ -1,0 +1,20 @@
+process_code,param_key,label,unit,value_type,min_value,max_value,required_yn,source,agg,seq,note
+P01,temp_c,원품 냉장고 온도,℃,number,,,N,collect,avg,1,온습도센서 → eqp_collect. 상·하한 (미확정 임진강 D-08)
+P01,humidity_pct,원품 냉장고 습도,%,number,,,N,collect,avg,2,(미확정)
+P02,input_weight_kg,투입 중량,kg,number,0,,Y,manual,last,1,TD5 RCV_PRETREAT.INPUT_WEIGHT
+P02,output_weight_kg,전처리 후 중량,kg,number,0,,Y,manual,last,2,TD5 RCV_PRETREAT.OUTPUT_WEIGHT
+P02,loss_rate_pct,손실률,%,number,,20,N,manual,last,3,훅 on_result_closed 가 계산해 기록 (D-510). 20% 초과 = 이탈 (사업계획서 기재값)
+P03,wash_time_min,세척 시간,분,number,0,,N,manual,last,1,TD5 WSH_RESULT.WASH_TIME · 품목별 기준은 x_kimchi_item_std
+P03,wash_volume_l,세척 물 사용량,L,number,0,,N,manual,last,2,TD5 WSH_RESULT.WASH_VOLUME
+P03,wash_weight_kg,세척 처리 중량,kg,number,0,,N,manual,last,3,TD5 WSH_RESULT.PROCESS_WEIGHT
+P03,wash_count,세척 횟수,회,number,0,,N,manual,last,4,spec.md §8.3 기재 — 임진강 TD5 에 없음 (미확정)
+P03,sanitizer_ppm,소독수 농도,ppm,number,10,,N,collect,min,5,소독수 Interface Module SW-01. 10ppm 미달 = 이탈 (정본)
+P03,salinity_pct,절임 염도,%,number,,,N,collect,last,6,염도센서 SS-01/02 → eqp_collect. 목표·허용편차는 x_kimchi_item_std (품목×크기). 완료 대표값 = last
+P03,salting_hours,절임 시간,h,number,0,,N,manual,last,7,기준 48h(9%) · 24h(13%) 는 x_kimchi_item_std
+P06,work_speed,충진기 작업 속도,,number,,,N,collect,avg,1,FL-01/SF-01 · 단위·통신 (미확정)
+P06,set_volume,충진기 세팅 양,,number,,,N,collect,last,2,(미확정)
+P08,pack_weight_kg,포장 중량(대표),kg,number,,,N,manual,last,1,전수 검사는 inspection_items 최종 pack_weight_kg. 허용범위 (미확정)
+P08,pack_count,포장 완료 수량,박스,number,0,,N,collect,last,2,자동포장기 AP-01 → eqp_collect → x_kimchi_taping_log 집계
+P09,temp_c,숙성 냉장고 온도,℃,number,,,N,collect,avg,1,온습도센서·온도조절기 → eqp_collect. 상·하한 (미확정)
+P09,humidity_pct,숙성 냉장고 습도,%,number,,,N,collect,avg,2,(미확정)
+P09,set_temp_c,온도조절기 설정값,℃,number,,,N,collect,last,3,TD5 AGE_ENV_LOG.SET_TEMP

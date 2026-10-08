@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ko">
+<!--
+  작업지시서 — print/work_order.html 정적 원형 (디자이너3 · 2026-10-09)
+  JOB-03 · F-JOB-07 `GET /job/print?id=` → printing.render_print(request, "work_order", data, screen_id="JOB-03"). 담당 개발1.
+  A4 세로. 화면에서는 "인쇄" 버튼 하나만 더 보인다(.no-print). 인쇄 때 여백 · 페이지 나눔 · 배경 제거는 @media print.
+
+  데이터(가설 — printing.render_print 의 data. 개발1 이 확정하면 docs/design/README.md "출력물" 절도 같이 고친다)
+    wo      : work_order_no item_code item_name spec unit process_name equipment_code equipment_name plan_qty plan_date status
+              plan_no order_no partner_name due_date bom_version note created_at created_by
+    bom_rows: [{seq item_code item_name required_qty unit lot_no}]            ← job_lot (BOM 이 있을 때만. 없으면 표 한 줄 `미수집`)
+    params  : [{seq label unit min_value max_value required_yn source}]        ← bas_process_param(process_id, use_yn=Y) seq 순 — 기록 빈칸 표의 원본
+    barcode : printing.barcode_svg(wo.work_order_no)                           ← 값은 지시 번호 글자 그대로. 작업 목록(POP-01) 스캔칸에 넣으면 그 지시가 열린다
+    printed_at · printed_by
+  빈 값은 `-`. 더미는 (예시). 사용자 문구는 {{ t("…") }} 를 거친다.
+-->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>작업지시서</title>
+<link rel="stylesheet" href="../tokens.css"><!-- 디자이너1 토큰. 개발: /static/tokens.css -->
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:var(--c-bg);color:var(--c-ink);font-family:var(--font-sans);font-size:11pt;line-height:1.4}
+.toolbar{max-width:210mm;margin:16px auto 8px;display:flex;justify-content:flex-end;padding:0 16px}
+.btn{font:inherit;font-size:14px;padding:8px 18px;border:1px solid var(--c-accent);background:var(--c-accent);color:var(--c-ink-inverse);border-radius:8px;cursor:pointer}
+
+/* 용지 — 화면에서는 종이처럼, 인쇄에서는 @page 여백만 */
+.sheet{background:var(--c-surface);width:210mm;min-height:297mm;margin:0 auto 24px;padding:14mm 12mm;box-shadow:var(--sh-2);position:relative}
+.sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8mm;border-bottom:2px solid var(--c-ink);padding-bottom:3mm;margin-bottom:4mm}
+.sheet-head h1{margin:0 0 2mm;font-size:22pt;letter-spacing:.1em}
+.no{font-size:11pt;color:var(--c-ink-2)}
+.no strong{font-family:var(--font-mono);font-size:14pt;color:var(--c-ink);margin-left:3mm}
+.status{display:inline-block;border:1px solid var(--c-ink);padding:0 2mm;margin-left:3mm;font-size:9pt;vertical-align:middle}
+.code{text-align:center;width:62mm}
+.code .barcode{width:62mm;height:14mm;display:block}
+.code .barcode rect{fill:#000}
+.code .txt{font-family:var(--font-mono);font-size:10pt;letter-spacing:.08em;margin-top:1mm}
+.code .cap{font-size:8pt;color:var(--c-ink-3)}
+
+h2{font-size:11pt;margin:5mm 0 1.5mm;display:flex;justify-content:space-between;align-items:baseline}
+h2 small{font-weight:400;color:var(--c-ink-3);font-size:8.5pt}
+table{width:100%;border-collapse:collapse;font-size:10pt}
+th,td{border:1px solid var(--c-line);padding:1.6mm 2mm;text-align:left;vertical-align:top}
+th{background:var(--c-surface-2);font-weight:600;white-space:nowrap}
+table.kv th{width:22mm;color:var(--c-ink-2)}
+table.kv td{width:auto}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+td.c{text-align:center}
+td.mono{font-family:var(--font-mono)}
+td.blank{height:8.5mm}                        /* 손으로 적는 칸 */
+td.auto{color:var(--c-ink-3);background:var(--c-surface-2)} /* 수집원 collect — 자동으로 채워지는 칸 */
+td.empty{color:var(--c-ink-3);text-align:center}
+.range{white-space:nowrap}
+
+.sign{display:grid;grid-template-columns:repeat(4,1fr);gap:3mm;margin-top:6mm;page-break-inside:avoid}
+.sign div{border:1px solid var(--c-line);height:22mm;position:relative;padding:1.5mm 2mm;font-size:9pt;color:var(--c-ink-2)}
+.sign div span{position:absolute;right:2mm;bottom:1.5mm;font-size:8pt;color:var(--c-ink-3)}
+.foot{margin-top:5mm;font-size:8.5pt;color:var(--c-ink-3);display:flex;justify-content:space-between}
+
+@media print{
+  @page{size:A4 portrait;margin:14mm 12mm}
+  body{background:var(--c-print-bg);font-size:10.5pt}
+  .no-print{display:none!important}
+  .sheet{width:auto;min-height:0;margin:0;padding:0;box-shadow:none}
+  th{background:var(--c-print-bg)}
+  td.auto{background:var(--c-print-bg)}
+  thead{display:table-header-group}
+  tr{page-break-inside:avoid}
+  h2{page-break-after:avoid}
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar no-print"><button class="btn" type="button" onclick="window.print()">인쇄</button></div>
+
+<article class="sheet" data-print="work_order" data-no="WO-20261009-0001">
+  <header class="sheet-head">
+    <div>
+      <h1>작업지시서</h1>
+      <p class="no">지시 번호 <strong>WO-20261009-0001</strong><span class="status">대기</span></p>
+      <p class="no" style="margin:1mm 0 0;font-size:9pt">등록 2026-10-09 08:12 · 관리자 (예시)</p>
+    </div>
+    <div class="code">
+      <!-- printing.barcode_svg(wo.work_order_no) 가 들어가는 자리. 아래는 더미 막대(실제 인코딩 아님) -->
+      <svg class="barcode" viewBox="0 0 250 100" preserveAspectRatio="none" shape-rendering="crispEdges" aria-label="WO-20261009-0001"><rect x="10" width="2" height="100"/><rect x="13" width="1" height="100"/><rect x="18" width="1" height="100"/><rect x="21" width="1" height="100"/><rect x="23" width="1" height="100"/><rect x="25" width="1" height="100"/><rect x="32" width="1" height="100"/><rect x="34" width="1" height="100"/><rect x="36" width="6" height="100"/><rect x="43" width="1" height="100"/><rect x="45" width="2" height="100"/><rect x="49" width="4" height="100"/><rect x="54" width="1" height="100"/><rect x="56" width="6" height="100"/><rect x="63" width="1" height="100"/><rect x="65" width="1" height="100"/><rect x="70" width="2" height="100"/><rect x="73" width="1" height="100"/><rect x="75" width="1" height="100"/><rect x="82" width="1" height="100"/><rect x="84" width="1" height="100"/><rect x="86" width="1" height="100"/><rect x="88" width="6" height="100"/><rect x="95" width="1" height="100"/><rect x="97" width="1" height="100"/><rect x="99" width="1" height="100"/><rect x="101" width="1" height="100"/><rect x="108" width="1" height="100"/><rect x="110" width="1" height="100"/><rect x="114" width="2" height="100"/><rect x="117" width="1" height="100"/><rect x="119" width="1" height="100"/><rect x="121" width="6" height="100"/><rect x="128" width="1" height="100"/><rect x="130" width="6" height="100"/><rect x="137" width="1" height="100"/><rect x="139" width="6" height="100"/><rect x="146" width="1" height="100"/><rect x="148" width="1" height="100"/><rect x="150" width="6" height="100"/><rect x="157" width="1" height="100"/><rect x="159" width="1" height="100"/><rect x="161" width="6" height="100"/><rect x="168" width="1" height="100"/><rect x="170" width="1" height="100"/><rect x="172" width="6" height="100"/><rect x="179" width="1" height="100"/><rect x="181" width="1" height="100"/><rect x="183" width="1" height="100"/><rect x="185" width="1" height="100"/><rect x="187" width="6" height="100"/><rect x="194" width="1" height="100"/><rect x="196" width="1" height="100"/><rect x="198" width="1" height="100"/><rect x="205" width="1" height="100"/><rect x="207" width="1" height="100"/><rect x="214" width="1" height="100"/><rect x="216" width="1" height="100"/><rect x="218" width="1" height="100"/><rect x="225" width="1" height="100"/><rect x="227" width="2" height="100"/><rect x="232" width="3" height="100"/><rect x="236" width="1" height="100"/><rect x="238" width="2" height="100"/></svg>
+      <div class="txt">WO-20261009-0001</div>
+      <div class="cap">지시 번호 바코드 · Code128</div>
+    </div>
+  </header>
+
+  <table class="kv">
+    <tbody>
+      <tr><th>품목</th><td><span class="mono">ITM-0001</span> 품목 A (예시)</td><th>규격 · 단위</th><td>규격 A (예시) · EA</td></tr>
+      <tr><th>공정</th><td>공정 1 (예시)</td><th>설비</th><td><span class="mono">EQ-001</span> 설비 1호 (예시)</td></tr>
+      <tr><th>계획 수량</th><td class="num" style="text-align:left"><b>500</b> EA</td><th>계획일</th><td>2026-10-09</td></tr>
+      <tr><th>생산계획</th><td class="mono">PLN-20261008-0004</td><th>BOM 버전</th><td>v2 (예시)</td></tr>
+      <tr><th>수주</th><td><span class="mono">ORD-20261007-0003</span> · 거래처 A (예시)</td><th>납기</th><td>2026-10-12</td></tr>
+      <tr><th>비고</th><td colspan="3">-</td></tr>
+    </tbody>
+  </table>
+
+  <h2>소요 품목 <small>BOM v2 · 지시 수량 기준 · 투입 LOT 는 현장에서 적는다</small></h2>
+  <table>
+    <thead><tr><th style="width:8mm">#</th><th style="width:28mm">품목 코드</th><th>품목명</th><th class="num" style="width:22mm">소요량</th><th style="width:12mm">단위</th><th style="width:36mm">지정 LOT</th><th style="width:40mm">투입 LOT (기록)</th></tr></thead>
+    <tbody>
+      <tr><td class="c">1</td><td class="mono">MAT-0011</td><td>원재료 A (예시)</td><td class="num">250.0</td><td>kg</td><td class="mono">-</td><td class="blank"></td></tr>
+      <tr><td class="c">2</td><td class="mono">MAT-0012</td><td>원재료 B (예시)</td><td class="num">50.0</td><td>kg</td><td class="mono">LOT-20261008-0003</td><td class="blank"></td></tr>
+      <tr><td class="c">3</td><td class="mono">SUB-0003</td><td>부자재 C (예시)</td><td class="num">500</td><td>EA</td><td class="mono">-</td><td class="blank"></td></tr>
+      <!-- BOM 이 없을 때: <tr><td colspan="7" class="empty">미수집</td></tr> -->
+    </tbody>
+  </table>
+
+  <h2>공정 측정값 기록 <small>공정 측정값 정의(BAS-04)에서 생성 · 종료 때 POP 에 같은 칸이 뜬다</small></h2>
+  <table>
+    <thead><tr><th style="width:8mm">#</th><th>항목</th><th style="width:14mm">단위</th><th style="width:30mm">기준 (하한 ~ 상한)</th><th style="width:12mm">필수</th><th style="width:36mm">기록값</th><th style="width:26mm">시각</th></tr></thead>
+    <tbody>
+      <tr><td class="c">1</td><td>측정 항목 1 (예시)</td><td>℃</td><td class="range">60.0 ~ 80.0</td><td class="c">●</td><td class="blank"></td><td class="blank"></td></tr>
+      <tr><td class="c">2</td><td>측정 항목 2 (예시)</td><td>%</td><td class="range">1.8 ~ 2.4</td><td class="c">●</td><td class="blank"></td><td class="blank"></td></tr>
+      <tr><td class="c">3</td><td>측정 항목 3 (예시)</td><td>mm</td><td class="range">- ~ 0.5</td><td class="c"></td><td class="blank"></td><td class="blank"></td></tr>
+      <tr><td class="c">4</td><td>측정 항목 4 (예시) <small style="color:var(--c-ink-3)">수집</small></td><td>rpm</td><td class="range">1,200 ~ 1,500</td><td class="c"></td><td class="auto">자동 수집 — 기록 불필요</td><td class="auto"></td></tr>
+      <tr><td class="c">5</td><td>측정 항목 5 (예시)</td><td>-</td><td class="range">선택: 양호 / 불량</td><td class="c">●</td><td class="blank"></td><td class="blank"></td></tr>
+      <!-- 정의가 없을 때: <tr><td colspan="7" class="empty">미수집 — 이 공정에 측정값 정의가 없다</td></tr> -->
+    </tbody>
+  </table>
+
+  <h2>작업 기록 <small>손으로 적는 칸 · 전산 입력은 POP-02</small></h2>
+  <table>
+    <thead><tr><th>시작 시각</th><th>종료 시각</th><th class="num">양품 수량</th><th class="num">불량 수량</th><th>작업자</th><th>설비</th></tr></thead>
+    <tbody><tr><td class="blank"></td><td class="blank"></td><td class="blank"></td><td class="blank"></td><td class="blank"></td><td class="blank"></td></tr></tbody>
+  </table>
+
+  <div class="sign">
+    <div>작성<span>관리자 (예시)</span></div>
+    <div>검토<span></span></div>
+    <div>작업자<span></span></div>
+    <div>확인<span></span></div>
+  </div>
+
+  <footer class="foot">
+    <span>출력 2026-10-09 09:30 · 관리자 (예시)</span>
+    <span>바코드 값 = 지시 번호. 스캔칸에 넣으면 그 지시가 열린다.</span>
+  </footer>
+</article>
+
+</body>
+</html>

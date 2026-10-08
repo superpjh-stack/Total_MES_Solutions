@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>스캔칸 상태 모음 · POP</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="pop.css">
+</head>
+<!--
+  참고 스캔칸 상태 모음 — 현장 POP 원형 (디자이너2). 스캔칸(data-scan)의 모든 상태를 한 페이지에. 아래 상자들은 그림이라 data-scan 이 없다 — 진짜 data-scan 은 맨 위 하나뿐(S-01). 각 상태의 동작 번호는 README 의 S-nn.
+  Jinja 로 옮길 때: body.ch-pop 는 templating.render 가 채널별로 붙인다 · 상단 탭은 nav.SCREENS 중 channels.pop 에 있는 화면만 ·
+  스캔칸은 ui.scan_box 하나(data-scan) · 알림은 base 의 #popup-layer + #flash-data · 문구는 전부 t() · 더미 값은 (예시).
+-->
+<body class="ch-pop" data-screen="참고">
+<header class="topbar">
+  <a class="btn back" href="pop_work.html">← 뒤로</a>
+  <nav class="tabs" aria-label="작업 전환">
+    <a class="tab" href="pop_work.html">작업</a>
+    <a class="tab" href="pop_inputs.html">투입</a>
+    <a class="tab" href="pop_labels.html">라벨</a>
+    <a class="tab" href="mat_receipts_pop.html">입고</a>
+    <a class="tab" href="mat_inspections_pop.html">입고검사</a>
+    <a class="tab" href="qua_inspections_pop.html">검사</a>
+    <a class="tab" href="shp_scan.html">출하</a>
+    <a class="tab" href="eqp_status_pop.html">설비</a>
+  </nav>
+  <div class="who" aria-label="현재 상태">
+    <span class="who-item"><small>작업자</small><b>김현장 (예시)</b></span>
+    <span class="who-item"><small>설비</small><b>EQ-001 (예시)</b></span>
+    <span class="who-item"><small>시각</small><b>10:42 (예시)</b></span>
+    <span class="who-item conn on"><small>연결</small><b>정상</b></span>
+  </div>
+</header>
+<div class="offline-bar" id="offline-bar" hidden role="alert">서비스 일시 중단 (503) — 연결이 돌아오면 스캔을 이어서 한다</div>
+<main class="pop-main">
+  <h1 class="screen-title">스캔칸 상태 모음 <small>참고</small></h1>
+  <form class="scan" method="get" action="#" autocomplete="off" data-demo>
+    <label for="scan">진짜 스캔칸 (data-scan) — 글자를 쳐 보고 아래 「알림 띄우기」로 동작을 본다</label>
+    <div class="scan-row">
+      <input id="scan" type="text" name="no" data-scan autofocus inputmode="text" autocomplete="off" placeholder="여기에 포커스가 산다">
+      <button type="submit" class="btn btn-primary">확인</button>
+    </div>
+  </form>
+  <section class="result" role="status" id="scan-result" hidden><p class="result-msg"></p></section>
+
+  <section class="panel"><h2>1 대기 <small>S-02 · S-03 — 화면이 열리면 포커스 · 빈 곳을 눌러도 복귀. 노란 테두리 = 포커스</small></h2><div class="scan"><label>작업지시 번호 스캔</label><div class="scan-row"><input type="text" inputmode="text" placeholder="바코드를 쏜다" style="outline:5px solid var(--focus)" aria-label="작업지시 번호 스캔"><button type="button" class="btn btn-primary">확인</button></div></div>
+    <ul class="notes"><li>비어 있고 노란 포커스 테두리. 다른 입력칸을 누르면 그 칸이 포커스를 갖고, 빈 곳을 누르면 스캔칸으로 돌아온다.</li></ul></section>
+
+  <section class="panel"><h2>2 입력 중 <small>S-05 — 스캐너가 글자를 넣는 중. Enter 가 오면 보낸다</small></h2><div class="scan"><label>작업지시 번호 스캔</label><div class="scan-row"><input type="text" inputmode="text" placeholder="바코드를 쏜다" value="WO-2026100" style="outline:5px solid var(--focus)" aria-label="작업지시 번호 스캔"><button type="button" class="btn btn-primary">확인</button></div></div>
+    <ul class="notes"><li>스캐너 = 키보드 입력 + Enter. 사람이 쳐도 같다. 바코드 1회 = 요청 1회 = 1건.</li></ul></section>
+
+  <section class="panel"><h2>3 처리 성공 <small>S-10 — 초록 배너 1초 · 스캔칸은 비워지고 포커스 유지</small></h2>
+    <div class="result ok" role="status"><p class="result-msg">투입했습니다 — <code>LM-20261007-002</code> 20 kg</p></div><div class="scan"><label>원재료 LOT 바코드 스캔</label><div class="scan-row"><input type="text" inputmode="text" placeholder="바코드를 쏜다" style="outline:5px solid var(--focus)" aria-label="원재료 LOT 바코드 스캔"><button type="button" class="btn btn-primary">확인</button></div></div>
+    <ul class="notes"><li>쓰기 POST 성공 = 303 → 같은 화면 + flash. POP 에서는 배너(본문)로 보이고 팝업을 띄우지 않아도 된다 — 1초 뒤 회색으로 가라앉는다. 목록에 방금 건이 맨 위로 온다.</li></ul></section>
+
+  <section class="panel"><h2>4 422 <small>S-11 — 큰 빨간 사유 · 스캔칸 유지 · 포커스 유지 · 오류 화면으로 가지 않는다</small></h2>
+    <div class="result err" role="alert"><p class="result-msg">없는 번호입니다 — <code>WO-2026100X</code></p><ul class="result-fields"><li>작업지시 번호 — 스캔한 글자 그대로. 작업지시서를 다시 스캔한다</li></ul></div><div class="scan"><label>작업지시 번호 스캔</label><div class="scan-row"><input type="text" inputmode="text" placeholder="바코드를 쏜다" style="outline:5px solid var(--focus)" aria-label="작업지시 번호 스캔"><button type="button" class="btn btn-primary">확인</button></div></div>
+    <ul class="notes"><li>스캔 진입 GET <code>?no=</code> 는 <b>그 화면을 422 로 다시 그린다</b>(api-contract §2). 폼 POST 의 422 는 303 + 알림 팝업(아래 6). 둘 다 다음 스캔을 막지 않는다.</li><li>사유는 사람이 할 일이 보이게 — 「없는 번호입니다」 + 「무엇을 다시 하라」.</li></ul></section>
+
+  <section class="panel"><h2>5 503 · 연결 끊김 <small>S-12 — 빨간 띠 · 연결 「끊김」 · 스캔칸 비활성</small></h2>
+    <div class="offline-bar" role="alert" style="margin-bottom:10px">서비스 일시 중단 (503) — 연결이 돌아오면 스캔을 이어서 한다</div><div class="scan"><label>작업지시 번호 스캔</label><div class="scan-row"><input type="text" inputmode="text" placeholder="연결 복구 후 스캔" disabled aria-label="작업지시 번호 스캔"><button type="button" class="btn btn-primary" disabled>확인</button></div></div>
+    <div class="actions" style="margin-top:8px"><button type="button" class="btn btn-primary btn-big" style="width:auto">다시 시도</button></div>
+    <ul class="notes"><li>DB 가 끊기면 서버가 503 오류 화면을 POP 레이아웃으로 그린다(<code>_error.html</code> · 아키텍트). 스캔칸을 비활성으로 두어 쏜 바코드가 사라졌다고 착각하지 않게 한다. 오프라인 큐는 없다 — 돌아오면 다시 스캔.</li><li>브라우저가 서버에 못 닿는 경우(응답 없음)는 브라우저 오류 화면이다. 현황판과 달리 POP 은 자동 새로고침하지 않는다 — 입력 중인 값을 지우기 때문.</li></ul></section>
+
+  <section class="panel"><h2>6 알림 떠 있을 때 스캔 <small>S-06 · S-07 · S-08 — 알림은 포커스를 뺏지 않는다. 글자가 오면 닫히고 스캔칸에 들어간다</small></h2>
+    <div style="position:relative;border:2px dashed var(--line);padding:12px;border-radius:6px">
+      <div class="result err" role="alert"><p class="result-msg">불합격 LOT 입니다 — 투입할 수 없습니다</p></div><div class="scan"><label>원재료 LOT 바코드 스캔</label><div class="scan-row"><input type="text" inputmode="text" placeholder="바코드를 쏜다" value="LM-2026" style="outline:5px solid var(--focus)" aria-label="원재료 LOT 바코드 스캔"><button type="button" class="btn btn-primary">확인</button></div></div>
+      <div style="position:absolute;right:16px;top:16px;width:min(560px,70%);background:var(--bg);border:4px solid var(--err);border-radius:6px;padding:16px 20px;box-shadow:0 8px 30px rgba(0,0,0,.35)">
+        <h2 style="font-size:20px;color:var(--muted)">투입 스캔</h2>
+        <p style="font-size:28px;font-weight:700;color:var(--err);margin:6px 0">불합격 LOT 입니다 — 투입할 수 없습니다</p>
+        <ul style="font-size:18px;margin:0 0 10px;padding-left:22px"><li>원재료 LOT — LM-20261008-004 (예시) 불합격</li></ul>
+        <p class="scan-hint">알림이 떠 있어도 바코드를 쏘면 스캔칸에 들어간다. 글자가 오면 알림은 닫힌다.</p>
+        <div class="actions" style="justify-content:flex-end"><button type="button" class="btn btn-primary">확인</button></div>
+      </div>
+    </div>
+    <ul class="notes">
+      <li>알림 아래 스캔칸에 「LM-2026」 가 들어가는 중 — 첫 글자가 온 순간 알림은 닫혔어야 하지만 그림은 둘을 같이 보여 준다.</li>
+      <li>닫는 길 4가지: 「확인」 · 바깥 누르기 · Esc · 빈 스캔칸에서 Enter. 전부 닫힌 뒤 포커스는 스캔칸.</li>
+      <li>스캔칸에 글자가 있을 때 Enter 는 닫기가 아니라 <b>전송</b>이다.</li>
+    </ul></section>
+
+  <section class="panel"><h2>7 스캔칸이 없는 화면 <small>참고 — 알림의 「확인」이 포커스를 갖고 Enter 로 닫힌다</small></h2>
+    <ul class="notes"><li>관리자 Web · 모바일에는 <code>data-scan</code> 이 없다. 그 화면의 알림은 「확인」 버튼이 포커스를 가진다(S-06 의 else).</li></ul></section>
+  <section class="demo">
+    <h3>시연 — 템플릿에 옮기지 않는다</h3>
+    <div class="actions"><button type="button" class="btn" data-demo-popup="불합격 LOT 입니다 — 투입할 수 없습니다" data-title="투입 스캔" data-fields='[{"label":"원재료 LOT","reason":"LM-20261008-004 (예시) 불합격"}]'>알림 띄우기 (422)</button><button type="button" class="btn" data-demo-popup="투입했습니다 — LM-20261007-002 20 kg" data-title="투입 스캔" data-kind="ok">알림 띄우기 (성공)</button><span class="notes" style="margin:0">알림을 띄운 채 아무 글자나 쳐 보면 알림이 닫히고 그 글자가 맨 위 스캔칸에 들어간다.</span></div>
+  </section>
+</main>
+
+<div class="popup-layer" id="popup-layer" hidden>
+  <div class="popup" role="alertdialog" aria-labelledby="popup-title" aria-describedby="popup-body">
+    <h2 id="popup-title">알림</h2>
+    <div id="popup-body"></div>
+    <p class="scan-hint">알림이 떠 있어도 바코드를 쏘면 스캔칸에 들어간다. 글자가 오면 알림은 닫힌다.</p>
+    <div class="actions"><button type="button" class="btn btn-primary" data-popup-close>확인</button></div>
+  </div>
+</div>
+<script type="application/json" id="flash-data">{}</script>
+<script src="pop.js"></script>
+</body>
+</html>

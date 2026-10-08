@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>재고 · 모바일</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="mobile.css">
+</head>
+<!--
+  MAT-04 재고 — 모바일 원형 (디자이너2). F-MAT-08 GET /mat/stock. 품목별 현재고(mat_stock) + LOT 별 잔량(v_lot_stock). 품목 카드 → LOT 목록은 접힘. 재고 조정(F-MAT-09)은 관리자 Web 만 — 여기 쓰기 0.
+  규칙: 폭 390px · 가로 넘침 0(칩 줄만 옆으로 민다) · 쓰기 버튼 0 · JS 0(접기는 details/summary) · 표를 쓰지 않고 카드로 접는다(README "모바일 접힘 규칙").
+  Jinja 로 옮길 때: body.ch-mobile 는 templating.render 가 붙인다 · 하단 탭 4 = channels.mobile 화면을 추적 · 현황 · 지시 · 재고 로 묶은 것 · 문구는 t() · 더미 값은 (예시).
+-->
+<body class="ch-mobile" data-screen="MAT-04">
+<div class="m-frame">
+<header class="m-top">
+  <div class="row"><h1>재고 <small>MAT-04</small></h1><span class="who">김조회 · 조회 (예시)</span></div>
+  <form class="m-search" method="get" action="/trc/search" role="search">
+    <input type="search" name="q" placeholder="품목 · LOT 번호" aria-label="품목 · LOT 번호" autocomplete="off">
+    <button type="submit">검색</button>
+  </form>
+</header>
+<main class="m-main">
+
+  <div class="chips"><a class="chip on" href="#">전부</a><a class="chip" href="#">원재료</a><a class="chip" href="#">생산품</a><a class="chip" href="#">부족만</a></div>
+  <div class="stat-grid"><div class="stat"><small>품목</small><b>6<span class="u">종</span></b></div><div class="stat"><small>부족</small><b>1<span class="u">종</span></b></div></div>
+  <section class="m-sec">
+    <h2>품목별 현재고 <small>10-09 10:42 기준 (예시)</small></h2>
+    <details class="fold" open>
+      <summary><span class="grow">원재료 X <small>RM-001</small></span><b>380 kg</b></summary>
+      <div class="body">
+        <dl class="kv" style="margin-top:6px"><dt>안전재고</dt><dd class="num">200 kg</dd><dt>LOT</dt><dd>3건 (재고 2 · 미검사 1)</dd></dl>
+        <div class="m-card" style="margin-top:8px"><h3><code>LM-20261009-003</code> <span class="badge b-wait">미검사</span></h3><dl class="kv"><dt>잔량</dt><dd class="num">200 / 200 kg</dd><dt>입고</dt><dd>10-09 · 공급처 1</dd></dl></div>
+        <div class="m-card"><h3><code>LM-20261007-002</code> <span class="badge b-ok">합격</span></h3><dl class="kv"><dt>잔량</dt><dd class="num">180 / 300 kg</dd><dt>투입</dt><dd>실적 #12 · #17</dd></dl><div class="links"><a href="#">정추적</a></div></div>
+        <div class="m-card"><h3><code>LM-20261007-005</code> <span class="badge b-off">소진</span></h3><dl class="kv"><dt>잔량</dt><dd class="num">0 / 100 kg</dd></dl></div>
+      </div>
+    </details>
+    <details class="fold">
+      <summary><span class="grow">원재료 Y <small>RM-002</small></span><b style="color:var(--err)">12 kg</b><span class="badge b-err">부족</span></summary>
+      <div class="body"><dl class="kv" style="margin-top:6px"><dt>안전재고</dt><dd class="num">50 kg</dd><dt>LOT</dt><dd>1건</dd></dl><div class="m-card" style="margin-top:8px"><h3><code>LM-20261006-001</code> <span class="badge b-warn">조건부</span></h3><dl class="kv"><dt>잔량</dt><dd class="num">12 / 50 kg</dd></dl></div></div>
+    </details>
+    <details class="fold">
+      <summary><span class="grow">원재료 Z <small>RM-003</small></span><b>30 kg</b></summary>
+      <div class="body"><div class="m-card" style="margin-top:8px"><h3><code>LM-20261008-006</code> <span class="badge b-wait">미검사</span></h3><dl class="kv"><dt>잔량</dt><dd class="num">30 / 30 kg</dd></dl></div></div>
+    </details>
+    <details class="fold">
+      <summary><span class="grow">품목 A <small>FG-001 · 생산품</small></span><b>1,230 EA</b></summary>
+      <div class="body"><div class="m-card" style="margin-top:8px"><h3><code>LP-20261009-005</code> <span class="badge b-ok">재고</span></h3><dl class="kv"><dt>잔량</dt><dd class="num">480 EA</dd><dt>검사</dt><dd><span class="badge b-wait">미검사</span></dd></dl></div><div class="m-card"><h3><code>LP-20261009-004</code> <span class="badge b-ok">재고</span></h3><dl class="kv"><dt>잔량</dt><dd class="num">500 EA</dd></dl></div><div class="m-card"><h3><code>LP-20261009-004-1</code> <span class="badge b-ok">재고</span></h3><dl class="kv"><dt>잔량</dt><dd class="num">250 EA</dd><dt>관계</dt><dd>분할</dd></dl></div></div>
+    </details>
+    <details class="fold">
+      <summary><span class="grow">품목 B <small>FG-002 · 생산품</small></span><b>150 EA</b></summary>
+      <div class="body"><div class="m-card" style="margin-top:8px"><h3><code>LP-20261008-007</code> <span class="badge b-ok">재고</span></h3><dl class="kv"><dt>잔량</dt><dd class="num">150 EA</dd></dl></div></div>
+    </details>
+    <ul class="notes"><li>접힘 규칙: 품목 요약 줄(이름 · 현재고 · 부족 배지)만 펼쳐 보이고 LOT 은 접힘. 첫 품목(또는 검색어에 맞는 품목)만 <code>open</code>.</li><li>잔량 = <code>v_lot_stock.remain_qty</code>. 값이 없는 품목은 「미수집」이 아니라 0 — 재고는 거래 합이다.</li></ul>
+  </section>
+
+</main>
+<nav class="m-tabs" aria-label="하단 탭">
+    <a href="trc_search_m.html"><span class="ico" aria-hidden="true">⌕</span>추적</a>
+    <a href="kpi_summary_m.html"><span class="ico" aria-hidden="true">▤</span>현황</a>
+    <a href="job_status_m.html"><span class="ico" aria-hidden="true">☰</span>지시</a>
+    <a href="mat_stock_m.html" class="on"><span class="ico" aria-hidden="true">▦</span>재고</a>
+</nav>
+</div>
+</body>
+</html>

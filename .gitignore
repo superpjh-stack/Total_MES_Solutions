@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.DS_Store
+*.log
+# 백업 덤프는 저장소에 넣지 않는다 (G-C20)
+backups/
+# 브라우저 한 바퀴 캡처 (QA3 산출물 — 크기 때문에 저장소 밖)
+outputs/e2e/
+# Claude Code 실행 중 잠금 파일
+.claude/*.lock
+.gstack/

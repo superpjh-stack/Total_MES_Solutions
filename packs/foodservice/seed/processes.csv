@@ -1,0 +1,10 @@
+process_code,process_name,seq,use_yn,collect_type,note
+PRC-010,원재료/자재 입고,1,Y,수동,design.json meta.main_processes 9단계 — TD1 data_collection '수동 입력'
+PRC-020,수입검사,2,Y,수동,'수동 입력 + 사진'
+PRC-030,가공(무침),3,Y,반자동(POP),
+PRC-040,가공(취사),4,Y,자동(PLC),교반기 PLC — RPM · 교반시간 · 조리온도 자동 수집
+PRC-050,가공(조리),5,Y,반자동(POP),
+PRC-060,가공(볶음),6,Y,자동(PLC),교반기 PLC — 자동 수집 · 이탈 대조
+PRC-070,공정중 검사,7,Y,수동,신규 단계 — 검사 기준값 (미확정 D-08)
+PRC-080,최종검사,8,Y,수동,'수동 입력 + 사진' — 샘플링 검식
+PRC-090,포장/출고,9,Y,반자동(POP),

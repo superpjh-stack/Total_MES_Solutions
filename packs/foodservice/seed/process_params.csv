@@ -1,0 +1,8 @@
+process_code,param_key,label,unit,value_type,min_value,max_value,required_yn,source,agg,seq,note
+PRC-040,RPM,교반속도,rpm,number,,,N,collect,avg,1,"범위 (미확정 D-506 · 니즈푸드 D-08) — TD3-004 목업 '교반속도 60~90rpm' 은 예시 행이라 넣지 않았다. 출처 AD2-050 · TD5 PRD_BATCH_RESULT.AVG_RPM"
+PRC-040,STIR_TIME,교반시간,분,number,,,N,collect,max,2,"PLC 누적값 → 작업 구간 최댓값 (니즈푸드 D-206). 범위 (미확정). TD5 STIR_MIN"
+PRC-040,TEMP,조리온도,℃,number,,,N,collect,avg,3,"범위 (미확정 D-506). TD5 AVG_TEMP"
+PRC-060,RPM,교반속도,rpm,number,,,N,collect,avg,1,"범위 (미확정 D-506). 가공(볶음) 자동 수집 (TD1 data_collection)"
+PRC-060,STIR_TIME,교반시간,분,number,,,N,collect,max,2,"TD1 '볶음시간'. PLC 누적값 → 최댓값 (D-206). 범위 (미확정)"
+PRC-060,TEMP,조리온도,℃,number,,,N,collect,avg,3,"범위 (미확정 D-506) — TD3-004 목업 '조리온도 160~180℃' 는 예시 행"
+PRC-050,COOK_TIME,조리시간,분,number,,,N,manual,last,1,"TD1 가공(조리) 'POP 반자동 입력: 레시피 버전 · 조리시간 · 생산인분 · 작업자'. 범위 (미확정)"

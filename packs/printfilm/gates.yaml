@@ -1,0 +1,90 @@
+# printfilm 팩 게이트 기대값 — pack-contract.md §7 (기획자2 · 2026-10-09)
+# G-P02 규모 · G-P03 추적표 · G-P04 시나리오 · G-P05 용어. 판정은 `MES_PACK=printfilm make gate` 출력뿐.
+
+screens: 7          # X-PRT-01~03 · X-CLR-01 · X-RLL-01~03 (pack.yaml: screens)
+tables: 8           # x_printfilm_{plate, anilox, ink_formula, ink_formula_component, color_record, color_record_mix, lot_ext, job_work_order_ext}
+functions: 24       # function-list.md §2 (prt 12 · clr 5 · rll 7)
+
+# G-P03 — 엘컴화인 산출물 ID ↔ 코어/팩 화면. 설계도 HTML 한 장이 정본(design.json 없음). 매핑표는 README.md §1.1 (중메뉴 32 → 화면) · §1.2 (기능 100 → 기능).
+design_source: "../lcomFine MES/엘컴화인_MES_설계도 복사본.html"
+design_expect:
+  menus: 12          # 설계도 .ia-menu
+  screens: 32        # 중메뉴 <li>
+  functions: 94      # <h4><span>
+  permission_cells: 48   # 입력 19 · 조회 24 · 없음 5 (→ permissions.csv 의 엘컴화인 12 메뉴 48칸과 같아야 한다)
+  mapping: README.md     # §1.1 32행 전부 코어/팩 화면 또는 '밖'(사유 CR-번호) — 고아 0
+  unmapped_allowed: [JOB-02]   # 코어 변경 요청 CR-1 (README §3)
+
+scenarios:
+  # ── S1 엘컴화인 goal.md G-06 계보 10행 — 설계도 §3 예시 그대로 ──
+  - id: S1
+    name: 계보 10행 (원재료 LOT 2 → 인쇄 Roll 2 → 후가공 Roll 1(splice) → 슬리팅 Roll 3 → 출하 LOT 1)
+    test: tests/test_scenario_lineage.py::test_ten_rows
+    steps:
+      - { step: 1,  api: "POST /mat/receipts ×2",                        expect: "lot kind=MATERIAL 2건 (M①, M②) · insp_status=미검사 · 번호 M+YYMMDD-+3자리" }
+      - { step: 2,  api: "POST /mat/inspections ×2 (합격)",               expect: "M①, M② insp_status=합격 (품질 계정 · 범위 입고검사)" }
+      - { step: 3,  api: "POST /ord/orders (수주 1 · 상세 1)",            expect: "ord_order 1 · ord_order_dtl 1 (D-506: Job 은 수주 상세 필수)" }
+      - { step: 4,  api: "POST /job/work-orders (인쇄 공정 · 수주 상세)",  expect: "work_order_no J+YYMMDD-+3자리 · status=대기 · attrs plate_code 검증 통과(비움 허용)" }
+      - { step: 5,  api: "POST /pop/result/start → POST /pop/inputs (M①) → POST /pop/result/{id}/end", expect: "Roll① lot kind=ROLL kind_base=PRODUCT 번호 R+YYMMDD-+4자리 · lot_genealogy 투입 1행 (M①→R①) · x_printfilm_lot_ext process_type=인쇄" }
+      - { step: 6,  api: "start → inputs (M①, M②) → end",                 expect: "Roll② · 투입 2행 (M①→R②, M②→R②) · 누계 3" }
+      - { step: 7,  api: "POST /rll/finishing/splice (R①, R②)",          expect: "후가공 Roll F 1건 kind=ROLL · lot_genealogy relation=splice relation_base=합병 2행 · 누계 5 · R①·R② v_lot_state=소진" }
+      - { step: 8,  api: "POST /rll/slitting (F, count=3)",               expect: "슬리팅 Roll S①②③ 3건 · relation=슬리팅 relation_base=분할 3행 · 누계 8 · ext slit_seq 1,2,3 · F=소진" }
+      - { step: 9,  api: "POST /qua/inspections + /judge (S①, S② 합격 · delta_e 값)", expect: "S①·S② insp_status=합격 (D-504: 코어 스캔이 미검사 422 라 검사가 먼저)" }
+      - { step: 10, api: "POST /shp/shipments → POST /shp/scan ×2 (S①, S②)", expect: "lot kind=SHIPMENT 1건 · relation=출하 2행 · 누계 10 · S③ 스캔 안 함" }
+      - { step: 11, api: "POST /shp/shipments/{id}/approve (관리자)",     expect: "200 · validate_shipment 통과 (전부 ROLL · 합격 · 같은 Job)" }
+      - { step: 12, api: "GET /trc/backward?no=<출하 LOT 번호>",          expect: "materials = {M①, M②} · edges 9 (출하 2 → 슬리팅 2 → splice 2 → 투입 3)" }
+      - { step: 13, api: "GET /trc/forward?no=M①",                        expect: "edges 9 (투입 2 → splice 2 → 슬리팅 3 → 출하 2) · S③ state=재고 · M②→R② 행은 안 나온다" }
+    expect:
+      genealogy_rows: 10
+      by_relation: { 투입: 3, splice: 2, 슬리팅: 3, 출하: 2 }
+      by_relation_base: { 투입: 3, 합병: 2, 분할: 3, 출하: 2 }
+      roll_lots: 6              # R① R② F S① S② S③ 전부 kind=ROLL
+      backward_materials: 2     # 출하 LOT → M① · M②
+      backward_edges: 9
+      forward_edges_from_m1: 9
+      stock_lots: 1             # S③ 재고
+      consumed_lots: 3          # R① R② F
+      shipped_lots: 2           # S① S②
+      lot_ext_rows: 6           # 롤마다 ext 1행 (인쇄 2 · 후가공 1 · 슬리팅 3)
+      genealogy_direct_sql_in_pack: 0   # R8 — rll 라우터 · hooks.py 에 lot_genealogy INSERT 0
+
+  # ── S2 불합격 롤 출하 금지 (엘컴화인 D-17 · D-305) ──
+  - id: S2
+    name: 불합격 롤 출하 금지 — 스캔 422(코어) + 승인 422(훅)
+    test: tests/test_scenario_ship.py::test_block_failed_roll
+    steps:
+      - { step: 1, api: "S1 의 1~8 (슬리팅 Roll S①②③ 재고)",                   expect: "준비" }
+      - { step: 2, api: "POST /qua/inspections + /judge (S① 불합격 · 불량코드 1줄)", expect: "S① insp_status=불합격 · qua_defect 1행" }
+      - { step: 3, api: "POST /shp/shipments → POST /shp/scan (S①)",           expect: "422 code=validation_error (코어 F-SHP-05 — 불합격) · 계보 출하 행 0" }
+      - { step: 4, api: "POST /shp/scan (S③ · 미검사)",                         expect: "422 validation_error (코어 — 미검사 · D-504)" }
+      - { step: 5, api: "검사 S② 합격 → POST /shp/scan (S②)",                  expect: "200 · 출하 1행" }
+      - { step: 6, api: "POST /qua/inspections + /judge (S② 불합격 — 스캔 뒤 재검사)", expect: "S② insp_status=불합격 (출하 승인 전이라 등록 가능)" }
+      - { step: 7, api: "POST /shp/shipments/{id}/approve (관리자)",            expect: "422 code=hook_rejected · 메시지에 S② 번호 · shp_shipment.status=등록 그대로" }
+      - { step: 8, api: "다른 Job 의 롤을 같은 출하에 스캔 → approve",            expect: "422 hook_rejected '출하 LOT 하나에는 한 Job 의 롤만' (D-16 · CR-3)" }
+    expect: { status: 422, code: hook_rejected, shipment_status: 등록, genealogy_ship_rows_after: 1 }
+
+  # ── S3 COA 발행 — 그 롤들의 ΔE · 검사 값 스냅샷 (엘컴화인 D-17 · D-304 · D-305) ──
+  - id: S3
+    name: COA 발행 — 승인 출하의 롤별 ΔE · 판정 · 불량 · 길이 · 폭 스냅샷, 발행본 불변
+    test: tests/test_scenario_coa.py::test_coa_snapshot
+    steps:
+      - { step: 1, api: "S1 의 1~11 (승인된 출하 · S①② 합격 · delta_e 기록)",  expect: "준비" }
+      - { step: 2, api: "POST /shp/documents (doc_type=성적서 → 화면 표기 COA)", expect: "200 · document_no C+YYMMDD-+3자리 · snapshot.lots = [S①, S②] 각각 {lot_no, delta_e, judgement, defects[], length_m, width_mm, process_type=슬리팅, inspected_at}" }
+      - { step: 3, api: "GET /shp/documents/{id}/print",                        expect: "200 · 팩 양식 print/document.html · 제목에 'COA'(terms) · 바코드 값 = 출하 LOT 번호(COA 번호 아님 · D-305) · '성적서' 글자 노출 0(G-P05)" }
+      - { step: 4, api: "미승인 출하에 POST /shp/documents",                     expect: "422 (코어 F-SHP-09)" }
+      - { step: 5, api: "승인 뒤 S① 에 새 검사 등록 시도 (POST /qua/inspections)", expect: "422 (코어 F-QUA-04 '출하된 LOT 422' = 엘컴화인 D-304)" }
+      - { step: 6, api: "재발행 POST /shp/documents (같은 출하)",                 expect: "새 번호 · 이전 발행본 snapshot 불변 (바이트 동일)" }
+      - { step: 7, api: "S1 에서 검사 없이 승인한 경우는 없다(D-504)",            expect: "미검사 롤 COA '미수집' 케이스는 코어 규칙상 발생하지 않음 — 문서화만" }
+    expect: { status: 200, document_prefix: C, snapshot_lots: 2, snapshot_keys: [delta_e, judgement, defects, length_m, width_mm], barcode_value: lot_no_of_shipment_lot, reissue_new_number: true, prior_snapshot_unchanged: true }
+
+# G-P05 — 이 키들이 화면 · 메뉴 · 라벨에 치환 안 된 채 보이면 FAIL
+terms_sample: [작업지시, 생산 LOT, 성적서, 분할, 합병, 거래처]
+
+# G-P01 보조 기대값 (check_pack)
+isolation:
+  core_hash_changes: 0
+  core_alter: 0
+  core_path_override: 0
+  out_of_scope_writes: 0
+  genealogy_direct_insert: 0
+  template_overrides: [print/label_lot.html, print/document.html, print/work_order.html]   # README §0 R10 과 같아야 한다

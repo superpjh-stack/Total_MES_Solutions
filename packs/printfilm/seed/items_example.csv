@@ -1,0 +1,6 @@
+item_code,item_name,item_type,spec,unit,use_yn
+EX-FG-01,제품 A (예시),제품,,m,Y
+EX-FG-02,제품 B (예시),제품,,m,Y
+EX-RM-01,원단 A (예시),원재료,,m,Y
+EX-RM-02,원단 B (예시),원재료,,m,Y
+EX-RM-03,잉크 원료 A (예시),원재료,,kg,Y

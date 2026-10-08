@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>작업 시작 · POP</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="pop.css">
+</head>
+<!--
+  POP-02 작업 시작 — 현장 POP 원형 (디자이너2). F-POP-02 POST /pop/result/start. 지시는 스캔(POP-01 ?no=) 또는 카드 「시작」으로 정해져 들어온다. 설비 · 작업자는 터치 선택.
+  Jinja 로 옮길 때: body.ch-pop 는 templating.render 가 채널별로 붙인다 · 상단 탭은 nav.SCREENS 중 channels.pop 에 있는 화면만 ·
+  스캔칸은 ui.scan_box 하나(data-scan) · 알림은 base 의 #popup-layer + #flash-data · 문구는 전부 t() · 더미 값은 (예시).
+-->
+<body class="ch-pop" data-screen="POP-02">
+<header class="topbar">
+  <a class="btn back" href="pop_work.html">← 뒤로</a>
+  <nav class="tabs" aria-label="작업 전환">
+    <a class="tab on" href="pop_work.html">작업</a>
+    <a class="tab" href="pop_inputs.html">투입</a>
+    <a class="tab" href="pop_labels.html">라벨</a>
+    <a class="tab" href="mat_receipts_pop.html">입고</a>
+    <a class="tab" href="mat_inspections_pop.html">입고검사</a>
+    <a class="tab" href="qua_inspections_pop.html">검사</a>
+    <a class="tab" href="shp_scan.html">출하</a>
+    <a class="tab" href="eqp_status_pop.html">설비</a>
+  </nav>
+  <div class="who" aria-label="현재 상태">
+    <span class="who-item"><small>작업자</small><b>김현장 (예시)</b></span>
+    <span class="who-item"><small>설비</small><b>EQ-001 (예시)</b></span>
+    <span class="who-item"><small>시각</small><b>10:42 (예시)</b></span>
+    <span class="who-item conn on"><small>연결</small><b>정상</b></span>
+  </div>
+</header>
+<div class="offline-bar" id="offline-bar" hidden role="alert">서비스 일시 중단 (503) — 연결이 돌아오면 스캔을 이어서 한다</div>
+<main class="pop-main">
+  <h1 class="screen-title">작업 시작 <small>POP-02</small></h1>
+  <form class="scan" method="get" action="/pop/work" autocomplete="off" data-demo>
+    <label for="scan">다른 지시로 바꾸려면 지시 번호 스캔</label>
+    <div class="scan-row">
+      <input id="scan" type="text" name="no" data-scan autofocus inputmode="text" autocomplete="off" placeholder="WO-…">
+      <button type="submit" class="btn btn-primary">확인</button>
+    </div>
+  </form>
+  <section class="result" role="status" id="scan-result" hidden><p class="result-msg"></p></section>
+
+  <div class="steps"><div class="step done">1 지시</div><div class="step on">2 설비</div><div class="step on">3 작업자</div><div class="step">4 시작</div></div>
+  <form method="post" action="/pop/result/start" id="start-form" data-demo>
+    <input type="hidden" name="work_order_id" value="1">
+    <section class="panel">
+      <h2>지시 <small><code>WO-20261009-002</code></small></h2>
+      <dl class="kv">
+        <dt>품목</dt><dd>품목 B (예시)</dd>
+        <dt>공정</dt><dd>공정 2 (예시)</dd>
+        <dt>지시 수량</dt><dd class="num">600 EA</dd>
+        <dt>상태</dt><dd><span class="badge b-wait">대기</span></dd>
+      </dl>
+    </section>
+    <section class="panel">
+      <h2>설비 <small>공정 2 의 설비 (예시) · 하나 고른다</small></h2>
+      <div class="choice">
+        <label><input type="radio" name="equipment_id" value="1" checked><span>EQ-001<br><small>설비 1 (예시)</small></span></label>
+        <label><input type="radio" name="equipment_id" value="2"><span>EQ-002<br><small>설비 2 (예시)</small></span></label>
+        <label><input type="radio" name="equipment_id" value=""><span>설비 없음</span></label>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>작업자 <small>로그인 작업자가 기본</small></h2>
+      <div class="choice">
+        <label><input type="radio" name="worker_id" value="11" checked><span>김현장 (예시)</span></label>
+        <label><input type="radio" name="worker_id" value="12"><span>이현장 (예시)</span></label>
+        <label><input type="radio" name="worker_id" value="13"><span>박현장 (예시)</span></label>
+      </div>
+    </section>
+    <button type="submit" class="btn btn-primary btn-big">작업 시작</button>
+  </form>
+  <ul class="notes">
+    <li>422: 대기 · 진행이 아닌 지시 / 같은 지시의 미종료 실적이 있음 → 303 + 알림(큰 글씨). 지시 행은 <code>for share</code>.</li>
+    <li>시작 성공 → 303 POP-02 종료 화면(그 실적). 훅 <code>on_result_started</code>.</li>
+  </ul>
+  <section class="demo">
+    <h3>시연 — 템플릿에 옮기지 않는다</h3>
+    <div class="actions"><button type="button" class="btn" data-demo-popup="같은 지시의 종료되지 않은 실적이 있습니다" data-title="작업 시작" data-fields='[{"label":"실적","reason":"#17 08:10 시작 (예시)"}]'>422 미종료 실적</button></div>
+  </section>
+</main>
+
+<div class="popup-layer" id="popup-layer" hidden>
+  <div class="popup" role="alertdialog" aria-labelledby="popup-title" aria-describedby="popup-body">
+    <h2 id="popup-title">알림</h2>
+    <div id="popup-body"></div>
+    <p class="scan-hint">알림이 떠 있어도 바코드를 쏘면 스캔칸에 들어간다. 글자가 오면 알림은 닫힌다.</p>
+    <div class="actions"><button type="button" class="btn btn-primary" data-popup-close>확인</button></div>
+  </div>
+</div>
+<script type="application/json" id="flash-data">{}</script>
+<script src="pop.js"></script>
+</body>
+</html>

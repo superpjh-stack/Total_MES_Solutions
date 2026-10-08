@@ -1,0 +1,7 @@
+item_code,item_name,item_type,spec,unit,use_yn,menu_type,serve_unit,serve_qty_g,material_type,storage_cond,expiry_mng_yn,cook_process_code,storage_temp,note
+MENU-0001,(예시)제육볶음,제품,,인분,Y,주찬,인분,150.00,,,,PRC-060,,TD3-001 목업 행 1 — 조리공정구분 가공(볶음)
+MENU-0002,(예시)백미밥,제품,,인분,Y,밥,인분,210.00,,,,PRC-040,,TD3-001 목업 행 2 — 가공(취사)
+MENU-0003,(예시)시금치무침,제품,,인분,Y,부찬,인분,,,,,PRC-030,,TD3-032 목업 메뉴명 — 1인 제공량 (미확정)
+MAT-1001,(예시)돈육 앞다리,원재료,10kg/BOX,kg,Y,,,,원물,냉장,Y,,,TD3-003 목업 행 1 — 보관기준온도 (미확정)
+MAT-1002,(예시)양파,원재료,,kg,Y,,,,원물,실온,Y,,,TD3-002 · 015 · 034 목업 — 규격 (미확정)
+MAT-2005,(예시)식용유,원재료,18L/EA,L,Y,,,,공산품,실온,N,,,TD3-003 목업 행 2

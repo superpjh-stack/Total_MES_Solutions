@@ -1,0 +1,4 @@
+equip_code,equip_name,process_code,collect_yn,use_yn
+EX-EQ-01,인쇄기 1호 (예시),EX-PR-10,N,Y
+EX-EQ-02,후가공기 1호 (예시),EX-PR-20,N,Y
+EX-EQ-03,슬리터 1호 (예시),EX-PR-30,N,Y

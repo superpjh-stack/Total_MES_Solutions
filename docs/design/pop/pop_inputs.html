@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>투입 스캔 · POP</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="pop.css">
+</head>
+<!--
+  POP-03 투입 스캔 — 현장 POP 원형 (디자이너2). F-POP-06 POST /pop/inputs (실적 + 원재료 LOT 바코드 + 투입량 → lineage.consume_material) · F-POP-07 취소. 아래는 불합격 LOT 을 스캔한 직후의 422 재렌더 상태.
+  Jinja 로 옮길 때: body.ch-pop 는 templating.render 가 채널별로 붙인다 · 상단 탭은 nav.SCREENS 중 channels.pop 에 있는 화면만 ·
+  스캔칸은 ui.scan_box 하나(data-scan) · 알림은 base 의 #popup-layer + #flash-data · 문구는 전부 t() · 더미 값은 (예시).
+-->
+<body class="ch-pop" data-screen="POP-03">
+<header class="topbar">
+  <a class="btn back" href="pop_work.html">← 뒤로</a>
+  <nav class="tabs" aria-label="작업 전환">
+    <a class="tab" href="pop_work.html">작업</a>
+    <a class="tab on" href="pop_inputs.html">투입</a>
+    <a class="tab" href="pop_labels.html">라벨</a>
+    <a class="tab" href="mat_receipts_pop.html">입고</a>
+    <a class="tab" href="mat_inspections_pop.html">입고검사</a>
+    <a class="tab" href="qua_inspections_pop.html">검사</a>
+    <a class="tab" href="shp_scan.html">출하</a>
+    <a class="tab" href="eqp_status_pop.html">설비</a>
+  </nav>
+  <div class="who" aria-label="현재 상태">
+    <span class="who-item"><small>작업자</small><b>김현장 (예시)</b></span>
+    <span class="who-item"><small>설비</small><b>EQ-001 (예시)</b></span>
+    <span class="who-item"><small>시각</small><b>10:42 (예시)</b></span>
+    <span class="who-item conn on"><small>연결</small><b>정상</b></span>
+  </div>
+</header>
+<div class="offline-bar" id="offline-bar" hidden role="alert">서비스 일시 중단 (503) — 연결이 돌아오면 스캔을 이어서 한다</div>
+<main class="pop-main">
+  <h1 class="screen-title">투입 스캔 <small>POP-03</small></h1>
+  <form class="scan" method="post" action="/pop/inputs" autocomplete="off" data-demo>
+    <label for="scan">원재료 LOT 바코드 스캔 → 투입량 → Enter</label>
+    <input type="hidden" name="work_result_id" value="17">
+    <div class="scan-row">
+      <input id="scan" type="text" name="lot_no" data-scan autofocus inputmode="text" autocomplete="off" placeholder="LM-…">
+      <div class="side"><label for="qty">투입량 <small>kg</small></label><input id="qty" type="number" name="qty" inputmode="decimal" step="any" min="0" value="20"></div>
+      <button type="submit" class="btn btn-primary">확인</button>
+    </div>
+  </form>
+  <section class="result err" role="alert" id="scan-result">
+    <p class="result-msg">불합격 LOT 입니다 — 투입할 수 없습니다</p>
+    <ul class="result-fields"><li>원재료 LOT <code>LM-20261008-004</code> (예시) — 검사 불합격 · 10-08 판정</li></ul>
+  </section>
+
+  <section class="panel">
+    <h2>실적 #17 <small><code>WO-20261009-001</code> · 품목 A (예시) · 진행 중</small></h2>
+    <ul class="notes" style="color:var(--fg)">
+      <li>한 번 스캔 = 한 건(<code>pop_input</code> 1행). 같은 LOT 을 또 쏘면 또 한 건이다 — 투입량이 다르면 그게 맞다.</li>
+      <li>투입량 칸은 직전 값을 유지한다(같은 포대를 연달아 쏠 때). 바꾸려면 투입량을 먼저 누르고 숫자를 친 뒤 스캔한다.</li>
+      <li>계보는 지금 생기지 않는다 — 작업 종료 때 <code>투입</code> 계보로 한 번에 옮겨진다.</li>
+    </ul>
+  </section>
+
+  <section class="panel">
+    <h2>스캔 이력 <small>이 실적 · 3건 (취소 1)</small></h2>
+    <table class="list">
+      <thead><tr><th>시각</th><th>원재료 LOT</th><th>품목</th><th>투입량</th><th>잔량</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>10:40</td><td><code>LM-20261007-002</code></td><td>원재료 X (예시)</td><td class="num">20 kg</td><td class="num">180 kg</td><td class="act"><form method="post" action="/pop/inputs/3/cancel" data-demo style="display:inline"><button type="submit" class="btn">취소</button></form></td></tr>
+        <tr><td>10:31</td><td><code>LM-20261007-002</code></td><td>원재료 X (예시)</td><td class="num">20 kg</td><td class="num">200 kg</td><td class="act"><form method="post" action="/pop/inputs/2/cancel" data-demo style="display:inline"><button type="submit" class="btn">취소</button></form></td></tr>
+        <tr class="canceled"><td>10:20</td><td><code>LM-20261006-001</code></td><td>원재료 Y (예시)</td><td class="num">5 kg</td><td class="num">—</td><td class="act"><span class="badge b-off">취소됨 10:22</span></td></tr>
+      </tbody>
+    </table>
+    <ul class="notes"><li>취소는 실적 종료 전만. 종료 후 누르면 422 「종료된 실적의 투입은 취소할 수 없습니다」.</li></ul>
+  </section>
+
+  <section class="panel">
+    <h2>422 사유 — 전부 큰 빨강 · 스캔칸은 그대로</h2>
+    <table class="list">
+      <thead><tr><th>스캔한 LOT</th><th>배너 문장</th><th>항목 사유</th></tr></thead>
+      <tbody>
+        <tr><td>불합격</td><td><b style="color:var(--err)">불합격 LOT 입니다 — 투입할 수 없습니다</b></td><td>LOT 번호 · 판정일</td></tr>
+        <tr><td>미검사</td><td><b style="color:var(--err)">검사 전 LOT 입니다 — 입고검사를 먼저 합니다</b></td><td>LOT 번호 · 입고일</td></tr>
+        <tr><td>소진 (잔량 0)</td><td><b style="color:var(--err)">잔량이 없는 LOT 입니다</b></td><td>LOT 번호 · 마지막 투입 실적</td></tr>
+        <tr><td>없는 번호</td><td><b style="color:var(--err)">없는 번호입니다</b></td><td>스캔한 글자 그대로</td></tr>
+        <tr><td>투입량 0 · 빈 칸</td><td><b style="color:var(--err)">투입량을 넣어 주세요</b></td><td>투입량</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="demo">
+    <h3>시연 — 템플릿에 옮기지 않는다</h3>
+    <div class="actions"><button type="button" class="btn" data-demo-popup="검사 전 LOT 입니다 — 입고검사를 먼저 합니다" data-title="투입 스캔" data-fields='[{"label":"원재료 LOT","reason":"LM-20261009-001 (예시) 미검사"}]'>미검사 LOT 알림</button><button type="button" class="btn" data-demo-popup="잔량이 없는 LOT 입니다" data-title="투입 스캔" data-fields='[{"label":"원재료 LOT","reason":"LM-20261005-003 (예시) 잔량 0"}]'>소진 LOT 알림</button><button type="button" class="btn" data-demo-popup="투입했습니다 — LM-20261007-002 20 kg" data-title="투입 스캔" data-kind="ok">투입 성공</button></div>
+  </section>
+</main>
+
+<div class="popup-layer" id="popup-layer" hidden>
+  <div class="popup" role="alertdialog" aria-labelledby="popup-title" aria-describedby="popup-body">
+    <h2 id="popup-title">알림</h2>
+    <div id="popup-body"></div>
+    <p class="scan-hint">알림이 떠 있어도 바코드를 쏘면 스캔칸에 들어간다. 글자가 오면 알림은 닫힌다.</p>
+    <div class="actions"><button type="button" class="btn btn-primary" data-popup-close>확인</button></div>
+  </div>
+</div>
+<script type="application/json" id="flash-data">{}</script>
+<script src="pop.js"></script>
+</body>
+</html>

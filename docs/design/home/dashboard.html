@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="ko">
+<!--
+  CMN-04 대시보드 — 정적 원형 (디자이너3 · 2026-10-09). 경로 `/dashboard`. 담당 개발3 (templates/dashboard/index.html).
+  로그인 직후 역할별 요약. **읽기만** — 쓰기 버튼 · 폼 없음. 숫자는 kpi 집계(stats) 를 읽을 뿐 어떤 테이블에도 쓰지 않는다.
+  머리글 · 좌측 탐색은 base.html(디자이너1). 이 파일은 body 블록만.
+
+  네 판(관리자 · 생산 · 품질 · 현장)을 한 파일에 둔 것은 검토용이다. 서버는 user.role_code 에 맞는 판 **하나**만 그린다
+  (팩이 역할을 늘리면 기본 판 = 생산 판. 역할별 판은 pack.yaml 로 바꾸지 않는다 — 바로가기 목록만 권한 표에서 나온다).
+  네 판 모두 같은 숫자 4 개(오늘 지시 · 오늘 실적 · 검사 대기 · 출하 대기)를 같은 자리에 두고, 역할마다 강조 1 · 바로가기만 다르다.
+  바로가기는 그 역할의 권한 칸이 조회 이상인 화면만(rbac.cell). 없음이면 그 바로가기가 빠진다.
+
+  데이터(가설 — 개발3 이 stats 의 공개 함수로 확정. 집계 SQL 은 stats 에만)
+    today: {date work_orders results inspections_pending shipments_pending}   ← 4 숫자(모든 판 공통)
+    extra : {deviated faults late_orders approvals_pending issues_open labels_today}  ← 역할별 강조 1 개
+    recent: [{at kind text href}]   ← 그 역할이 볼 만한 최근 5 건(선택 — 없으면 블록 생략)
+  null → `미수집`. 더미는 (예시). 문구는 {{ t("…") }}.
+-->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>대시보드</title>
+<link rel="stylesheet" href="../tokens.css"><!-- 디자이너1 토큰. 개발: /static/tokens.css -->
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:var(--c-bg);color:var(--c-ink);font-family:var(--font-sans);font-size:14px;line-height:1.45}
+a{color:inherit;text-decoration:none}
+.base-head{height:52px;background:var(--c-surface);border-bottom:1px solid var(--c-line);display:flex;align-items:center;padding:0 24px;gap:16px;color:var(--c-ink-3);font-size:13px}
+.base-head b{color:var(--c-ink)}
+main{max-width:1280px;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:32px}
+
+/* 검토용 구분 — 서버는 한 판만 그린다 */
+.review-cap{font-size:12px;color:var(--c-ink-3);border-top:1px dashed var(--c-line);padding-top:8px;margin:0}
+
+.panel{display:flex;flex-direction:column;gap:14px}
+.panel-head{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px 16px}
+.panel-head h1{margin:0;font-size:20px}
+.panel-head h1 small{font-weight:400;color:var(--c-ink-2);font-size:14px;margin-left:10px}
+.panel-head .as-of{font-size:12.5px;color:var(--c-ink-3)}
+
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media (max-width:900px){.tiles{grid-template-columns:repeat(2,1fr)}}
+.tile{background:var(--c-surface);border:1px solid var(--c-line);border-radius:var(--radius);padding:14px 16px;display:flex;flex-direction:column;gap:4px;min-height:112px}
+.tile:hover{border-color:var(--c-accent)}
+.tile span{font-size:12.5px;color:var(--c-ink-2)}
+.tile b{font-size:34px;line-height:1.05;font-weight:600}
+.tile b.is-empty{font-size:16px;color:var(--c-ink-3);font-weight:400}
+.tile small{font-size:12px;color:var(--c-ink-3);margin-top:auto}
+.tile[data-focus]{border-color:var(--c-accent);background:var(--c-accent-tint)}
+.tile b[data-status="critical"]{color:var(--c-err)}
+.tile b[data-status="warn"]{color:var(--c-warn)}
+.tile b[data-status="good"]{color:var(--c-ok)}
+
+.row{display:grid;grid-template-columns:2fr 1fr;gap:12px}
+@media (max-width:900px){.row{grid-template-columns:1fr}}
+.box{background:var(--c-surface);border:1px solid var(--c-line);border-radius:var(--radius);padding:14px 16px}
+.box h2{margin:0 0 10px;font-size:14px;color:var(--c-ink-2);font-weight:600}
+.links{display:flex;flex-wrap:wrap;gap:8px}
+.links a{padding:8px 14px;border:1px solid var(--c-line);border-radius:8px;font-size:13.5px;background:var(--c-bg)}
+.links a:hover{border-color:var(--c-accent);color:var(--c-accent)}
+.links a.print{border-style:dashed}
+.recent{list-style:none;margin:0;padding:0;font-size:13px}
+.recent li{display:grid;grid-template-columns:48px 72px 1fr;gap:10px;padding:6px 0;border-bottom:1px solid var(--c-line)}
+.recent li:last-child{border-bottom:0}
+.recent .at{color:var(--c-ink-3);font-variant-numeric:tabular-nums}
+.recent .k{color:var(--c-ink-2)}
+.recent.is-empty::after{content:"미수집";color:var(--c-ink-3)}
+.focus{background:var(--c-surface);border:1px solid var(--c-line);border-radius:var(--radius);padding:14px 16px;display:flex;align-items:baseline;gap:14px}
+.focus b{font-size:34px;line-height:1}
+.focus b[data-status="critical"]{color:var(--c-err)}
+.focus b[data-status="warn"]{color:var(--c-warn)}
+.focus b[data-status="good"]{color:var(--c-ok)}
+.focus span{color:var(--c-ink-2)}
+.focus a{margin-left:auto;font-size:13px;color:var(--c-accent)}
+
+/* 현장 판 — POP 채널이면 글자 · 터치 영역 확대 */
+.panel[data-role="OPERATOR"] .tile b{font-size:44px}
+.panel[data-role="OPERATOR"] .links a{padding:14px 20px;font-size:16px}
+</style>
+</head>
+<body>
+
+<div class="base-head">base.html 머리글 자리 — <b>MES 표준플랫폼</b> · <b>대시보드</b> · 로그인 직후 · <span style="margin-left:auto">2026-10-09 09:30</span></div>
+
+<main>
+
+  <!-- ───────── 1. 관리자 ───────── -->
+  <section class="panel" data-role="ADMIN">
+    <div class="panel-head">
+      <h1>오늘 <small>관리자 · 2026-10-09 (목)</small></h1>
+      <span class="as-of">집계 09:30 기준 · 현황판은 <a href="/kpi/board?device=board" style="color:var(--c-accent)">/kpi/board</a></span>
+    </div>
+    <div class="tiles">
+      <a class="tile" href="/job/work-orders"><span>오늘 지시</span><b>7</b><small>대기 2 · 진행 5</small></a>
+      <a class="tile" href="/kpi/summary?kind=production"><span>오늘 실적</span><b>12</b><small>양품 1,217 · 불량 23</small></a>
+      <a class="tile" href="/qua/inspections"><span>검사 대기</span><b data-status="warn">5</b><small>LOT · 공정 3 · 최종 2</small></a>
+      <a class="tile" href="/shp/shipments" data-focus><span>출하 대기 · 승인 대기</span><b>3</b><small>승인 대기 2 — 관리자만 승인</small></a>
+    </div>
+    <div class="row">
+      <div class="box">
+        <h2>바로가기</h2>
+        <div class="links">
+          <a href="/shp/scan">출하 승인</a><a href="/kpi/indicators">지표 정의</a><a href="/sys/permissions">권한 표</a><a href="/sys/logs">접근 로그</a><a href="/sys/backup">백업 · 이관</a><a href="/ifc/erp">ERP 연계 로그</a><a href="/kpi/board?device=board">현황판 열기</a>
+        </div>
+      </div>
+      <div class="box">
+        <h2>최근 변경 (예시)</h2>
+        <ul class="recent">
+          <li><span class="at">09:12</span><span class="k">출하</span><a href="/shp/shipments">SHP-20261009-0003 등록 · 거래처 A</a></li>
+          <li><span class="at">08:55</span><span class="k">지시</span><a href="/job/work-orders">WO-20261009-0007 등록</a></li>
+          <li><span class="at">08:40</span><span class="k">검사</span><a href="/qua/inspections">LOT-20261009-0004 판정 합격</a></li>
+          <li><span class="at">08:05</span><span class="k">입고</span><a href="/mat/receipts">RCV-20261009-0002 · 원재료 A</a></li>
+          <li><span class="at">07:58</span><span class="k">설비</span><a href="/eqp/faults">설비 5호 고장 등록</a></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+  <p class="review-cap">▲ 관리자 판 — 강조: 승인 대기 출하. 아래는 다른 역할의 판(검토용 · 서버는 하나만 그린다)</p>
+
+  <!-- ───────── 2. 생산 ───────── -->
+  <section class="panel" data-role="PRODUCTION">
+    <div class="panel-head">
+      <h1>오늘 <small>생산 · 2026-10-09 (목)</small></h1>
+      <span class="as-of">집계 09:30 기준</span>
+    </div>
+    <div class="tiles">
+      <a class="tile" href="/job/status" data-focus><span>오늘 지시</span><b>7</b><small>대기 2 · 진행 5 · 달성률 82.7%</small></a>
+      <a class="tile" href="/kpi/summary?kind=production"><span>오늘 실적</span><b>12</b><small>양품률 98.2%</small></a>
+      <a class="tile" href="/qua/inspections"><span>검사 대기</span><b data-status="warn">5</b><small>검사가 끝나야 출하 스캔이 된다</small></a>
+      <a class="tile" href="/shp/shipments"><span>출하 대기</span><b>3</b><small>오늘 납기 21 · 지연 2</small></a>
+    </div>
+    <div class="row">
+      <div class="box">
+        <h2>바로가기</h2>
+        <div class="links">
+          <a href="/job/work-orders">작업지시 등록</a><a href="/ord/plans">생산계획</a><a href="/mat/requirements">소요량</a><a href="/mat/stock">재고</a><a href="/eqp/status">가동 현황</a><a href="/job/print" class="print">작업지시서 출력</a>
+        </div>
+      </div>
+      <div class="focus"><b data-status="critical">2</b><span>지연 수주 — 납기 지남 · 미출하</span><a href="/shp/status">출하 현황 →</a></div>
+    </div>
+  </section>
+  <p class="review-cap">▲ 생산 판 — 강조: 지시 달성률 · 지연 수주</p>
+
+  <!-- ───────── 3. 품질 ───────── -->
+  <section class="panel" data-role="QUALITY">
+    <div class="panel-head">
+      <h1>오늘 <small>품질 · 2026-10-09 (목)</small></h1>
+      <span class="as-of">집계 09:30 기준</span>
+    </div>
+    <div class="tiles">
+      <a class="tile" href="/job/status"><span>오늘 지시</span><b>7</b><small>진행 5</small></a>
+      <a class="tile" href="/kpi/summary?kind=quality"><span>오늘 실적</span><b>12</b><small>불량 23 · 양품률 98.2%</small></a>
+      <a class="tile" href="/qua/inspections" data-focus><span>검사 대기</span><b data-status="warn">5</b><small>입고 1 · 공정 3 · 최종 1</small></a>
+      <a class="tile" href="/shp/documents"><span>출하 대기</span><b>3</b><small>성적서 미발행 1</small></a>
+    </div>
+    <div class="row">
+      <div class="box">
+        <h2>바로가기</h2>
+        <div class="links">
+          <a href="/mat/inspections">입고검사</a><a href="/qua/inspections">검사 결과 · 판정</a><a href="/qua/issues">이상 · 시정</a><a href="/qua/defect-stats">불량 집계</a><a href="/kpi/summary?kind=quality">품질 집계</a>
+        </div>
+      </div>
+      <div class="focus"><b data-status="critical">2</b><span>측정값 이탈 — 오늘 범위 밖 기록</span><a href="/kpi/summary?kind=quality">측정값 추이 →</a></div>
+    </div>
+  </section>
+  <p class="review-cap">▲ 품질 판 — 강조: 검사 대기 · 측정값 이탈 · 이상 미종결</p>
+
+  <!-- ───────── 4. 현장 (POP 채널이면 확대) ───────── -->
+  <section class="panel" data-role="OPERATOR">
+    <div class="panel-head">
+      <h1>오늘 <small>현장 · 2026-10-09 (목)</small></h1>
+      <span class="as-of">집계 09:30 기준 · 현장 POP</span>
+    </div>
+    <div class="tiles">
+      <a class="tile" href="/pop/work" data-focus><span>오늘 지시</span><b>7</b><small>내 공정 3 · 스캔으로 시작</small></a>
+      <a class="tile" href="/pop/result"><span>오늘 실적</span><b>12</b><small>진행 중 5</small></a>
+      <a class="tile" href="/mat/inspections"><span>검사 대기</span><b data-status="warn">5</b><small>미검사 입고 LOT 1</small></a>
+      <a class="tile" href="/shp/scan"><span>출하 대기</span><b>3</b><small>LOT 스캔 대기</small></a>
+    </div>
+    <div class="row">
+      <div class="box">
+        <h2>바로가기</h2>
+        <div class="links">
+          <a href="/pop/work">작업 목록 (스캔)</a><a href="/pop/inputs">투입 스캔</a><a href="/mat/receipts">입고</a><a href="/eqp/status">가동 상태 기록</a><a href="/shp/scan">출하 LOT 스캔</a><a href="/pop/labels" class="print">LOT 라벨</a>
+        </div>
+      </div>
+      <div class="focus"><b data-status="critical">1</b><span>고장 중 설비 — 설비 5호 (예시)</span><a href="/eqp/faults">고장 →</a></div>
+    </div>
+  </section>
+  <p class="review-cap">▲ 현장 판 — 강조: 오늘 작업 · 고장. 추적 · 시스템 · 인터페이스 바로가기는 권한 없음이라 빠진다</p>
+
+</main>
+</body>
+</html>

@@ -1,0 +1,5 @@
+defect_code,defect_name,process_code,use_yn,attrs.defect_group
+EX-DF-01,색차 (예시),EX-PR-10,Y,인쇄
+EX-DF-02,핀홀 (예시),EX-PR-10,Y,인쇄
+EX-DF-03,주름 (예시),EX-PR-20,Y,후가공
+EX-DF-04,폭 불량 (예시),EX-PR-30,Y,슬리팅

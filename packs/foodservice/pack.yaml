@@ -1,0 +1,170 @@
+# foodservice 팩 매니페스트 — pack-contract.md §2 의 키 전부 (기획자1 · 2026-10-09 · 초안)
+# 근거: ../NeedsFood MES Platform/docs/design/design.json (TD3 49 · TD5 37 · role_matrix) · db/seed.py · decisions*.md
+# 값이 니즈푸드 산출물에 없으면 비우고 주석에 (미확정) 을 적었다. README.md §8 D-5nn 참조.
+
+pack: foodservice
+name: 급식 MES                    # UI 표기 — 회사 고정값(니즈푸드 MES Solution)은 쓰지 않는다
+company: (예시)급식 제조기업       # 실제 회사명은 이관 단계에서 넣는다
+requires_core: ">=0.1,<1.0"
+env_prefix: MES_                  # 바꾸지 않는다
+
+# ── E1 용어 사전 — 키는 spec.md §12 core.yaml:terms_keys 안에서만 ─────────────────────
+terms:
+  품목: 메뉴                       # D-513: 원부자재도 bas_item — 화면 안에서는 item_type 라벨로 구분
+  BOM: 레시피
+  공정: 조리 공정
+  작업지시: 조리 지시
+  원재료 LOT: 원료 LOT
+  생산 LOT: 배치(솥)
+  출하 LOT: 출고 LOT
+  실적: 조리 실적
+  작업 시작: 조리 시작
+  작업 종료: 조리 완료
+  투입: 원료 투입
+  측정값: 조리 조건
+  검사: 검식
+  이상: 품질 이슈
+  출하: 출고
+  추적: 배치 추적
+  # 설비 · 거래처 · 작업자 · 수주 · 생산계획 · 불량 · 성적서 · 현황판 · 분할 · 합병 — 중립어 그대로(니즈푸드 화면명과 같거나 급식에 없다)
+
+# ── E1 메뉴 — 코어 12 를 니즈푸드 메뉴 10 순서(기준·영업·자재·생산·품질·공정·설비·POP·시스템)로 ─
+menus:
+  hide: []                         # 숨기지 않는다. AI Agent 메뉴는 코어에 없으므로 숨길 것도 없다
+  rename:
+    bas: 기준정보
+    ord: 영업 · 수주
+    mat: 자재 · 입고
+    job: 조리 지시
+    pop: 조리 실적 (POP)
+    qua: 품질 · 검식
+    eqp: 설비
+    shp: 출고
+    trc: 배치 추적
+    kpi: KPI · 현황판
+    sys: 시스템
+    ifc: 설비 수집
+  order: [bas, ord, mat, job, pop, qua, eqp, shp, trc, kpi, sys, ifc]
+  add: []                          # 팩 모듈 없음 (README §4)
+
+# ── E4 팩 화면 — 없음 (README §4 · function-list.md). 이관 단계 후보: X-FSV-01 검식 일정 · X-FSV-02 발주 (D-507)
+screens: []
+
+# ── E1 역할 — TD3 role_matrix 6역할이 코어 4 를 대체 (D-503). ADMIN 필수 ─────────────────
+roles:
+  - { code: ADMIN,        name: 관리자 }           # 정본 '관리자 (대표·과장)'
+  - { code: PRODUCTION,   name: 생산관리 담당 }
+  - { code: NUTRITIONIST, name: 영양사 }           # 정본 '영양사 (검식)'
+  - { code: WORKER,       name: 현장 작업자 }
+  - { code: SHIPPING,     name: 출고 담당 }
+  - { code: VENDOR,       name: 외부업체 }         # 정본 '외부업체 (공급기업)'
+permissions: seed/permissions.csv  # 코어 메뉴 12 × 역할 6 = 72칸 전부
+
+# ── E1 채번 — TD3 목업 번호 형식 (D-510 · 니즈푸드 D-29 · D-101 · D-201) ────────────────
+numbering:
+  ORDER:        { prefix: SO-, date: YYMMDD-, digits: 2 }   # SO-260810-01
+  PLAN:         { prefix: PP-, date: YYMMDD-, digits: 2 }   # PP-260812-01
+  WORK_ORDER:   { prefix: WO-, date: YYMMDD-, digits: 4 }   # WO-260812-0101
+  LOT_MATERIAL: { prefix: L,   date: YYMMDD,  digits: 2 }   # L26081001 (D-101 — 목업 L260810A 의 영문 꼬리는 채번 규칙이 아니다)
+  LOT_PRODUCT:  { prefix: P,   date: YYMMDD-, digits: 4 }   # P260812-0007 — 배치(솥) 1건당 1개 (D-201)
+  SHIPMENT:     { prefix: SH-, date: YYMMDD-, digits: 2 }   # SH-260812-01
+  # LOT_SHIPMENT · DOCUMENT — 니즈푸드에 없음 → 코어 기본 (미확정)
+
+# ── E1 채널 — 터치PC 3 · 스마트패드 2 → pop, 현황판 1 → board, 조회 → mobile (TD3 channels · TD2) ─
+channels:
+  pop:    [POP-01, POP-02, POP-03, POP-04, MAT-01, MAT-02, MAT-03, SHP-01, SHP-02, QUA-02, EQP-01, EQP-02, EQP-03]
+  mobile: [ORD-03, JOB-02, MAT-04, SHP-03, TRC-01, TRC-02, TRC-03, KPI-02]
+  board:  [KPI-01, JOB-02, EQP-01]      # TD3 017 · 022 · 024 · 030 · 033 의 '현황판' 채널은 KPI-01 외에 JOB-02 · EQP-01 로
+
+# ── E2 표시용 속성 (attrs jsonb) — 검색 · 집계 · FK 는 schema_ext.md 의 ext 테이블로 ───────
+attrs:
+  bas_item:
+    - { key: menu_type,      label: 메뉴유형,          type: select, choices: [밥, 국, 주찬, 부찬, 김치] }       # BAS_MENU.MENU_TYPE_CD
+    - { key: serve_unit,     label: 제공단위,          type: text }                                          # BAS_MENU.SERVE_UNIT ('인분')
+    - { key: serve_qty_g,    label: 1인 제공량(g),     type: number }                                        # BAS_MENU.SERVE_QTY_G
+    - { key: allergy_note,   label: 알레르기 표기,     type: text }                                          # 식품안전관리 기능은 범위 외 — 표기만
+    - { key: material_type,  label: 자재구분,          type: select, choices: [원물, 공산품, 부자재, 포장재] }  # BAS_MATERIAL.MATERIAL_TYPE_CD
+    - { key: storage_cond,   label: 보관조건,          type: select, choices: [냉장, 냉동, 실온] }
+    - { key: expiry_mng_yn,  label: 유통기한관리,      type: bool }                                          # Y 면 입고 때 유통기한 필수 (validate_mat_receipt)
+    - { key: spare_rate,     label: 여유율(%),         type: number }                                        # 일부 원물·공산품 2%
+    - { key: partner_code,   label: 주거래처,          type: text }
+  bas_bom:
+    - { key: cook_step_desc, label: 조리순서 설명,     type: text }                                          # 작업지시서 출력에 찍는다
+    - { key: caution_note,   label: 주의사항,          type: text }
+  bas_partner:
+    - { key: biz_no,         label: 사업자등록번호,    type: text }
+    - { key: delivery_addr,  label: 납품지 주소,       type: text }
+  bas_worker:
+    - { key: job,            label: 직무,              type: select, choices: [조리, 검식, 포장, 출고] }
+    - { key: line,           label: 담당 조리라인,     type: text }                                          # 공통코드 LINE (예시 3) — select 는 코드가 확정되면
+    - { key: join_date,      label: 입사일,            type: date }
+  bas_equipment:
+    - { key: equip_type,     label: 설비유형,          type: select, choices: [조리설비, 계측기, 보관설비] }
+    - { key: maker_model,    label: 제조사·모델,       type: text }
+    - { key: comm_type,      label: 통신방식,          type: select, choices: [RS-485, Ethernet, 수동] }
+    - { key: install_loc,    label: 설치위치,          type: text }
+  ord_order:
+    - { key: src_system,     label: 연계출처,          type: select, choices: [SCM, 수기입력] }
+    - { key: if_dt,          label: 연계일시,          type: text }
+  ord_plan:
+    - { key: line,           label: 조리라인(솥그룹),  type: text }
+    - { key: resched_reason, label: 재스케줄 사유,     type: text }
+  job_work_order:
+    - { key: line,           label: 조리라인(솥그룹),  type: text }
+    - { key: caution_note,   label: 주의사항,          type: text }                                          # 지시 생성 때 레시피에서 복사 (hooks.md §2)
+  pop_work_result:
+    - { key: input_type,     label: 입력구분,          type: select, choices: [자동(PLC), POP수동, 스마트패드] }
+  pop_stop:
+    - { key: fault_ref,      label: 연결 설비이상,     type: text }
+    - { key: delay_desc,     label: 지연내용,          type: text }
+  mat_receipt:
+    - { key: storage_loc,    label: 보관위치,          type: select, choices: [냉장보관실, 냉동보관실, 실온보관실, 조리장] }
+    - { key: storage_temp,   label: 입고 시 보관온도,  type: number }
+  mat_stock_trx:
+    - { key: move_type,      label: 이동구분,          type: select, choices: [이동, 조정, 폐기, 반품] }
+    - { key: from_loc,       label: 출발 보관위치,     type: text }
+    - { key: to_loc,         label: 도착 보관위치,     type: text }
+  qua_issue:
+    - { key: issue_type,     label: 이슈유형,          type: select, choices: [이물, 품질이상, 클레임, 반품] }
+    - { key: partner_code,   label: 고객사,            type: text }                                          # 클레임이면 필수 (validate_qua_issue)
+  eqp_check:
+    - { key: inspect_type,   label: 점검구분,          type: select, choices: [일상, 예방, 정기] }
+    - { key: plan_date,      label: 점검예정일,        type: date }
+  eqp_fault:
+    - { key: fault_type,     label: 이상유형,          type: select, choices: [고장, 오작동, 통신단절, 센서이상] }
+  sys_user:
+    - { key: org_type,       label: 소속구분,          type: select, choices: [관리자, 영양사, 현장작업자, 외부업체] }
+
+# ── E3 공정 측정값 · 검사 항목 ───────────────────────────────────────────────────
+process_params: seed/process_params.csv     # 교반기 RPM · 교반시간 · 조리온도 (collect, 취사·볶음) · 조리시간 (manual, 조리)
+inspection_items: seed/inspection_items.csv # 입고(수입검사) · 공정(공정중 검사) · 최종(검식)
+
+# ── E6 계보 ───────────────────────────────────────────────────────────────────
+lineage:
+  lot_kinds:
+    - { kind: BATCH, base: PRODUCT, label: 배치(솥) }   # 완제품LOT = 배치 1건 (D-501)
+  relations: []                                         # 투입 · 출하 로 충분. 분할 · 합병은 급식에 없다
+  states: { IN_STOCK: 잔여, CONSUMED: 투입됨, SHIPPED: 출고 }
+
+# ── 훅이 쓸 수 있는 코어 테이블 (팩 라우터 없음 — D-512) ─────────────────────────────
+write_scope:
+  hooks: [mat_requirement, qua_issue, job_lot, lot]     # lot 은 lineage.retag 경유만 (직접 SQL 금지 R8). job_lot 은 투입 LOT 추천 행
+
+hooks: hooks.py                                         # hooks.md 의 사양대로 개발1 이 만든다
+
+# ── E7 어댑터 — 전부 코어 기본 ────────────────────────────────────────────────────
+adapters:
+  collect: null        # Edge Collector 가 코어 POST /ifc/collect 로 보낸다 (태그 RPM · STIR_TIME · TEMP · HUMI · PV_TEMP)
+  erp: null            # SCM 연계 규격 미정의 → 501 미확정 (D-511)
+  printing: null       # 바코드 라벨 없음(AD2-012 "바코드를 사용하지 않고") — 브라우저 인쇄. print/work_order.html 만 덮어쓴다 (README §6)
+
+seeds:
+  - seed/codes.csv
+  - seed/processes.csv
+  - seed/equipment.csv
+  - seed/kpi_indicators.csv
+  - seed/partners_example.csv
+  - seed/items_example.csv
+  - seed/bom_example.csv
+tests: tests/
+gates: gates.yaml

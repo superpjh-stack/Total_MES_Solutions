@@ -1,0 +1,180 @@
+# 코어 매니페스트 — nav · rbac · numbering · terms 의 **유일한 출처** (spec.md §4.2 · goal.md §3.1 3).
+# 출처: 모듈 12 spec.md §2.1 · 화면 51 contracts/screen-map.md §1 · 권한 48칸 goal.md §6 · 채번 종류 interfaces.md §3 · 관계 5 spec.md §2.4 · 금지어 spec.md §12.
+# 팩은 packs/<팩>/pack.yaml 로 이것을 덮어쓴다(app/packs.py 가 코어 → 팩 순으로 병합). 여기 적힌 수(12 · 51 · 5 · 4 · 48)는 게이트의 기대값이다.
+# 이 파일은 아키텍트만 고친다 (CLAUDE.md).
+
+core_version: 0.1.0
+system_name: MES 표준플랫폼
+env_prefix: MES_
+
+# ── 채널 4 (spec.md §6.2) — device 코드 → 화면 표기 ──
+devices:
+  web: 관리자 Web
+  pop: 현장 POP
+  mobile: 모바일
+  board: 현황판
+
+# ── 모듈 12 (spec.md §2.1 순서) — code = 라우터 파일 = 권한 표의 menu_code ──
+modules:
+  - { code: bas, name: 기준정보, owner: 개발1, channels: [관리자 Web] }
+  - { code: ord, name: 수주 · 계획, owner: 개발3, channels: [관리자 Web] }
+  - { code: job, name: 작업지시, owner: 개발1, channels: [관리자 Web] }
+  - { code: mat, name: 자재, owner: 개발2, channels: [현장 POP, 관리자 Web] }
+  - { code: pop, name: 생산실적, owner: 개발2, channels: [현장 POP] }
+  - { code: qua, name: 품질, owner: 개발2, channels: [관리자 Web, 현장 POP] }
+  - { code: eqp, name: 설비, owner: 개발2, channels: [현장 POP, 관리자 Web] }
+  - { code: shp, name: 출하, owner: 개발3, channels: [현장 POP, 관리자 Web] }
+  - { code: trc, name: LOT 추적, owner: 개발3, channels: [관리자 Web, 모바일] }
+  - { code: kpi, name: 현황 · KPI, owner: 개발3, channels: [관리자 Web, 현황판, 모바일] }
+  - { code: sys, name: 시스템, owner: 개발1, channels: [관리자 Web] }
+  - { code: ifc, name: 인터페이스, owner: 개발3, channels: [관리자 Web] }
+
+# 메인(CMN-02) 카드와 좌측 메뉴의 순서 — 일하는 순서(spec.md §2.1 "메인은 모듈 카드를 일하는 순서로"). 팩 menus.order 가 덮어쓴다
+order: [ord, job, mat, pop, qua, eqp, shp, trc, kpi, bas, sys, ifc]
+
+# ── 코어 화면 51 (contracts/screen-map.md §1 그대로) ──
+screens:
+  - { id: BAS-01, name: 품목, module: bas, path: /bas/items, channels: [관리자 Web], owner: 개발1 }
+  - { id: BAS-02, name: BOM, module: bas, path: /bas/bom, channels: [관리자 Web], owner: 개발1 }
+  - { id: BAS-03, name: 공정, module: bas, path: /bas/processes, channels: [관리자 Web], owner: 개발1 }
+  - { id: BAS-04, name: 공정 측정값 정의, module: bas, path: /bas/process-params, channels: [관리자 Web], owner: 개발1 }
+  - { id: BAS-05, name: 설비, module: bas, path: /bas/equipment, channels: [관리자 Web], owner: 개발1 }
+  - { id: BAS-06, name: 거래처, module: bas, path: /bas/partners, channels: [관리자 Web], owner: 개발1 }
+  - { id: BAS-07, name: 작업자, module: bas, path: /bas/workers, channels: [관리자 Web], owner: 개발1 }
+  - { id: BAS-08, name: 불량코드, module: bas, path: /bas/defect-codes, channels: [관리자 Web], owner: 개발1 }
+  - { id: BAS-09, name: 공통코드, module: bas, path: /bas/codes, channels: [관리자 Web], owner: 개발1 }
+  - { id: ORD-01, name: 수주, module: ord, path: /ord/orders, channels: [관리자 Web], owner: 개발3 }
+  - { id: ORD-02, name: 수주 이력, module: ord, path: /ord/order-history, channels: [관리자 Web], owner: 개발3 }
+  - { id: ORD-03, name: 납기 달력, module: ord, path: /ord/delivery-calendar, channels: [관리자 Web, 모바일], owner: 개발3 }
+  - { id: ORD-04, name: 생산계획, module: ord, path: /ord/plans, channels: [관리자 Web], owner: 개발3 }
+  - { id: JOB-01, name: 작업지시, module: job, path: /job/work-orders, channels: [관리자 Web], owner: 개발1 }
+  - { id: JOB-02, name: 지시 현황, module: job, path: /job/status, channels: [관리자 Web, 모바일], owner: 개발1 }
+  - { id: JOB-03, name: 작업지시서 출력, module: job, path: /job/print, channels: [관리자 Web], owner: 개발1 }
+  - { id: MAT-01, name: 입고, module: mat, path: /mat/receipts, channels: [현장 POP, 관리자 Web], owner: 개발2 }
+  - { id: MAT-02, name: 입고검사, module: mat, path: /mat/inspections, channels: [현장 POP, 관리자 Web], owner: 개발2 }
+  - { id: MAT-03, name: 원재료 LOT, module: mat, path: /mat/lots, channels: [관리자 Web, 현장 POP], owner: 개발2 }
+  - { id: MAT-04, name: 재고, module: mat, path: /mat/stock, channels: [관리자 Web, 모바일], owner: 개발2 }
+  - { id: MAT-05, name: 소요량, module: mat, path: /mat/requirements, channels: [관리자 Web], owner: 개발2 }
+  - { id: POP-01, name: 작업 목록 (스캔), module: pop, path: /pop/work, channels: [현장 POP], owner: 개발2 }
+  - { id: POP-02, name: 작업 시작 · 종료, module: pop, path: /pop/result, channels: [현장 POP], owner: 개발2 }
+  - { id: POP-03, name: 투입 스캔, module: pop, path: /pop/inputs, channels: [현장 POP], owner: 개발2 }
+  - { id: POP-04, name: LOT 라벨, module: pop, path: /pop/labels, channels: [현장 POP], owner: 개발2 }
+  - { id: QUA-01, name: 검사 계획, module: qua, path: /qua/plans, channels: [관리자 Web], owner: 개발2 }
+  - { id: QUA-02, name: 검사 결과, module: qua, path: /qua/inspections, channels: [관리자 Web, 현장 POP], owner: 개발2 }
+  - { id: QUA-03, name: 불량 집계, module: qua, path: /qua/defect-stats, channels: [관리자 Web], owner: 개발2 }
+  - { id: QUA-04, name: 이상 · 시정, module: qua, path: /qua/issues, channels: [관리자 Web], owner: 개발2 }
+  - { id: EQP-01, name: 가동 현황, module: eqp, path: /eqp/status, channels: [현장 POP, 관리자 Web], owner: 개발2 }
+  - { id: EQP-02, name: 점검, module: eqp, path: /eqp/checks, channels: [현장 POP, 관리자 Web], owner: 개발2 }
+  - { id: EQP-03, name: 고장, module: eqp, path: /eqp/faults, channels: [현장 POP, 관리자 Web], owner: 개발2 }
+  - { id: EQP-04, name: 수집값 조회, module: eqp, path: /eqp/collect, channels: [관리자 Web], owner: 개발2 }
+  - { id: SHP-01, name: 출하 등록, module: shp, path: /shp/shipments, channels: [현장 POP, 관리자 Web], owner: 개발3 }
+  - { id: SHP-02, name: LOT 스캔 · 승인, module: shp, path: /shp/scan, channels: [현장 POP, 관리자 Web], owner: 개발3 }
+  - { id: SHP-03, name: 출하 현황, module: shp, path: /shp/status, channels: [관리자 Web, 모바일], owner: 개발3 }
+  - { id: SHP-04, name: 성적서, module: shp, path: /shp/documents, channels: [관리자 Web], owner: 개발3 }
+  - { id: TRC-01, name: 정방향 추적, module: trc, path: /trc/forward, channels: [관리자 Web, 모바일], owner: 개발3 }
+  - { id: TRC-02, name: 역방향 추적, module: trc, path: /trc/backward, channels: [관리자 Web, 모바일], owner: 개발3 }
+  - { id: TRC-03, name: 번호 검색, module: trc, path: /trc/search, channels: [관리자 Web, 모바일], owner: 개발3 }
+  - { id: KPI-01, name: 현황판, module: kpi, path: /kpi/board, channels: [현황판], owner: 개발3 }
+  - { id: KPI-02, name: 집계 (생산 · 품질 · 납기 · 설비), module: kpi, path: /kpi/summary, channels: [관리자 Web, 모바일], owner: 개발3 }
+  - { id: KPI-03, name: 지표 정의, module: kpi, path: /kpi/indicators, channels: [관리자 Web], owner: 개발3 }
+  - { id: SYS-01, name: 사용자, module: sys, path: /sys/users, channels: [관리자 Web], owner: 개발1 }
+  - { id: SYS-02, name: 역할, module: sys, path: /sys/roles, channels: [관리자 Web], owner: 개발1 }
+  - { id: SYS-03, name: 권한 표, module: sys, path: /sys/permissions, channels: [관리자 Web], owner: 개발1 }
+  - { id: SYS-04, name: 접근 로그, module: sys, path: /sys/logs, channels: [관리자 Web], owner: 개발1 }
+  - { id: SYS-05, name: 채번 규칙, module: sys, path: /sys/numbering, channels: [관리자 Web], owner: 개발1 }
+  - { id: SYS-06, name: 백업 · 이관, module: sys, path: /sys/backup, channels: [관리자 Web], owner: 개발1 }
+  - { id: IFC-01, name: 수집 수신 현황, module: ifc, path: /ifc/collect, channels: [관리자 Web], owner: 개발3 }
+  - { id: IFC-02, name: ERP 연계 로그, module: ifc, path: /ifc/erp, channels: [관리자 Web], owner: 개발3 }
+
+# ── 공통 화면 5 (screen-map.md §2) — 권한 표 밖. 로그인만 하면 연다(로그인 · 오류는 인증 없이) ──
+common:
+  - { id: CMN-01, name: 로그인, path: /login, owner: 아키텍트 → 개발1, channels: [관리자 Web, 현장 POP, 모바일, 현황판], auth: false }
+  - { id: CMN-02, name: 메인 (IA), path: /, owner: 개발1, channels: [관리자 Web, 현장 POP, 모바일, 현황판], auth: true }
+  - { id: CMN-03, name: 오류, path: /error, owner: 아키텍트, channels: [관리자 Web, 현장 POP, 모바일, 현황판], auth: false }
+  - { id: CMN-04, name: 대시보드, path: /dashboard, owner: 개발3, channels: [관리자 Web, 모바일], auth: true }
+  - { id: CMN-05, name: 팝업, path: "/popup/{kind}", owner: 아키텍트, channels: [관리자 Web, 현장 POP], auth: true,
+      kinds: [item, partner, equipment, lot, worker], probe: /popup/item }
+
+# ── 역할 4 (D-08) ──
+roles:
+  - { code: ADMIN, name: 관리자 }
+  - { code: PROD, name: 생산 }
+  - { code: QA, name: 품질 }
+  - { code: FIELD, name: 현장 }
+
+# ── 권한 표 48칸 = 모듈 12 × 역할 4 (goal.md §6 그대로 · D-13). 값: 없음 | 조회 | 입력 | {level: 입력, scopes: [범위…]}
+#    괄호 없는 `입력` 은 scopes [일반]. 괄호 조건은 **그 범위 기능만** 쓸 수 있다(일반 기능은 못 한다). 범위 이름은 function-list.md 의 `범위` 열과 같다
+permissions:
+  bas: { ADMIN: 입력, PROD: 조회, QA: 조회, FIELD: 없음 }
+  ord: { ADMIN: 입력, PROD: 입력, QA: 조회, FIELD: 조회 }
+  job: { ADMIN: 입력, PROD: 입력, QA: 조회, FIELD: 조회 }
+  mat: { ADMIN: 조회, PROD: 입력, QA: { level: 입력, scopes: [입고검사] }, FIELD: 입력 }
+  pop: { ADMIN: 조회, PROD: 입력, QA: 조회, FIELD: 입력 }
+  qua: { ADMIN: 조회, PROD: 조회, QA: 입력, FIELD: 조회 }
+  eqp: { ADMIN: 조회, PROD: 입력, QA: 조회, FIELD: 입력 }
+  shp: { ADMIN: { level: 입력, scopes: [승인] }, PROD: 입력, QA: 조회, FIELD: 입력 }
+  trc: { ADMIN: 조회, PROD: 조회, QA: 조회, FIELD: 없음 }
+  kpi: { ADMIN: { level: 입력, scopes: [지표] }, PROD: 조회, QA: 조회, FIELD: 조회 }
+  sys: { ADMIN: 입력, PROD: 없음, QA: 없음, FIELD: 없음 }
+  ifc: { ADMIN: { level: 입력, scopes: [재전송] }, PROD: 조회, QA: 없음, FIELD: 없음 }
+scope_general: 일반
+scopes: [일반, 입고검사, 승인, 지표, 재전송]
+
+# ── 채번 종류 8 (interfaces.md §3) · 기본 형식 D-10 · 접두어 D-16. sys_number_rule 시드의 출처. 팩 numbering 이 덮어쓴다 ──
+numbering:
+  WORK_ORDER: { prefix: W, date: YYMMDD-, digits: 3, label: 작업지시 번호 }
+  LOT_MATERIAL: { prefix: M, date: YYMMDD-, digits: 4, label: 원재료 LOT 번호 }
+  LOT_PRODUCT: { prefix: P, date: YYMMDD-, digits: 4, label: 생산 LOT 번호 }
+  LOT_SHIPMENT: { prefix: X, date: YYMMDD-, digits: 4, label: 출하 LOT 번호 }
+  SHIPMENT: { prefix: S, date: YYMMDD-, digits: 3, label: 출하 번호 }
+  DOCUMENT: { prefix: C, date: YYMMDD-, digits: 3, label: 성적서 번호 }
+  ORDER: { prefix: O, date: YYMMDD-, digits: 3, label: 수주 번호 }
+  PLAN: { prefix: N, date: YYMMDD-, digits: 3, label: 생산계획 번호 }
+
+# ── 계보 (spec.md §2.4 · §3.6) — LOT 종류 3 · 관계 5 · 상태 표시어. 팩은 base 로 귀속되는 종류 · 관계를 더한다 ──
+lineage:
+  lot_kinds:
+    - { kind: MATERIAL, base: MATERIAL, label: 원재료 LOT }
+    - { kind: PRODUCT, base: PRODUCT, label: 생산 LOT }
+    - { kind: SHIPMENT, base: SHIPMENT, label: 출하 LOT }
+  relations:
+    - { name: 투입, base: 투입 }
+    - { name: 생산, base: 생산 }
+    - { name: 분할, base: 분할 }
+    - { name: 합병, base: 합병 }
+    - { name: 출하, base: 출하 }
+  states: { IN_STOCK: 재고, CONSUMED: 소진, SHIPPED: 출하 }
+
+# ── 채널별 화면 (screens[].channels 에서 뽑은 것 — 팩 channels 가 통째로 대체). web 은 전 화면 ──
+channels:
+  pop: [MAT-01, MAT-02, MAT-03, POP-01, POP-02, POP-03, POP-04, QUA-02, EQP-01, EQP-02, EQP-03, SHP-01, SHP-02]
+  mobile: [ORD-03, JOB-02, MAT-04, SHP-03, TRC-01, TRC-02, TRC-03, KPI-02]
+  board: [KPI-01]
+
+# ── 용어 사전 키 — 코어 중립어 26 (spec.md §12). 팩 terms 의 키는 이 안에 있어야 한다(R6) ──
+terms_keys: [품목, BOM, 공정, 설비, 거래처, 작업자, 수주, 생산계획, 작업지시, 원재료 LOT, 생산 LOT, 출하 LOT, 실적,
+             작업 시작, 작업 종료, 투입, 측정값, 검사, 불량, 이상, 출하, 성적서, 추적, 현황판, 분할, 합병]
+
+# ── 금지어 (spec.md §12 전체) — tools/check_terms.py 가 src/mescore/ 에서 찾으면 G-C23 FAIL. 이 블록 자체는 검사에서 뺀다 ──
+forbidden_terms:
+  김치: [절임, 절임통, 염도, 숙성, 양념, 버무림, 금속검출, 소독수, 세척, 탈수, 김치, 율무, 아이스박스]
+  급식: [솥, 인분, 식수, 검식, 레시피, 조리, 취사, 볶음, 무침, 급식, 교반]
+  인쇄필름: [Roll, 롤, Job, 판사양, 아니록스, 잉크, 조색, 배합비, ΔE, 후가공, 슬리팅, splice, COA]
+  타월: [DTF, 나염, 승화, 전사, 타월, 수건, 자수]
+# spec.md §12 의 `메뉴(음식 뜻)` — 음식 뜻으로만 금지. 화면 메뉴의 `메뉴` 는 코어가 쓴다 (D-22). 검사하지 않는다
+forbidden_terms_notes:
+  급식: [메뉴(음식 뜻)]
+
+# ── 공통코드 코어 그룹 (db-schema.md bas_code) — 시드가 is_core='Y' 로 넣는다. 코드 추가는 가능, 코어 코드 삭제는 422 (F-BAS-35) ──
+code_groups:
+  ITEM_TYPE: { name: 품목 구분, codes: [제품, 반제품, 원재료, 부자재] }
+  PARTNER_TYPE: { name: 거래처 구분, codes: [고객, 공급, 외주] }
+  STOP_REASON: { name: 정지 사유, codes: [{ code: ETC, name: 기타 (예시) }] }   # D-15
+  INSP_TYPE: { name: 검사 유형, codes: [입고, 공정, 최종] }
+  JUDGEMENT: { name: 판정, codes: [합격, 불합격, 조건부] }
+  EQUIP_STATE: { name: 설비 상태, codes: [가동, 정지, 점검, 고장] }
+  ISSUE_STATUS: { name: 이상 상태, codes: [발생, 조치, 종결] }
+  DEVICE: { name: 채널, codes: [web, pop, mobile, board] }
+
+# ── 코어가 아는 수집 태그 (api-contract.md §4 · D-17). 나머지는 bas_process_param.collect_tag 선언 ──
+collect_tags: [run_state, count]

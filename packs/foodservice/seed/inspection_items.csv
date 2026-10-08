@@ -1,0 +1,14 @@
+insp_type,item_code,process_code,item_key,label,unit,value_type,standard,min_value,max_value,seq,use_yn,note
+입고,,PRC-020,appearance_ok,외관 이상 없음,,bool,외관 이상 없음,,,1,Y,"TD1 수입검사 '외관·중량 확인'. TD3-005 목업 SMP-001 검식항목 '외관/중량'"
+입고,,PRC-020,insp_weight,입고검사 중량,kg,number,박스 단위 중량 확인,,,2,Y,"TD5 MAT_RECEIPT.INSP_WEIGHT. 기준값 (미확정)"
+입고,,PRC-020,insp_photo,검사 사진경로,,text,스마트패드 촬영 — 경로 문자열만 저장,,,3,Y,"TD5 MAT_RECEIPT.INSP_PHOTO_PATH. 오브젝트 스토리지 업로드는 범위 밖"
+공정,,PRC-070,measure_temp,측정온도,℃,number,(미확정 D-08) — 공정중 검사 기준값 착수 시 확정,,,1,Y,"TD1 공정중 검사 (신규 단계)"
+공정,,PRC-070,sensory_score,관능점수,점,number,(미확정 D-505) — 척도 100점(TD3-005) vs 5점(AD2-020) 충돌,,,2,Y,
+공정,,PRC-070,foreign_yn,이물 발견,,bool,이물 없음,,,3,Y,"TD5 QUA_INSP_RESULT.FOREIGN_YN"
+최종,,PRC-080,appearance,외관,,text,(미확정) — 검식항목 '외관/맛/온도/이물' 중 외관,,,1,Y,"TD5 BAS_SAMPLE_STD.INSP_ITEM"
+최종,,PRC-080,taste,맛,,text,(미확정),,,2,Y,
+최종,,PRC-080,measure_temp,측정온도,℃,number,(미확정),,,3,Y,"TD3-020 목업 열 '측정온도(℃)'"
+최종,,PRC-080,sensory_score,관능점수,점,number,합격 점수 이상 (척도 · 합격 점수 미확정 D-505 — 목업 SMP-014 제육볶음 80.00 은 예시),,,4,Y,"TD5 BAS_SAMPLE_STD.PASS_SCORE = min_value 자리"
+최종,,PRC-080,foreign_yn,이물 발견,,bool,이물 없음,,,5,Y,
+최종,,PRC-080,insp_comment,검식 코멘트,,text,,,,6,Y,"TD5 QUA_INSP_RESULT.INSP_COMMENT"
+최종,,PRC-080,photo_path,사진경로,,text,스마트패드 촬영 — 경로 문자열만,,,7,Y,"TD5 QUA_INSP_RESULT.PHOTO_PATH"

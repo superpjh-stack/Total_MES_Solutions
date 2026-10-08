@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>설비 상태 · POP</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="pop.css">
+</head>
+<!--
+  EQP-01 설비 상태 — 현장 POP 원형 (디자이너2). F-EQP-01 GET /eqp/status · F-EQP-02 POST /eqp/status (상태 기록 — 제어 아님) · F-EQP-03 점검 등록 · F-EQP-05 고장 등록 · F-EQP-06 고장 조치. 한 화면에 설비 카드 + 상태 기록 버튼.
+  Jinja 로 옮길 때: body.ch-pop 는 templating.render 가 채널별로 붙인다 · 상단 탭은 nav.SCREENS 중 channels.pop 에 있는 화면만 ·
+  스캔칸은 ui.scan_box 하나(data-scan) · 알림은 base 의 #popup-layer + #flash-data · 문구는 전부 t() · 더미 값은 (예시).
+-->
+<body class="ch-pop" data-screen="EQP-01">
+<header class="topbar">
+  <a class="btn back" href="pop_work.html">← 뒤로</a>
+  <nav class="tabs" aria-label="작업 전환">
+    <a class="tab" href="pop_work.html">작업</a>
+    <a class="tab" href="pop_inputs.html">투입</a>
+    <a class="tab" href="pop_labels.html">라벨</a>
+    <a class="tab" href="mat_receipts_pop.html">입고</a>
+    <a class="tab" href="mat_inspections_pop.html">입고검사</a>
+    <a class="tab" href="qua_inspections_pop.html">검사</a>
+    <a class="tab" href="shp_scan.html">출하</a>
+    <a class="tab on" href="eqp_status_pop.html">설비</a>
+  </nav>
+  <div class="who" aria-label="현재 상태">
+    <span class="who-item"><small>작업자</small><b>김현장 (예시)</b></span>
+    <span class="who-item"><small>설비</small><b>EQ-001 (예시)</b></span>
+    <span class="who-item"><small>시각</small><b>10:42 (예시)</b></span>
+    <span class="who-item conn on"><small>연결</small><b>정상</b></span>
+  </div>
+</header>
+<div class="offline-bar" id="offline-bar" hidden role="alert">서비스 일시 중단 (503) — 연결이 돌아오면 스캔을 이어서 한다</div>
+<main class="pop-main">
+  <h1 class="screen-title">설비 상태 <small>EQP-01</small></h1>
+  <form class="scan" method="get" action="/eqp/status" autocomplete="off" data-demo>
+    <label for="scan">설비 바코드 스캔 (있으면) → 그 설비 카드로</label>
+    <div class="scan-row">
+      <input id="scan" type="text" name="equip_code" data-scan autofocus inputmode="text" autocomplete="off" placeholder="EQ-…">
+      <button type="submit" class="btn btn-primary">확인</button>
+    </div>
+  </form>
+  <section class="result" role="status" id="scan-result" hidden><p class="result-msg"></p></section>
+
+  <div class="notice">여기 버튼은 <b>상태 기록</b>이다 — 설비를 켜거나 끄지 않는다. 사람이 본 상태를 적는 것이고, 수집 설비의 상태는 수집값이 따로 보여 준다.</div>
+  <section class="panel">
+    <h2>설비 <small>이 공정 · 3대 (예시)</small></h2>
+    <div class="cards">
+      <article class="card">
+        <h3>EQ-001 설비 1 <span class="badge b-ok">가동</span></h3>
+        <dl class="kv"><dt>부터</dt><dd>08:10 (2시간 32분)</dd><dt>수집</dt><dd>마지막 수신 10:41 · 가동 1 · 72.4 ℃ (예시)</dd><dt>실적</dt><dd>#17 WO-20261009-001</dd></dl>
+        <form method="post" action="/eqp/status" data-demo>
+          <input type="hidden" name="equipment_id" value="1">
+          <div class="choice" style="grid-template-columns:repeat(4,1fr)">
+            <label class="ok"><input type="radio" name="state" value="가동" checked><span>가동</span></label>
+            <label class="warn"><input type="radio" name="state" value="정지"><span>정지</span></label>
+            <label><input type="radio" name="state" value="점검"><span>점검</span></label>
+            <label class="err"><input type="radio" name="state" value="고장"><span>고장</span></label>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px">상태 기록</button>
+        </form>
+        <div class="actions"><a class="btn" href="#check">점검 등록</a><a class="btn" href="#fault">고장 등록</a></div>
+      </article>
+      <article class="card">
+        <h3>EQ-002 설비 2 <span class="badge b-err">고장</span></h3>
+        <dl class="kv"><dt>부터</dt><dd>09:55 (47분)</dd><dt>증상</dt><dd>이송부 멈춤 (예시)</dd><dt>수집</dt><dd><span class="badge b-off">미수집</span> — 수집 설비 아님</dd></dl>
+        <form method="post" action="/eqp/faults/8/fix" data-demo>
+          <div class="field"><label for="fix_action">조치 내용 <span class="badge b-err">필수</span></label><input id="fix_action" type="text" name="fix_action" maxlength="200" required placeholder="무엇을 했는가"></div>
+          <button type="submit" class="btn btn-ok" style="width:100%;margin-top:8px">조치 완료 (복구 시각 = 지금)</button>
+        </form>
+      </article>
+      <article class="card">
+        <h3>EQ-003 설비 3 <span class="badge b-warn">정지</span></h3>
+        <dl class="kv"><dt>부터</dt><dd>10:12 (30분)</dd><dt>수집</dt><dd>마지막 수신 10:40 · 가동 0 (예시)</dd><dt>실적</dt><dd>—</dd></dl>
+        <form method="post" action="/eqp/status" data-demo>
+          <input type="hidden" name="equipment_id" value="3">
+          <div class="choice" style="grid-template-columns:repeat(4,1fr)">
+            <label class="ok"><input type="radio" name="state" value="가동"><span>가동</span></label>
+            <label class="warn"><input type="radio" name="state" value="정지" checked><span>정지</span></label>
+            <label><input type="radio" name="state" value="점검"><span>점검</span></label>
+            <label class="err"><input type="radio" name="state" value="고장"><span>고장</span></label>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px">상태 기록</button>
+        </form>
+        <div class="actions"><a class="btn" href="#check">점검 등록</a><a class="btn" href="#fault">고장 등록</a></div>
+      </article>
+    </div>
+    <ul class="notes"><li>상태 기록 = <code>eqp_run_log</code> 1행(이전 구간을 닫는다). 수집 설비의 「가동 1/0」은 <code>collect.latest</code> 가 보여 주는 값이고 버튼과 섞지 않는다 — 다르면 둘 다 보인다.</li><li>수집이 없는 설비는 「미수집」. 값을 지어내지 않는다.</li></ul>
+  </section>
+
+  <section class="panel" id="check">
+    <h2>점검 등록 <small>F-EQP-03</small></h2>
+    <form method="post" action="/eqp/checks" data-demo>
+      <div class="form-grid">
+        <div class="field"><span class="lbl">설비</span><div class="choice c3"><label><input type="radio" name="equipment_id" value="1" checked><span>EQ-001</span></label><label><input type="radio" name="equipment_id" value="2"><span>EQ-002</span></label><label><input type="radio" name="equipment_id" value="3"><span>EQ-003</span></label></div></div>
+        <div class="field"><label for="c_item">점검 항목 <span class="badge b-err">필수</span></label><input id="c_item" type="text" name="check_item" required placeholder="예: 급유 · 벨트 (예시)"></div>
+        <div class="field"><span class="lbl">결과 <span class="badge b-err">필수</span></span><div class="choice c2"><label class="ok"><input type="radio" name="result" value="양호" required><span>양호</span></label><label class="err"><input type="radio" name="result" value="불량"><span>불량</span></label></div></div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-big" style="margin-top:10px">점검 기록 (점검자 = 로그인 작업자 · 점검일 = 오늘)</button>
+    </form>
+  </section>
+
+  <section class="panel" id="fault">
+    <h2>고장 등록 <small>F-EQP-05 — 고장 행 + 가동 로그 「고장」 구간 시작</small></h2>
+    <form method="post" action="/eqp/faults" data-demo>
+      <div class="form-grid">
+        <div class="field"><span class="lbl">설비</span><div class="choice c3"><label><input type="radio" name="equipment_id" value="1"><span>EQ-001</span></label><label><input type="radio" name="equipment_id" value="2"><span>EQ-002</span></label><label><input type="radio" name="equipment_id" value="3" checked><span>EQ-003</span></label></div></div>
+        <div class="field"><label for="symptom">증상 <span class="badge b-err">필수</span></label><input id="symptom" type="text" name="symptom" required maxlength="200" placeholder="무엇이 어떻게"></div>
+      </div>
+      <button type="submit" class="btn btn-danger btn-big" style="margin-top:10px">고장 등록 (발생 시각 = 지금)</button>
+    </form>
+  </section>
+  <section class="demo">
+    <h3>시연 — 템플릿에 옮기지 않는다</h3>
+    <div class="actions"><button type="button" class="btn" data-demo-popup="EQ-003 을 가동으로 기록했습니다 10:42" data-title="설비 상태" data-kind="ok">상태 기록 성공</button><button type="button" class="btn" data-demo-popup="조치 내용을 넣어 주세요" data-title="고장 조치" data-fields='[{"label":"조치 내용","reason":"필수"}]'>422 조치 내용 누락</button></div>
+  </section>
+</main>
+
+<div class="popup-layer" id="popup-layer" hidden>
+  <div class="popup" role="alertdialog" aria-labelledby="popup-title" aria-describedby="popup-body">
+    <h2 id="popup-title">알림</h2>
+    <div id="popup-body"></div>
+    <p class="scan-hint">알림이 떠 있어도 바코드를 쏘면 스캔칸에 들어간다. 글자가 오면 알림은 닫힌다.</p>
+    <div class="actions"><button type="button" class="btn btn-primary" data-popup-close>확인</button></div>
+  </div>
+</div>
+<script type="application/json" id="flash-data">{}</script>
+<script src="pop.js"></script>
+</body>
+</html>

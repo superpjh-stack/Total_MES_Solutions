@@ -1,0 +1,4 @@
+process_code,process_name,seq,use_yn,attrs.process_type
+EX-PR-10,인쇄 (예시),10,Y,인쇄
+EX-PR-20,후가공 (예시),20,Y,후가공
+EX-PR-30,슬리팅 (예시),30,Y,슬리팅

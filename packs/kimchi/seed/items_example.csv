@@ -1,0 +1,7 @@
+item_code,item_name,item_type,spec,unit,use_yn,capacity_kg,pack_unit,ship_type,note
+FG-BC-010,배추김치 (예시),제품,10kg 박스,박스,Y,10,박스,홈쇼핑,TD3 001 목업 예시 — 품목 종류명만
+FG-CG-005,총각김치 (예시),제품,5kg 봉,봉,Y,5,봉,일반출고,TD3 001 목업 예시
+RM-001,배추 (예시),원재료,,kg,Y,,,,AD2-002 · AD2-014 예시
+RM-002,무 (예시),원재료,,kg,Y,,,,AD2-014 예시
+RM-003,고춧가루 (예시),원재료,,kg,Y,,,,AD2-002 예시
+RM-004,마늘 (예시),원재료,,kg,Y,,,,AD2-002 예시

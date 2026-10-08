@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ko">
+<!--
+  출하 라벨 — print/label_shipment.html 정적 원형 (디자이너3 · 2026-10-09)
+  출력물 4종의 하나(G-C14). 담당 개발3. 경로는 function-list.md 에 따로 줄이 없다 — 가설: SHP-02 LOT 스캔 · 승인 화면의 인쇄 버튼
+  → `GET /shp/shipments/{id}/label`. 아키텍트 확인 전까지 `미확정`(decisions.md 에 올린다).
+  printing.render_print(request, "label_shipment", data, screen_id="SHP-02").
+
+  크기 100×50mm (LOT 라벨과 같은 용지 — 가설). @page 는 템플릿이 찍는다.
+  데이터(가설 — 개발3 이 확정)
+    shipment_no · partner_code · partner_name · ship_date · status(등록/승인) · approved_at · approved_by
+    lot_count(출하 LOT 에 묶인 생산 LOT 수) · total_qty · unit(단위가 섞이면 비운다) · order_no(선택)
+    shipment_lot_no: lot(kind=SHIPMENT).lot_no — 첫 스캔 때 생긴다. 승인 전 · 스캔 0 건이면 `-`
+    barcode: printing.barcode_svg(shipment_no) ← 값은 출하 번호 글자 그대로. SHP-02 스캔칸에 넣으면 그 출하가 열린다.
+             (역추적용으로 출하 LOT 번호를 싣는 안도 있다 — 둘 중 하나로 확정: 미확정)
+  더미는 (예시).
+-->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>출하 라벨</title>
+<link rel="stylesheet" href="../tokens.css"><!-- 디자이너1 토큰. 개발: /static/tokens.css -->
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:var(--c-bg);color:var(--c-ink);font-family:var(--font-sans)}
+.toolbar{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;max-width:900px;margin:0 auto}
+.toolbar .cap{font-size:13px;color:var(--c-ink-2)}
+.btn{font:inherit;font-size:14px;padding:8px 18px;border:1px solid var(--c-accent);background:var(--c-accent);color:var(--c-ink-inverse);border-radius:8px;cursor:pointer}
+.review{display:flex;flex-wrap:wrap;gap:32px;padding:8px 24px 40px;max-width:900px;margin:0 auto;align-items:flex-start}
+.review figure{margin:0}
+.review figcaption{font-size:13px;color:var(--c-ink-2);margin-bottom:8px}
+
+.label{width:100mm;height:50mm;padding:3mm 4mm;background:var(--c-surface);color:var(--c-print-ink);box-shadow:0 0 0 1px var(--c-line);overflow:hidden;
+  display:grid;grid-template-columns:56mm 1fr;grid-template-rows:auto 1fr auto;column-gap:3mm;row-gap:1mm;page-break-after:always;font-size:9pt}
+.head{grid-column:1/3;display:flex;justify-content:space-between;align-items:baseline}
+.head .title{font-size:13pt;font-weight:700;letter-spacing:.08em}
+.head .status{border:1px solid var(--c-print-line);padding:0 1.5mm;font-size:8pt;font-weight:600}
+.head .status[data-status="승인"]{background:var(--c-print-ink);color:var(--c-ink-inverse)}
+.partner{font-size:15pt;font-weight:700;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;align-self:center}
+.partner small{display:block;font-size:8pt;font-weight:400;color:var(--c-print-ink);font-family:var(--font-mono)}
+.facts{display:grid;grid-template-columns:auto 1fr;column-gap:2mm;row-gap:.6mm;align-content:center;font-size:8.5pt}
+.facts dt{color:var(--c-print-ink);white-space:nowrap}
+.facts dd{margin:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.facts dd.big{font-size:14pt;line-height:1}
+.code{grid-column:1/3;display:grid;grid-template-columns:1fr auto;align-items:end;column-gap:3mm}
+.barcode{display:block;width:60mm;height:12mm}
+.barcode rect{fill:#000}
+.no{font-family:var(--font-mono);font-size:11pt;font-weight:600;letter-spacing:.06em;text-align:center;width:60mm}
+.sub{font-size:7.5pt;color:var(--c-print-ink);text-align:right;line-height:1.3}
+.sub b{font-family:var(--font-mono);font-weight:500}
+
+@media print{
+  @page{size:100mm 50mm;margin:0}
+  body{background:var(--c-print-bg)}
+  .no-print{display:none!important}
+  .review{display:block;padding:0;margin:0;max-width:none}
+  .review figure{margin:0}
+  .label{box-shadow:none}
+  .head .status[data-status="승인"]{background:var(--c-print-ink);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar no-print">
+  <span class="cap">출하 라벨 · 100×50mm. 바코드 값 = 출하 번호 글자 그대로.</span>
+  <button class="btn" type="button" onclick="window.print()">인쇄</button>
+</div>
+
+<div class="review">
+
+  <figure>
+    <figcaption>승인된 출하 — LOT 수 · 수량이 있다</figcaption>
+    <section class="label" data-shipment="SHP-20261009-0003">
+      <div class="head">
+        <span class="title">출하 라벨</span>
+        <span>출하일 <b>2026-10-09</b> &nbsp; <span class="status" data-status="승인">승인</span></span>
+      </div>
+      <div class="partner">거래처 A (예시)<small>PRT-0001 · 수주 ORD-20261007-0003</small></div>
+      <dl class="facts">
+        <dt>LOT 수</dt><dd class="big">12</dd>
+        <dt>수량</dt><dd>5,760 EA</dd>
+        <dt>출하 LOT</dt><dd style="font-family:var(--font-mono);font-weight:500">SLT-20261009-0003</dd>
+      </dl>
+      <div class="code">
+        <div>
+          <!-- printing.barcode_svg(shipment_no, height=12mm) 자리 — 더미 막대 -->
+          <svg class="barcode" viewBox="0 0 242 100" preserveAspectRatio="none" shape-rendering="crispEdges" aria-label="SHP-20261009-0003"><rect x="10" width="2" height="100"/><rect x="13" width="1" height="100"/><rect x="18" width="1" height="100"/><rect x="21" width="1" height="100"/><rect x="28" width="1" height="100"/><rect x="30" width="1" height="100"/><rect x="32" width="1" height="100"/><rect x="34" width="6" height="100"/><rect x="41" width="1" height="100"/><rect x="43" width="2" height="100"/><rect x="48" width="2" height="100"/><rect x="51" width="1" height="100"/><rect x="54" width="1" height="100"/><rect x="56" width="6" height="100"/><rect x="63" width="1" height="100"/><rect x="65" width="1" height="100"/><rect x="67" width="1" height="100"/><rect x="69" width="6" height="100"/><rect x="76" width="1" height="100"/><rect x="78" width="6" height="100"/><rect x="85" width="1" height="100"/><rect x="87" width="6" height="100"/><rect x="94" width="1" height="100"/><rect x="96" width="1" height="100"/><rect x="98" width="1" height="100"/><rect x="105" width="1" height="100"/><rect x="107" width="1" height="100"/><rect x="109" width="1" height="100"/><rect x="111" width="1" height="100"/><rect x="118" width="1" height="100"/><rect x="120" width="1" height="100"/><rect x="122" width="1" height="100"/><rect x="124" width="1" height="100"/><rect x="131" width="1" height="100"/><rect x="138" width="1" height="100"/><rect x="140" width="1" height="100"/><rect x="142" width="1" height="100"/><rect x="149" width="1" height="100"/><rect x="151" width="1" height="100"/><rect x="153" width="1" height="100"/><rect x="155" width="6" height="100"/><rect x="162" width="1" height="100"/><rect x="164" width="1" height="100"/><rect x="166" width="6" height="100"/><rect x="173" width="1" height="100"/><rect x="175" width="1" height="100"/><rect x="177" width="6" height="100"/><rect x="184" width="1" height="100"/><rect x="186" width="1" height="100"/><rect x="188" width="1" height="100"/><rect x="190" width="1" height="100"/><rect x="197" width="6" height="100"/><rect x="204" width="1" height="100"/><rect x="206" width="1" height="100"/><rect x="208" width="1" height="100"/><rect x="215" width="1" height="100"/><rect x="217" width="1" height="100"/><rect x="219" width="2" height="100"/><rect x="224" width="3" height="100"/><rect x="228" width="1" height="100"/><rect x="230" width="2" height="100"/></svg>
+          <div class="no">SHP-20261009-0003</div>
+        </div>
+        <div class="sub">승인 2026-10-09 15:10<br>관리자 (예시)</div>
+      </div>
+    </section>
+  </figure>
+
+  <figure>
+    <figcaption>등록만 된 출하 — 스캔 전. 출하 LOT · 수량은 <code>-</code>, LOT 수 0</figcaption>
+    <section class="label" data-shipment="SHP-20261009-0004">
+      <div class="head">
+        <span class="title">출하 라벨</span>
+        <span>출하일 <b>2026-10-10</b> &nbsp; <span class="status" data-status="등록">등록</span></span>
+      </div>
+      <div class="partner">거래처 C (예시)<small>PRT-0003</small></div>
+      <dl class="facts">
+        <dt>LOT 수</dt><dd class="big">0</dd>
+        <dt>수량</dt><dd>-</dd>
+        <dt>출하 LOT</dt><dd>-</dd>
+      </dl>
+      <div class="code">
+        <div>
+          <svg class="barcode" viewBox="0 0 242 100" preserveAspectRatio="none" shape-rendering="crispEdges" aria-label="SHP-20261009-0003"><rect x="10" width="2" height="100"/><rect x="13" width="1" height="100"/><rect x="18" width="1" height="100"/><rect x="21" width="1" height="100"/><rect x="28" width="1" height="100"/><rect x="30" width="1" height="100"/><rect x="32" width="1" height="100"/><rect x="34" width="6" height="100"/><rect x="41" width="1" height="100"/><rect x="43" width="2" height="100"/><rect x="48" width="2" height="100"/><rect x="51" width="1" height="100"/><rect x="54" width="1" height="100"/><rect x="56" width="6" height="100"/><rect x="63" width="1" height="100"/><rect x="65" width="1" height="100"/><rect x="67" width="1" height="100"/><rect x="69" width="6" height="100"/><rect x="76" width="1" height="100"/><rect x="78" width="6" height="100"/><rect x="85" width="1" height="100"/><rect x="87" width="6" height="100"/><rect x="94" width="1" height="100"/><rect x="96" width="1" height="100"/><rect x="98" width="1" height="100"/><rect x="105" width="1" height="100"/><rect x="107" width="1" height="100"/><rect x="109" width="1" height="100"/><rect x="111" width="1" height="100"/><rect x="118" width="1" height="100"/><rect x="120" width="1" height="100"/><rect x="122" width="1" height="100"/><rect x="124" width="1" height="100"/><rect x="131" width="1" height="100"/><rect x="138" width="1" height="100"/><rect x="140" width="1" height="100"/><rect x="142" width="1" height="100"/><rect x="149" width="1" height="100"/><rect x="151" width="1" height="100"/><rect x="153" width="1" height="100"/><rect x="155" width="6" height="100"/><rect x="162" width="1" height="100"/><rect x="164" width="1" height="100"/><rect x="166" width="6" height="100"/><rect x="173" width="1" height="100"/><rect x="175" width="1" height="100"/><rect x="177" width="6" height="100"/><rect x="184" width="1" height="100"/><rect x="186" width="1" height="100"/><rect x="188" width="1" height="100"/><rect x="190" width="1" height="100"/><rect x="197" width="6" height="100"/><rect x="204" width="1" height="100"/><rect x="206" width="1" height="100"/><rect x="208" width="1" height="100"/><rect x="215" width="1" height="100"/><rect x="217" width="1" height="100"/><rect x="219" width="2" height="100"/><rect x="224" width="3" height="100"/><rect x="228" width="1" height="100"/><rect x="230" width="2" height="100"/></svg>
+          <div class="no">SHP-20261009-0004</div>
+        </div>
+        <div class="sub">승인 전<br>&nbsp;</div>
+      </div>
+    </section>
+  </figure>
+
+</div>
+</body>
+</html>

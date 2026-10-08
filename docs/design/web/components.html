@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<!--
+  컴포넌트 카탈로그 — interfaces.md §2 의 ui 매크로 하나하나에 대응하는 마크업 · 상태. 개발자는 home/_macros.html 을 이 모양으로 만든다.
+  ─────────────────────────────────────────────────────────────────────────
+  정적 원형(디자이너1). 개발자는 웨이브 A R2 에서 이 파일을 Jinja 템플릿으로 옮긴다.
+  · `{% … %}` 를 감싼 HTML 주석이 Jinja 블록 · 식의 자리다. 주석을 풀면 템플릿이 된다.
+  · 사용자 문구는 전부 t() 를 거친다 — 원형에서는 시스템명만 자리표시(`{{ t("시스템명") }}`)로 두었다.
+  · CSS: ../tokens.css(전 채널 공용) + 이 파일의 <style>(Web 레이아웃). 외부 CDN · 웹폰트 · JS 프레임워크 0.
+  · JS: 메뉴 접기 · 계약 패널 접기 · 토스트 닫기 · 인라인 확인 닫기만. 브라우저 confirm() 은 쓰지 않는다.
+  · 메뉴 12 는 코어 모듈 순서(screen-map.md §1). 팩이 menus.hide 로 숨기고 menus.rename 로 이름을 바꾸고 menus.order 로 순서를 바꾼다 — 템플릿은 nav.MENUS 를 돈다.
+  · 우측 계약 패널은 개발 중 참고용 — 운영 설정에서 숨긴다(data-env="dev").
+-->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>컴포넌트 카탈로그 · {{ t("시스템명") }}</title>
+<!-- 토큰은 static/tokens.css 로 그대로 복사한다. 아래 <style> 은 static/web.css 또는 base.html 의 <style> 로 -->
+<link rel="stylesheet" href="../tokens.css">
+<style>
+/* ── 관리자 Web 레이아웃 (tokens.css 의 변수만 쓴다 · 색상값 직접 기입 0) ──
+   이식: 이 블록을 static/web.css 로 빼거나 base.html <style> 에 그대로 둔다. */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--c-bg);color:var(--c-ink);font:var(--fs-md)/var(--lh-base) var(--font-sans);min-height:100vh}
+a{color:var(--c-link);text-decoration:none}
+a:hover{text-decoration:underline}
+code,.code{font:var(--fs-sm)/1.3 var(--font-mono);background:var(--c-surface-2);padding:1px 4px;border-radius:var(--r-sm);color:var(--c-ink)}
+small{font-size:var(--fs-xs);color:var(--c-ink-2);font-weight:400}
+b{font-weight:600}
+[hidden]{display:none !important}
+:focus-visible{outline:none;box-shadow:var(--focus-ring)}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.mono{font-family:var(--font-mono)}
+.muted{color:var(--c-ink-2)}
+.inline{display:inline}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* 헤더 */
+.hdr{position:sticky;top:0;z-index:var(--z-hdr);height:var(--h-hdr);display:flex;align-items:center;justify-content:space-between;gap:var(--sp-4);
+  padding:0 var(--sp-4);background:var(--c-head);color:var(--c-head-ink)}
+.hdr-l,.hdr-r{display:flex;align-items:center;gap:var(--sp-3);min-width:0}
+.brand{color:var(--c-head-ink);font-weight:700;font-size:var(--fs-lg);white-space:nowrap}
+.brand:hover{text-decoration:none}
+.crumb{color:var(--c-head-ink-2);font-size:var(--fs-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crumb strong{color:var(--c-head-ink);font-weight:600}
+.crumb code{background:rgba(255,255,255,.12);color:var(--c-head-ink-2)}
+.hdr-r{font-size:var(--fs-sm);color:var(--c-head-ink-2)}
+.hdr-r .meta b{color:var(--c-head-ink);font-weight:600}
+.hdr-r .user em{font-style:normal;color:var(--c-head-ink);background:rgba(255,255,255,.12);padding:0 6px;border-radius:var(--r-sm);margin-left:4px}
+.hdr-btn{font:inherit;font-size:var(--fs-sm);color:var(--c-head-ink);background:transparent;border:var(--bw) solid rgba(255,255,255,.25);border-radius:var(--r-md);padding:3px 8px;cursor:pointer;line-height:1.2}
+.hdr-btn:hover{background:rgba(255,255,255,.1)}
+.hdr-btn[aria-expanded="false"]{opacity:.6}
+.btn-ghost{background:transparent;border-color:rgba(255,255,255,.3);color:var(--c-head-ink)}
+.btn-ghost:hover{background:rgba(255,255,255,.1)}
+
+/* 3단 셸: 메뉴 / 본문 / 계약 패널. 1280 기준, 1024 에서는 메뉴가 좁아지고 계약 패널이 접힌다 */
+.shell{display:grid;grid-template-columns:var(--w-side) minmax(0,1fr) var(--w-desc);gap:var(--sp-3);padding:var(--sp-3);align-items:start}
+body.side-collapsed .shell{grid-template-columns:0 minmax(0,1fr) var(--w-desc)}
+body.side-collapsed .side{display:none}
+body.desc-closed .shell{grid-template-columns:var(--w-side) minmax(0,1fr) 0}
+body.desc-closed .desc{display:none}
+body.side-collapsed.desc-closed .shell{grid-template-columns:0 minmax(0,1fr) 0}
+@media (max-width:1180px){
+  .shell{grid-template-columns:var(--w-side-min) minmax(0,1fr) 0}
+  .desc{display:none}
+  body.desc-open .desc{display:block;position:fixed;right:var(--sp-3);top:calc(var(--h-hdr) + var(--sp-3));width:var(--w-desc);max-height:calc(100vh - var(--h-hdr) - var(--sp-5));overflow:auto;box-shadow:var(--sh-2);z-index:var(--z-side)}
+}
+@media (max-width:860px){
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .side{position:static;max-height:none}
+  .main{order:-1}
+}
+
+/* 좌측 메뉴 */
+.side{position:sticky;top:calc(var(--h-hdr) + var(--sp-3));max-height:calc(100vh - var(--h-hdr) - var(--sp-5));overflow:auto;
+  background:var(--c-surface);border:var(--bw) solid var(--c-line);border-radius:var(--r-md);padding:var(--sp-1)}
+.mg{margin-bottom:1px}
+.mg-h{display:flex;width:100%;justify-content:space-between;align-items:center;gap:var(--sp-2);padding:6px 8px;
+  font:inherit;font-size:var(--fs-sm);font-weight:700;color:var(--c-ink);background:transparent;border:0;border-radius:var(--r-md);cursor:pointer;text-align:left}
+.mg-h:hover{background:var(--c-surface-2)}
+.mg-h small{background:var(--c-surface-2);color:var(--c-ink-2);border-radius:9px;padding:0 6px;font-size:var(--fs-xs);line-height:16px}
+.mg.on>.mg-h{background:var(--c-accent);color:var(--c-accent-ink)}
+.mg.on>.mg-h small{background:rgba(255,255,255,.25);color:var(--c-accent-ink)}
+.mg>ul{list-style:none;margin:0 0 var(--sp-1);padding:2px 0 0 var(--sp-2);display:none}
+.mg.open>ul{display:block}
+.mg li a{display:flex;align-items:center;gap:6px;padding:4px 8px;font-size:var(--fs-sm);color:var(--c-ink-2);border-radius:var(--r-md);border-left:var(--bw-strong) solid transparent}
+.mg li a:hover{background:var(--c-surface-2);color:var(--c-ink);text-decoration:none}
+.mg li a.cur{background:var(--c-accent-tint);color:var(--c-accent);font-weight:700;border-left-color:var(--c-accent)}
+.mg li a .ch{font-style:normal;font-size:10px;color:var(--c-ink-3);border:var(--bw) solid var(--c-line);border-radius:var(--r-sm);padding:0 3px;line-height:14px}
+
+/* 본문 · 패널 */
+.main{display:flex;flex-direction:column;gap:var(--sp-3);min-width:0}
+.panel{background:var(--c-surface);border:var(--bw) solid var(--c-line);border-radius:var(--r-md);padding:var(--sp-3) var(--sp-4)}
+.panel>h2,.panel>.ph{margin:0 0 var(--sp-2);font-size:var(--fs-md);font-weight:700;color:var(--c-ink);display:flex;align-items:baseline;gap:var(--sp-2);flex-wrap:wrap}
+.panel>h2 small{font-weight:400}
+.panel>h2 .right{margin-left:auto;display:flex;gap:var(--sp-2);align-items:center}
+.panel h3{margin:var(--sp-3) 0 var(--sp-2);font-size:var(--fs-sm);color:var(--c-ink-2);text-transform:none;letter-spacing:0}
+.panel.sub{border-style:dashed}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--sp-3)}
+@media (max-width:1100px){.two{grid-template-columns:minmax(0,1fr)}}
+
+/* 조회 조건 · 입력 폼 */
+.search-form,.form-grid{display:flex;flex-wrap:wrap;gap:var(--sp-2) var(--sp-4);align-items:flex-end}
+.form-grid.cols{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));align-items:start}
+.form-grid .wide{grid-column:span 2}
+.form-grid .full{grid-column:1/-1}
+.f{display:flex;flex-direction:column;gap:3px;font-size:var(--fs-sm);color:var(--c-ink-2);min-width:120px}
+.f>span{display:flex;justify-content:space-between;gap:var(--sp-2);line-height:var(--lh-tight)}
+.f .req{color:var(--c-err);font-style:normal;font-weight:700}
+.f .hint{color:var(--c-ink-3);font-size:var(--fs-xs);font-weight:400}
+input,select,textarea{font:inherit;color:var(--c-ink);background:var(--c-surface);border:var(--bw) solid var(--c-line);border-radius:var(--r-md);padding:4px 8px;min-height:30px;min-width:0}
+input[type="date"],input[type="number"]{font-variant-numeric:tabular-nums}
+input[type="checkbox"],input[type="radio"]{min-height:0;width:15px;height:15px;margin:0;accent-color:var(--c-accent)}
+textarea{min-height:64px;resize:vertical}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--c-accent);box-shadow:var(--focus-ring)}
+input[readonly],input:disabled,select:disabled,textarea[readonly]{background:var(--c-surface-2);color:var(--c-ink-2);cursor:default}
+input::placeholder{color:var(--c-ink-3)}
+.f.err input,.f.err select,.f.err textarea{border-color:var(--c-err);background:var(--c-err-bg)}
+.f .reason{color:var(--c-err);font-size:var(--fs-xs);font-weight:600}
+.f.check{flex-direction:row;align-items:center;gap:6px;min-height:30px;color:var(--c-ink)}
+.f.inline-unit{position:relative}
+.f .unit{position:absolute;right:8px;bottom:6px;font-size:var(--fs-xs);color:var(--c-ink-3)}
+.f.w-sm{min-width:90px;max-width:110px}
+.f.w-md{min-width:160px}
+.f.w-lg{min-width:260px;flex:1 1 260px}
+fieldset{border:var(--bw) solid var(--c-line);border-radius:var(--r-md);margin:0;padding:var(--sp-2) var(--sp-3);min-width:0}
+legend{font-size:var(--fs-xs);color:var(--c-ink-2);padding:0 var(--sp-1)}
+/* 팩 속성 폼 (ui.attrs_fields) — 코어 칸과 구분선으로 나뉜다. 팩 선언이 없으면 통째로 안 그려진다 */
+.attrs{grid-column:1/-1;border:0;border-top:var(--bw) dashed var(--c-line-strong);border-radius:0;padding:var(--sp-2) 0 0;margin-top:var(--sp-1)}
+.attrs>legend{padding:0 var(--sp-2) 0 0;color:var(--c-undecided);font-weight:700}
+.attrs .form-grid{margin-top:var(--sp-1)}
+.form-actions{display:flex;gap:var(--sp-2);align-items:center;flex-wrap:wrap;margin-top:var(--sp-3)}
+.form-actions .why{font-size:var(--fs-xs);color:var(--c-ink-2)}
+dl.kv{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:3px var(--sp-3);margin:0;font-size:var(--fs-sm)}
+dl.kv dt{color:var(--c-ink-2)}
+dl.kv dd{margin:0}
+
+/* 표 (ui.grid) */
+.grid-panel{overflow-x:auto}
+table.grid{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}
+table.grid th,table.grid td{padding:5px 8px;border-bottom:var(--bw) solid var(--c-line);text-align:left;white-space:nowrap;vertical-align:middle}
+table.grid thead th{background:var(--c-surface-2);color:var(--c-ink);font-weight:700;border-bottom:var(--bw) solid var(--c-line-strong);position:sticky;top:0}
+table.grid thead th.num,table.grid td.num{text-align:right;font-variant-numeric:tabular-nums}
+table.grid thead th[aria-sort]{cursor:pointer;padding-right:18px;position:relative}
+table.grid thead th[aria-sort]::after{content:"\25B4\25BE";position:absolute;right:5px;top:5px;font-size:9px;letter-spacing:-2px;color:var(--c-ink-3);line-height:1}
+table.grid thead th[aria-sort="ascending"]::after{content:"\25B4";color:var(--c-accent);font-size:11px;letter-spacing:0}
+table.grid thead th[aria-sort="descending"]::after{content:"\25BE";color:var(--c-accent);font-size:11px;letter-spacing:0}
+table.grid tbody tr:hover{background:var(--c-surface-2)}
+table.grid tbody tr.sel{background:var(--c-accent-tint)}
+table.grid tbody tr.sel td:first-child{box-shadow:inset var(--bw-strong) 0 0 var(--c-accent)}
+table.grid tbody tr.dim td{color:var(--c-ink-3)}
+table.grid td.wrap{white-space:normal;min-width:200px}
+table.grid td.act{white-space:nowrap}
+table.grid td.act .btn,table.grid td.act details{display:inline-block;vertical-align:middle;margin-right:2px}
+table.grid td.empty{color:var(--c-empty);text-align:center;padding:var(--sp-5) var(--sp-2)}
+table.grid td.empty b{display:block;font-size:var(--fs-md);color:var(--c-ink-2);margin-bottom:2px}
+table.grid tfoot td{background:var(--c-surface-2);font-weight:700;border-top:var(--bw) solid var(--c-line-strong)}
+table.grid.compact th,table.grid.compact td{padding:3px 6px}
+table.grid tr.group td{background:var(--c-surface-3);font-weight:700;color:var(--c-ink-2)}
+table.grid tr.dtl td{background:var(--c-surface);color:var(--c-ink-2);padding-left:var(--sp-5);border-bottom-style:dashed}
+table.grid tr.dtl td:first-child::before{content:"\2514";margin-right:6px;color:var(--c-ink-3)}
+.pager{display:flex;gap:var(--sp-1);align-items:center;margin-top:var(--sp-2);font-size:var(--sp-3);font-size:var(--fs-sm);color:var(--c-ink-2);flex-wrap:wrap}
+.pager .pg{min-width:28px;padding:2px 6px;text-align:center;border:var(--bw) solid var(--c-line);border-radius:var(--r-md);background:var(--c-surface);color:var(--c-ink);font:inherit;cursor:pointer}
+.pager .pg[aria-current]{background:var(--c-accent);border-color:var(--c-accent);color:var(--c-accent-ink);font-weight:700}
+.pager .pg:disabled{opacity:.4;cursor:default}
+.pager .sum{margin-left:auto}
+.bar{display:inline-block;height:8px;background:var(--c-surface-3);border-radius:var(--r-sm);vertical-align:middle;width:72px;position:relative;overflow:hidden}
+.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--c-accent)}
+.bar.ok i{background:var(--c-ok)}.bar.warn i{background:var(--c-warn)}.bar.err i{background:var(--c-err)}
+
+/* 버튼 */
+.btn{font:inherit;font-size:var(--fs-md);line-height:1.2;padding:5px 12px;min-height:30px;border:var(--bw) solid var(--c-line-strong);border-radius:var(--r-md);
+  background:var(--c-surface);color:var(--c-ink);cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{background:var(--c-surface-2);text-decoration:none}
+.btn:disabled,.btn[aria-disabled="true"]{opacity:.45;cursor:not-allowed}
+.btn-sm{font-size:var(--fs-sm);padding:2px 8px;min-height:24px}
+.btn-primary{background:var(--c-accent);border-color:var(--c-accent);color:var(--c-accent-ink);font-weight:600}
+.btn-primary:hover{background:var(--c-accent-hover);border-color:var(--c-accent-hover)}
+.btn-err{color:var(--c-err);border-color:var(--c-err-line)}
+.btn-err:hover{background:var(--c-err-bg)}
+.btn-ok{color:var(--c-ok);border-color:var(--c-ok-line)}
+.btn-ok:hover{background:var(--c-ok-bg)}
+.btn-warn{color:var(--c-warn);border-color:var(--c-warn-line)}
+.btn-warn:hover{background:var(--c-warn-bg)}
+.actions{display:flex;gap:var(--sp-2);align-items:center;flex-wrap:wrap;justify-content:flex-end;background:var(--c-surface);border:var(--bw) solid var(--c-line);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-4)}
+.actions .why{font-size:var(--fs-xs);color:var(--c-ink-2);margin-right:auto}
+.btn-row{display:flex;gap:var(--sp-2);flex-wrap:wrap;align-items:center}
+
+/* 인라인 확인 (브라우저 confirm 금지) — <details> 하나로 끝난다. summary 가 첫 버튼, 펼치면 확인 버튼이 옆에 나온다 */
+details.confirm{display:inline-block;position:relative}
+details.confirm>summary{list-style:none;display:inline-flex}
+details.confirm>summary::-webkit-details-marker{display:none}
+details.confirm[open]>summary{background:var(--c-surface-3)}
+.confirm-box{position:absolute;z-index:var(--z-side);top:calc(100% + 4px);right:0;background:var(--c-surface);border:var(--bw) solid var(--c-err-line);border-radius:var(--r-md);
+  box-shadow:var(--sh-2);padding:var(--sp-2) var(--sp-3);display:flex;gap:var(--sp-2);align-items:center;white-space:nowrap;font-size:var(--fs-sm)}
+.confirm-box.static{position:static;box-shadow:none;margin-top:var(--sp-2)}
+.confirm-box form{display:inline}
+
+/* 배지 — 색 + 글자. 의미는 tokens.css §8~§11 에 고정 */
+.badge{display:inline-block;font-size:var(--fs-xs);font-weight:600;line-height:16px;padding:0 6px;border-radius:var(--r-sm);border:var(--bw) solid transparent;white-space:nowrap;vertical-align:middle}
+.badge-ok{color:var(--c-ok);background:var(--c-ok-bg);border-color:var(--c-ok-line)}
+.badge-warn{color:var(--c-warn);background:var(--c-warn-bg);border-color:var(--c-warn-line)}
+.badge-err{color:var(--c-err);background:var(--c-err-bg);border-color:var(--c-err-line)}
+.badge-info{color:var(--c-info);background:var(--c-info-bg);border-color:var(--c-info-line)}
+.badge-neutral{color:var(--c-neutral);background:var(--c-neutral-bg);border-color:var(--c-neutral-line)}
+.badge-stock{color:var(--c-lot-stock);background:var(--c-lot-stock-bg);border-color:var(--c-lot-stock)}
+.badge-consumed{color:var(--c-lot-consumed);background:var(--c-lot-consumed-bg);border-color:var(--c-neutral-line)}
+.badge-shipped{color:var(--c-lot-shipped);background:var(--c-lot-shipped-bg);border-color:var(--c-lot-shipped)}
+.badge-pass{color:var(--c-pass);background:var(--c-pass-bg);border-color:var(--c-ok-line)}
+.badge-fail{color:var(--c-fail);background:var(--c-fail-bg);border-color:var(--c-err-line)}
+.badge-cond{color:var(--c-cond);background:var(--c-cond-bg);border-color:var(--c-warn-line)}
+.badge-none{color:var(--c-none);background:var(--c-none-bg);border-color:var(--c-neutral-line);border-style:dashed}
+.badge-run{color:var(--c-eq-run);background:var(--c-eq-run-bg);border-color:var(--c-ok-line)}
+.badge-stop{color:var(--c-eq-stop);background:var(--c-eq-stop-bg);border-color:var(--c-neutral-line)}
+.badge-check{color:var(--c-eq-check);background:var(--c-eq-check-bg);border-color:var(--c-info-line)}
+.badge-fault{color:var(--c-eq-fault);background:var(--c-eq-fault-bg);border-color:var(--c-err-line)}
+.badge-kind{color:var(--c-ink-2);background:var(--c-surface-2);border-color:var(--c-line);font-family:var(--font-mono);font-weight:400}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:currentColor;margin-right:4px;vertical-align:1px}
+.tag{display:inline-block;font-size:10px;font-weight:700;color:var(--c-undecided);background:var(--c-undecided-bg);border:var(--bw) solid var(--c-undecided-line);border-radius:var(--r-sm);padding:0 5px;line-height:15px;vertical-align:middle}
+.undecided{display:inline-block;color:var(--c-undecided);background:var(--c-undecided-bg);border:var(--bw) solid var(--c-undecided-line);border-radius:var(--r-sm);padding:0 6px;font-size:var(--fs-xs);font-weight:600;line-height:16px;white-space:nowrap}
+.empty-inline{color:var(--c-empty);font-size:var(--fs-sm);margin:0;padding:var(--sp-2) 0}
+.deviated{color:var(--c-deviated);background:var(--c-deviated-bg);font-weight:700;padding:0 4px;border-radius:var(--r-sm)}
+.notes{margin:var(--sp-2) 0 0;padding-left:var(--sp-4);font-size:var(--fs-xs);color:var(--c-ink-2)}
+.notes li{margin-bottom:2px}
+
+/* 탭 (KPI 집계의 kind 전환 등 — 링크이지 JS 탭이 아니다) */
+.tabs{display:flex;gap:var(--sp-1);border-bottom:var(--bw) solid var(--c-line);margin:0 0 var(--sp-3);flex-wrap:wrap}
+.tabs a{padding:6px 12px;font-size:var(--fs-md);color:var(--c-ink-2);border-bottom:var(--bw-strong) solid transparent;margin-bottom:-1px}
+.tabs a:hover{color:var(--c-ink);text-decoration:none;background:var(--c-surface-2)}
+.tabs a[aria-current]{color:var(--c-accent);font-weight:700;border-bottom-color:var(--c-accent)}
+
+/* 알림 — 303 뒤 토스트 한 번 · 422 항목별 사유 목록 */
+.toast{position:fixed;top:calc(var(--h-hdr) + var(--sp-3));right:var(--sp-4);z-index:var(--z-toast);display:flex;align-items:center;gap:var(--sp-2);
+  background:var(--c-surface);color:var(--c-ink);border:var(--bw) solid var(--c-line);border-left:4px solid var(--c-ok);border-radius:var(--r-lg);box-shadow:var(--sh-2);padding:var(--sp-2) var(--sp-3);max-width:420px;font-size:var(--fs-md)}
+.toast strong{color:var(--c-ok)}
+.toast.warn{border-left-color:var(--c-warn)}.toast.warn strong{color:var(--c-warn)}
+.toast.err{border-left-color:var(--c-err)}.toast.err strong{color:var(--c-err)}
+.toast-x{margin-left:auto;font:inherit;font-size:var(--fs-lg);line-height:1;background:transparent;border:0;color:var(--c-ink-2);cursor:pointer;padding:0 2px}
+.alert{border:var(--bw) solid var(--c-err-line);border-left-width:4px;background:var(--c-err-bg);color:var(--c-ink);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);font-size:var(--fs-md)}
+.alert>strong{color:var(--c-err)}
+.alert.warn{border-color:var(--c-warn-line);background:var(--c-warn-bg)}.alert.warn>strong{color:var(--c-warn)}
+.alert.info{border-color:var(--c-info-line);background:var(--c-info-bg)}.alert.info>strong{color:var(--c-info)}
+.alert ul.fields{margin:var(--sp-1) 0 0;padding-left:var(--sp-4);font-size:var(--fs-sm)}
+.alert ul.fields li b{font-weight:600}
+.alert ul.fields li code{background:rgba(0,0,0,.06)}
+.alert .alert-x{float:right;font:inherit;font-size:var(--fs-lg);line-height:1;background:transparent;border:0;color:var(--c-ink-2);cursor:pointer}
+
+/* 계보 트리 (TRC) — 깊이 · 분기가 커져도 읽히게: 들여쓰기 + 연결선 + 가지별 접기 */
+.tree,.tree ul{list-style:none;margin:0;padding:0}
+.tree ul{padding-left:var(--sp-5);border-left:var(--bw) solid var(--c-line);margin-left:9px}
+.tree li{position:relative;padding:2px 0}
+.tree ul>li::before{content:"";position:absolute;left:calc(-1 * var(--sp-5));top:15px;width:var(--sp-4);border-top:var(--bw) solid var(--c-line)}
+.tree details>summary{list-style:none;cursor:pointer;display:inline-block}
+.tree details>summary::-webkit-details-marker{display:none}
+.node{display:inline-flex;align-items:center;gap:var(--sp-2);padding:3px 8px;border:var(--bw) solid var(--c-line);border-radius:var(--r-md);background:var(--c-surface);font-size:var(--fs-sm);max-width:100%;flex-wrap:wrap}
+.node.start{border-color:var(--c-accent);background:var(--c-accent-tint);box-shadow:inset var(--bw-strong) 0 0 var(--c-accent)}
+.node .no{font-family:var(--font-mono);font-weight:700}
+.node .qty{font-variant-numeric:tabular-nums;color:var(--c-ink-2)}
+.node .rel{font-size:var(--fs-xs);color:var(--c-ink-3)}
+.node .links{display:inline-flex;gap:4px;margin-left:var(--sp-1)}
+.node .links a{font-size:var(--fs-xs);color:var(--c-link);border:var(--bw) solid var(--c-line);border-radius:var(--r-sm);padding:0 4px;line-height:15px}
+.node .more{font-size:var(--fs-xs);color:var(--c-ink-2);cursor:pointer}
+.tree details:not([open])>summary .node::after{content:"\25B8 가지 펴기";font-size:var(--fs-xs);color:var(--c-accent);margin-left:4px}
+
+/* 집계 타일 (KPI · 대시보드) — 표의 보조. 숫자는 tabular */
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:var(--sp-2);margin-bottom:var(--sp-3)}
+.tile{border:var(--bw) solid var(--c-line);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);background:var(--c-surface)}
+.tile .l{font-size:var(--fs-xs);color:var(--c-ink-2)}
+.tile .v{font-size:var(--fs-xl);font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2}
+.tile .v small{font-size:var(--fs-sm);font-weight:400;margin-left:2px}
+.tile .s{font-size:var(--fs-xs);color:var(--c-ink-2)}
+.tile.warn{border-color:var(--c-warn-line);background:var(--c-warn-bg)}
+.tile.err{border-color:var(--c-err-line);background:var(--c-err-bg)}
+
+/* 우측 계약 패널 */
+.desc{position:sticky;top:calc(var(--h-hdr) + var(--sp-3));background:var(--c-surface);border:var(--bw) solid var(--c-line);border-radius:var(--r-md);padding:var(--sp-3) var(--sp-4);font-size:var(--fs-sm)}
+.desc h2{margin:0 0 var(--sp-2);font-size:var(--fs-md);display:flex;align-items:center;gap:var(--sp-2)}
+.desc-b{margin-bottom:var(--sp-3)}
+.desc-b h3{margin:0 0 var(--sp-1);font-size:var(--fs-sm);color:var(--c-accent);display:flex;justify-content:space-between;gap:var(--sp-2);align-items:baseline}
+.desc-b ul{margin:0;padding-left:var(--sp-4);color:var(--c-ink-2)}
+.desc-b li{margin-bottom:3px}
+.desc-b li.off{opacity:.5}
+.desc-b p{margin:0;color:var(--c-ink-2)}
+
+/* 바코드 자리 (printing.barcode_svg — Code128 인라인 SVG) */
+.barcode{display:inline-block;vertical-align:middle;line-height:0}
+.barcode svg{display:block;height:36px;width:auto}
+.barcode+.bc-text{display:block;font-family:var(--font-mono);font-size:var(--fs-xs);text-align:center;letter-spacing:1px}
+
+/* 푸터 */
+.ftr{padding:var(--sp-3) var(--sp-4);font-size:var(--fs-xs);color:var(--c-ink-2);text-align:center}
+
+/* 인쇄 — 크롬은 빼고 본문만 */
+@media print{
+  .hdr,.side,.desc,.ftr,.actions,.toast,.no-print,.form-actions{display:none !important}
+  .shell{display:block;padding:0}
+  .panel{border:0;padding:0;margin-bottom:var(--sp-3)}
+  table.grid th,table.grid td{white-space:normal}
+}
+
+</style>
+<!-- {% block head %} 화면 전용 스타일 — 전역으로 올리지 않는다 -->
+<style>
+.cmp-desc{margin:0 0 var(--sp-3);font-size:var(--fs-sm);color:var(--c-ink-2)}
+.toc{display:flex;flex-wrap:wrap;gap:var(--sp-1) var(--sp-2);font-size:var(--fs-sm)}
+.toc a{padding:2px 8px;border:var(--bw) solid var(--c-line);border-radius:var(--r-md)}
+.cmp h3{margin-top:var(--sp-4)}
+.badge-table th{width:180px;color:var(--c-ink-2);font-weight:600;text-align:left}
+.badge-table td .badge{margin-right:6px}
+.pack-col{box-shadow:inset 0 2px 0 var(--c-undecided-line)}
+</style>
+<!-- {% endblock %} -->
+</head>
+<!-- 채널: body.ch-web | ch-pop | ch-mobile | ch-board (templating.render 가 device 로 붙인다). 이 원형은 Web -->
+<body class="ch-web" data-device="web" data-screen="">
+
+<!-- ── 상단 헤더: 시스템명 · 현재 위치 · 사용자 · 역할 · 채널 · 로그아웃 ── -->
+<header class="hdr">
+  <div class="hdr-l">
+    <button type="button" class="hdr-btn" id="side-toggle" aria-controls="side-menu" aria-expanded="true" title="메뉴 접기/펴기">&#9776;</button>
+    <a class="brand" href="../web/base.html">{{ t("시스템명") }}</a>
+    <span class="crumb"><strong>컴포넌트 카탈로그</strong></span>
+  </div>
+  <div class="hdr-r">
+    <span class="meta">갱신 <b>2026-10-09 14:05</b></span>
+    <span class="meta">채널 <b>Web</b></span>
+    <span class="meta user">홍길동 <em>관리자</em></span>
+    <button type="button" class="hdr-btn" id="desc-toggle" aria-controls="desc-panel" aria-expanded="true" title="계약 패널 접기/펴기">계약</button>
+    <!-- {% if user %} -->
+    <form method="post" action="/logout" class="inline"><button type="submit" class="btn btn-ghost btn-sm">로그아웃</button></form>
+    <!-- {% endif %} -->
+  </div>
+</header>
+
+<div class="shell">
+  <!-- ── 좌측 메뉴 12 (nav.MENUS · 현재 화면 .cur / 현재 메뉴 .on) ── -->
+  <nav class="side" id="side-menu" aria-label="메뉴">
+    <div class="mg" data-menu="bas">
+      <button type="button" class="mg-h" aria-expanded="false"><span>기준정보</span><small>9</small></button>
+      <ul>
+        <li><a href="screens/bas_items.html" data-screen="BAS-01">품목</a></li>
+        <li><a href="/bas/bom" data-screen="BAS-02">BOM</a></li>
+        <li><a href="/bas/processes" data-screen="BAS-03">공정</a></li>
+        <li><a href="/bas/process-params" data-screen="BAS-04">공정 측정값 정의</a></li>
+        <li><a href="/bas/equipment" data-screen="BAS-05">설비</a></li>
+        <li><a href="/bas/partners" data-screen="BAS-06">거래처</a></li>
+        <li><a href="/bas/workers" data-screen="BAS-07">작업자</a></li>
+        <li><a href="/bas/defect-codes" data-screen="BAS-08">불량코드</a></li>
+        <li><a href="/bas/codes" data-screen="BAS-09">공통코드</a></li>
+      </ul>
+    </div>
+    <div class="mg" data-menu="ord">
+      <button type="button" class="mg-h" aria-expanded="false"><span>수주 · 계획</span><small>4</small></button>
+      <ul>
+        <li><a href="screens/ord_orders.html" data-screen="ORD-01">수주</a></li>
+        <li><a href="/ord/order-history" data-screen="ORD-02">수주 이력</a></li>
+        <li><a href="/ord/delivery-calendar" data-screen="ORD-03">납기 달력</a></li>
+        <li><a href="/ord/plans" data-screen="ORD-04">생산계획</a></li>
+      </ul>
+    </div>
+    <div class="mg" data-menu="job">
+      <button type="button" class="mg-h" aria-expanded="false"><span>작업지시</span><small>3</small></button>
+      <ul>
+        <li><a href="screens/job_work_orders.html" data-screen="JOB-01">작업지시</a></li>
+        <li><a href="/job/status" data-screen="JOB-02">지시 현황</a></li>
+        <li><a href="/job/print" data-screen="JOB-03">작업지시서 출력</a></li>
+      </ul>
+    </div>
+    <div class="mg" data-menu="mat">
+      <button type="button" class="mg-h" aria-expanded="false"><span>자재</span><small>5</small></button>
+      <ul>
+        <li><a href="screens/mat_receipts.html" data-screen="MAT-01">입고</a></li>
+        <li><a href="/mat/inspections" data-screen="MAT-02">입고검사</a></li>
+        <li><a href="/mat/lots" data-screen="MAT-03">원재료 LOT</a></li>
+        <li><a href="/mat/stock" data-screen="MAT-04">재고</a></li>
+        <li><a href="/mat/requirements" data-screen="MAT-05">소요량</a></li>
+      </ul>
+    </div>
+    <div class="mg" data-menu="pop">
+      <button type="button" class="mg-h" aria-expanded="false"><span>생산실적</span><small>4</small></button>
+      <ul>
+        <li><a href="/pop/work" data-screen="POP-01">작업 목록 (스캔) <i class="ch" title="현장 POP 채널 전용 — Web 에서 열면 403">POP</i></a></li>
+        <li><a href="screens/pop_result_web.html" data-screen="POP-02">작업 시작 · 종료 <i class="ch" title="현장 POP 채널 전용 — Web 에서 열면 403">POP</i></a></li>
+        <li><a href="/pop/inputs" data-screen="POP-03">투입 스캔 <i class="ch" title="현장 POP 채널 전용 — Web 에서 열면 403">POP</i></a></li>
+        <li><a href="/pop/labels" data-screen="POP-04">LOT 라벨 <i class="ch" title="현장 POP 채널 전용 — Web 에서 열면 403">POP</i></a></li>
+      </ul>
+    </div>
+    <div class="mg" data-menu="qua">
+      <button type="button" class="mg-h" aria-expanded="false"><span>품질</span><small>4</small></button>
+      <ul>
+        <li><a href="/qua/plans" data-screen="QUA-01">검사 계획</a></li>
+        <li><a href="screens/qua_inspections.html" data-screen="QUA-02">검사 결과</a></li>
+        <li><a href="/qua/defect-stats" data-screen="QUA-03">불량 집계</a></li>
+        <li><a href="/qua/issues" data-screen="QUA-04">이상 · 시정</a></li>
+      </ul>
+    </div>
+    <div class="mg" data-menu="eqp">
+      <button type="button" class="mg-h" aria-expanded="false"><span>설비</span><small>4</small></button>
+      <ul>
+        <li><a href="screens/eqp_status.html" data-screen="EQP-01">가동 현황</a></li>
+        <li><a href="/eqp/checks" data-screen="EQP-02">점검</a></li>
+        <li><a href="/eqp/faults" data-screen="EQP-03">고장</a></li>
+        <li><a href="/eqp/collect" data-screen="EQP-04">수집값 조회</a></li>
+      </ul>
+    </div>
+    <div class="mg" data-menu="shp">
+      <button type="button" class="mg-h" aria-expanded="false"><span>출하</span><small>4</small></button>
+      <ul>
+        <li><a href="screens/shp_shipments.html" data-screen="SHP-01">출하 등록</a></li>
+        <li><a href="/shp/scan" data-screen="SHP-02">LOT 스캔 · 승인</a></li>
+        <li><a href="/shp/status" data-screen="SHP-03">출하 현황</a></li>
+        <li><a href="/shp/documents" data-screen="SHP-04">성적서</a></li>
+      </ul>
+    </div>
+    <div class="mg" data-menu="trc">
+      <button type="button" class="mg-h" aria-expanded="false"><span>LOT 추적</span><small>3</small></button>
+      <ul>
+        <li><a href="/trc/forward" data-screen="TRC-01">정방향 추적</a></li>
+        <li><a href="screens/trc_backward.html" data-screen="TRC-02">역방향 추적</a></li>
+        <li><a href="/trc/search" data-screen="TRC-03">번호 검색</a></li>
+      </ul>
+    </div>
+    <div class="mg" data-menu="kpi">
+      <button type="button" class="mg-h" aria-expanded="false"><span>현황 · KPI</span><small>3</small></button>
+      <ul>
+        <li><a href="/kpi/board" data-screen="KPI-01">현황판 <i class="ch" title="현황판 채널 전용">현황판</i></a></li>
+        <li><a href="screens/kpi_summary.html" data-screen="KPI-02">집계 (생산 · 품질 · 납기 · 설비)</a></li>
+        <li><a href="/kpi/indicators" data-screen="KPI-03">지표 정의</a></li>
+      </ul>
+    </div>
+    <div class="mg" data-menu="sys">
+      <button type="button" class="mg-h" aria-expanded="false"><span>시스템</span><small>6</small></button>
+      <ul>
+        <li><a href="/sys/users" data-screen="SYS-01">사용자</a></li>
+        <li><a href="/sys/roles" data-screen="SYS-02">역할</a></li>
+        <li><a href="screens/sys_permissions.html" data-screen="SYS-03">권한 표</a></li>
+        <li><a href="/sys/logs" data-screen="SYS-04">접근 로그</a></li>
+        <li><a href="/sys/numbering" data-screen="SYS-05">채번 규칙</a></li>
+        <li><a href="/sys/backup" data-screen="SYS-06">백업 · 이관</a></li>
+      </ul>
+    </div>
+    <div class="mg" data-menu="ifc">
+      <button type="button" class="mg-h" aria-expanded="false"><span>인터페이스</span><small>2</small></button>
+      <ul>
+        <li><a href="screens/ifc_collect.html" data-screen="IFC-01">수집 수신 현황</a></li>
+        <li><a href="/ifc/erp" data-screen="IFC-02">ERP 연계 로그</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <main class="main" id="main">
+
+    <section class="panel" id="toc">
+      <h2>컴포넌트 카탈로그 <small>interfaces.md §2 의 <code>ui</code> 매크로 하나 = 아래 한 절. 매크로 → 마크업 대응은 README §5</small></h2>
+      <nav class="toc" aria-label="목차">
+        <a href="#grid">grid</a><a href="#field">field</a><a href="#select">select</a><a href="#scan_box">scan_box</a><a href="#write_button">write_button</a><a href="#print_button">print_button</a>
+        <a href="#undecided">undecided</a><a href="#notes">notes</a><a href="#attrs_fields">attrs_fields</a><a href="#measure_fields">measure_fields (읽기)</a>
+        <a href="#badge">상태 배지</a><a href="#barcode">바코드</a><a href="#tabs">탭</a><a href="#confirm">인라인 확인</a><a href="#alerts">알림</a><a href="#empty">빈 상태</a><a href="#kv">키-값 · 타일 · 트리</a>
+      </nav>
+      <ul class="notes">
+        <li>확인 다이얼로그 · 모달 · 브라우저 <code>confirm()</code> 은 <b>쓰지 않는다</b>. 되돌릴 수 없는 동작은 <a href="#confirm">인라인 확인</a>으로.</li>
+        <li>색만으로 뜻을 나누지 않는다 — 배지에는 글자, 막대에는 숫자, 이탈에는 "이탈" 표기.</li>
+        <li>모든 사용자 문구는 <code>t()</code>. 이 카탈로그의 글자는 코어 중립어다.</li>
+      </ul>
+    </section>
+    <section class="panel cmp" id="grid" aria-labelledby="h-grid">
+      <h2 id="h-grid">표 <small><code>ui.grid(columns, rows, empty=미수집)</code></small></h2>
+      <p class="cmp-desc">표가 주인공이다. 머리 고정 · 정렬 표시(aria-sort · 서버 ?sort=) · 숫자 오른쪽 정렬(tabular) · 코드 모노 · 선택 행 · 흐린 행(취소) · 행 액션 · 페이지 · 0건 = <b>미수집</b>.</p>
+      <div class="grid-panel">
+      <table class="grid">
+        <thead><tr><th aria-sort="ascending">코드</th><th aria-sort="none">이름</th><th>구분</th><th aria-sort="none" class="num">수량</th><th>상태</th><th>동작</th></tr></thead>
+        <tbody>
+          <tr class="sel"><td><code>ITM-0001</code></td><td>제품 A (예시)</td><td>제품</td><td class="num">1,000</td><td><span class="badge badge-ok">사용</span></td><td class="act"><a class="btn btn-sm" href="#">수정</a> <details class="confirm"><summary class="btn btn-sm" role="button">삭제</summary><div class="confirm-box"><span>ITM-0001 을 삭제한다</span><form method="post" action="#"><button type="submit" class="btn btn-sm btn-err">삭제 확인</button></form><button type="button" class="btn btn-sm" data-close-details>취소</button></div></details></td></tr>
+          <tr><td><code>ITM-0002</code></td><td>제품 B (예시)</td><td>제품</td><td class="num">500</td><td><span class="badge badge-ok">사용</span></td><td class="act"><a class="btn btn-sm" href="#">수정</a> <button type="button" class="btn btn-sm" disabled title="참조가 있어 삭제 422">삭제</button></td></tr>
+          <tr class="group"><td colspan="6">묶음 행 — 공정별 · 그룹별 소계 머리</td></tr>
+          <tr><td><code>ITM-2001</code></td><td>원재료 R-1 (예시)</td><td>원재료</td><td class="num">12,500.0</td><td><span class="badge badge-ok">사용</span></td><td class="act"><a class="btn btn-sm" href="#">수정</a></td></tr>
+          <tr class="dtl"><td></td><td colspan="5">상세 행 — 헤더 아래 들여쓰기(수주 상세 · BOM 구성품)</td></tr>
+          <tr class="dim"><td><code>ITM-3001</code></td><td>부자재 S (예시)</td><td>부자재</td><td class="num">0</td><td><span class="badge badge-neutral">미사용</span></td><td class="act"><a class="btn btn-sm" href="#">수정</a></td></tr>
+        </tbody>
+        <tfoot><tr><td colspan="3">합계</td><td class="num">14,000.0</td><td colspan="2"></td></tr></tfoot>
+      </table>
+      <nav class="pager" aria-label="페이지"><button type="button" class="pg" aria-label="이전">&lsaquo;</button><button type="button" class="pg">1</button><button type="button" class="pg" aria-current="page">2</button><button type="button" class="pg">3</button><button type="button" class="pg">4</button><button type="button" class="pg">5</button><button type="button" class="pg" aria-label="다음">&rsaquo;</button><span class="sum">231건 · 페이지당 50건</span></nav>
+      </div>
+      <h3>0건</h3>
+      <table class="grid"><thead><tr><th>코드</th><th>이름</th><th>구분</th></tr></thead><tbody><tr><td colspan="3" class="empty"><b>미수집</b>조회 조건에 맞는 행이 없다</td></tr></tbody></table>
+      <h3>상한 초과</h3>
+      <table class="grid"><thead><tr><th>코드</th><th>이름</th></tr></thead><tbody><tr><td colspan="2" class="empty"><b>500건까지만 보인다</b>조회 조건을 좁힌다 — 전체 1,204건</td></tr></tbody></table>
+    </section>
+    <section class="panel cmp" id="field" aria-labelledby="h-field">
+      <h2 id="h-field">입력칸 <small><code>ui.field(label, name, value, type, required, readonly, step)</code></small></h2>
+      <p class="cmp-desc">라벨은 위, 필수는 붉은 * (aria-label). 오류 상태는 테두리 + 아래 한 줄 사유(422 의 fields[].reason). 읽기 전용은 회색 바탕. 단위는 칸 안 오른쪽.</p>
+      <div class="form-grid cols">
+        <label class="f"><span>text <em class="req" aria-label="필수">*</em></span><input type="text" name="t1" value="제품 A (예시)" required></label>
+        <label class="f inline-unit"><span>number + 단위</span><input type="number" name="n1" value="1000" step="1"><i class="unit">EA</i></label>
+        <label class="f inline-unit"><span>number (소수)<small class="hint">하한 60 · 상한 80</small></span><input type="number" name="n2" value="72.5" step="0.1"><i class="unit">°C</i></label>
+        <label class="f"><span>date</span><input type="date" name="d1" value="2026-10-09"></label>
+        <label class="f"><span>datetime-local</span><input type="datetime-local" name="dt1" value="2026-10-09T14:05"></label>
+        <label class="f"><span>readonly (코드는 못 바꾼다)</span><input type="text" name="r1" value="ITM-0001" readonly></label>
+        <label class="f err"><span>오류 상태 <em class="req" aria-label="필수">*</em></span><input type="text" name="e1" value="" required aria-invalid="true"><small class="reason">값이 없다</small></label>
+        <label class="f err"><span>오류 + 값 유지 <em class="req" aria-label="필수">*</em></span><input type="text" name="e2" value="ITM-0001" required aria-invalid="true"><small class="reason">이미 있는 품목 코드</small></label>
+        <label class="f"><span>placeholder</span><input type="text" name="p1" value="" placeholder="일부 일치"></label>
+        <label class="f"><span>textarea</span><textarea name="ta"></textarea></label>
+        <label class="f check"><input type="checkbox" name="c1" checked> 체크 (사용 여부 · scopes)</label>
+        <label class="f check"><input type="radio" name="rd" checked> 라디오 (채널 · 판정)</label>
+      </div>
+    </section>
+    <section class="panel cmp" id="select" aria-labelledby="h-select">
+      <h2 id="h-select">선택칸 <small><code>ui.select(label, name, options, value, required, blank='선택')</code></small></h2>
+      <p class="cmp-desc">첫 항목은 빈 값(검색은 '전체', 입력은 '선택'). 필수면 빈 값으로 저장 못 한다. 옵션은 <code>bas_code</code> 그룹이나 마스터 조회에서.</p>
+      <div class="form-grid">
+        <label class="f w-sm"><span>조회용 (blank=전체)</span><select name="s1"><option value="">전체</option><option value="Y">사용</option><option value="N">미사용</option></select></label>
+        <label class="f w-md"><span>입력용 필수 <em class="req" aria-label="필수">*</em></span><select name="s2" required><option value="">선택</option><option value="PRODUCT" selected>제품</option><option value="SEMI">반제품</option><option value="MATERIAL">원재료</option><option value="SUB">부자재</option></select></label>
+        <label class="f w-sm"><span>blank 없음 (값이 항상 있다)</span><select name="s3"><option value="가동" selected>가동</option><option value="정지">정지</option><option value="점검">점검</option><option value="고장">고장</option></select></label>
+        <label class="f err w-md"><span>오류 <em class="req" aria-label="필수">*</em></span><select name="s4" required><option value="">선택</option><option value="1">고객 A (예시)</option></select><small class="reason">거래처를 고른다</small></label>
+        <label class="f w-md"><span>disabled (바꿀 수 없는 참조)</span><select name="s5" disabled><option value="">선택</option><option value="1" selected>ITM-0001 제품 A (예시)</option></select></label>
+      </div>
+      <p class="cmp-desc">긴 목록(품목 · 거래처 · LOT)은 select 대신 <b>공용 팝업</b>(CMN-05 <code>/popup/{kind}</code>) — 코드 입력칸 + "찾기" 버튼. 팝업 디자인은 아래.</p>
+      <div class="form-grid">
+        <label class="f w-md"><span>품목 <em class="req">*</em></span><span class="btn-row" style="gap:4px"><input type="text" name="item_code" value="ITM-0001" style="flex:1"><button type="button" class="btn" title="품목 찾기 (CMN-05)">찾기</button></span><small class="hint">제품 A (예시)</small></label>
+      </div>
+    </section>
+    <section class="panel cmp" id="scan_box" aria-labelledby="h-scan_box">
+      <h2 id="h-scan_box">스캔칸 <small><code>ui.scan_box(action, name, label, hidden, button)</code></small></h2>
+      <p class="cmp-desc">화면에 <code>data-scan</code> 은 하나(실제 템플릿은 <code>autofocus</code> — 카탈로그에서는 뺐다). 열리면 포커스, 처리 뒤 돌아와도 포커스. 알림이 떠 있어도 스캔 글자가 들어가고 Enter 가 보낸다. Web 모양은 이것 — POP 확대본은 디자이너2 pop/.</p>
+      <form class="scan-box form-grid" method="post" action="/shp/scan" autocomplete="off">
+        <input type="hidden" name="shipment_id" value="2">
+        <label class="f w-lg"><span>생산 LOT 바코드</span><input type="text" name="lot_no" value="" placeholder="스캐너 = 키보드 입력 + Enter" data-scan inputmode="text"></label>
+        <label class="f w-sm inline-unit"><span>투입량 (call 블록)</span><input type="number" name="qty" value="" step="0.1"><i class="unit">kg</i></label>
+        <label class="f"><span>&nbsp;</span><button type="submit" class="btn btn-primary">처리</button></label>
+      </form>
+      <h3>없는 번호 — 그 화면을 422 로 다시 그린다 (스캔 진입 GET ?no=)</h3>
+      <div class="alert" role="alert"><strong>없는 번호</strong> — <code>LP-20261009-999</code> 는 LOT 이 아니다. 다시 스캔한다. <small>(포커스는 스캔칸에 남는다)</small></div>
+    </section>
+    <section class="panel cmp" id="write_button" aria-labelledby="h-write_button">
+      <h2 id="h-write_button">쓰기 버튼 <small><code>ui.write_button(label, allowed=user.can('F-…'), form, kind)</code></small></h2>
+      <p class="cmp-desc">그 기능을 할 수 없는 역할에게는 비활성 + 이유(title + 옆 글자). 서버도 403 으로 막는다 — 버튼은 안내지 보안이 아니다. 종류: primary(저장) · 기본(보조) · ok/warn/err(판정 · 되돌림).</p>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary" form="x1">등록</button>
+        <button type="submit" class="btn btn-primary" form="x2">수정 저장</button>
+        <button type="button" class="btn">보조 (취소 · 새로 등록)</button>
+        <button type="submit" class="btn btn-ok">합격</button>
+        <button type="submit" class="btn btn-warn">조건부</button>
+        <button type="submit" class="btn btn-err">불합격</button>
+        <button type="button" class="btn btn-sm">작은 버튼 (행 액션)</button>
+      </div>
+      <h3>권한 없음</h3>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary" form="x3" disabled title="이 역할은 입력 권한이 없다" aria-describedby="why-x3">등록</button><span class="why" id="why-x3">이 역할은 입력 권한이 없다</span>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary" form="x4" disabled title="승인은 관리자 + scopes: 승인" aria-describedby="why-x4">출하 승인</button><span class="why" id="why-x4">승인은 관리자 + scopes: 승인</span>
+      </div>
+      <h3>조건이 안 맞음 (권한은 있다)</h3>
+      <div class="form-actions">
+        <button type="button" class="btn" disabled title="종료 안 된 실적이 있다 — 마감 422">마감</button>
+        <span class="why">종료 안 된 실적이 있다 — 마감하면 422. 버튼을 막는 대신 눌러서 422 사유를 보게 해도 된다(둘 다 계약 안)</span>
+      </div>
+    </section>
+    <section class="panel cmp" id="print_button" aria-labelledby="h-print_button">
+      <h2 id="h-print_button">인쇄 버튼 <small><code>ui.print_button(label='인쇄')</code></small></h2>
+      <p class="cmp-desc">브라우저 인쇄(<code>window.print()</code>). 기본 PrintAdapter 는 아무것도 보내지 않는다 — 팩이 ZPL 등으로 바꾼다(E7). 인쇄 화면 자체는 디자이너3 print/.</p>
+      <div class="btn-row">
+        <button type="button" class="btn btn-primary no-print" onclick="window.print()">인쇄</button>
+        <a class="btn" href="/job/print?id=2">작업지시서 (JOB-03)</a>
+        <a class="btn" href="/mat/lots/1/label">원재료 LOT 라벨 (F-MAT-07)</a>
+        <a class="btn" href="/pop/labels?lot=LP-20261009-004">생산 LOT 라벨 (F-POP-08)</a>
+        <a class="btn" href="/shp/documents/1/print">성적서 (F-SHP-10)</a>
+      </div>
+    </section>
+    <section class="panel cmp" id="undecided" aria-labelledby="h-undecided">
+      <h2 id="h-undecided">미확정 <small><code>ui.undecided(decision, what='')</code></small></h2>
+      <p class="cmp-desc">사람이 아직 정하지 않은 값. 결정 번호(D-nn)를 반드시 붙인다. 빈 칸으로 두거나 기본값을 지어내지 않는다.</p>
+      <p><span class="undecided">ERP 연계 미확정 (D-02)</span> &nbsp; <span class="undecided">채번 규칙 미확정 (D-10)</span> &nbsp; <span class="undecided">미확정 (D-12)</span> &nbsp; 표 안: <code>sys_number_rule</code> 없음 → 다음 번호 <span class="undecided">미확정 (D-10)</span></p>
+      <table class="grid compact"><thead><tr><th>종류</th><th>접두어</th><th>다음 번호 (peek)</th></tr></thead>
+      <tbody><tr><td><code>WORK_ORDER</code></td><td>WO-</td><td><code>WO-20261009-004</code></td></tr><tr><td><code>X_BATCH</code> (팩)</td><td class="muted">—</td><td><span class="undecided">미확정 (D-10)</span></td></tr></tbody></table>
+    </section>
+    <section class="panel cmp" id="notes" aria-labelledby="h-notes">
+      <h2 id="h-notes">안내 목록 <small><code>ui.notes(items)</code></small></h2>
+      <p class="cmp-desc">폼 · 표 아래 작은 글자 목록. 계약 문장을 사용자 말로 옮긴 것 — 길게 쓰지 않는다(한 줄 = 규칙 하나).</p>
+      <ul class="notes">
+        <li>삭제 대신 <b>사용 여부 N</b> — LOT · BOM · 수주 · 지시가 참조하면 삭제는 422.</li>
+        <li>코드는 바꿀 수 없다. 바꾸려면 새 코드로 등록하고 옛 코드를 미사용으로.</li>
+      </ul>
+    </section>
+    <section class="panel cmp" id="attrs_fields" aria-labelledby="h-attrs_fields">
+      <h2 id="h-attrs_fields">팩 속성 폼 <small><code>ui.attrs_fields(table)</code></small></h2>
+      <p class="cmp-desc"><code>pack.yaml: attrs[table]</code> 선언 → 폼 자동. 코어 칸 아래 점선 구분선 + '업종 속성' 묶음으로 나뉜다. 선언이 없으면 통째로 안 그려진다. 표시용 — 검색 · 집계 · 제약에 쓰지 않는다(D-05). 라벨은 팩이 준 글자 그대로(업종어 허용).</p>
+      <form class="form-grid cols">
+        <label class="f"><span>품목 코드</span><input type="text" name="item_code" value="ITM-0001" readonly></label>
+        <label class="f"><span>품목명 <em class="req" aria-label="필수">*</em></span><input type="text" name="item_name" value="제품 A (예시)" required></label>
+        <label class="f w-sm"><span>단위</span><input type="text" name="unit" value="EA"></label>
+        <fieldset class="attrs">
+          <legend>업종 속성 <small>팩 <code>{{ pack.name }}</code> 선언 · 표시용</small></legend>
+          <div class="form-grid cols">
+            <label class="f inline-unit"><span>number (예시)</span><input type="number" name="attrs[a_num]" value="12"><i class="unit">단위</i></label>
+            <label class="f"><span>text (예시)</span><input type="text" name="attrs[a_text]" value="자유 글자"></label>
+            <label class="f check"><input type="checkbox" name="attrs[a_bool]" checked> bool (예시)</label>
+            <label class="f"><span>date (예시)</span><input type="date" name="attrs[a_date]" value="2026-10-01"></label>
+            <label class="f"><span>select (예시) <em class="req" aria-label="필수">*</em></span><select name="attrs[a_sel]" required><option value="">선택</option><option value="A" selected>선택 A</option><option value="B">선택 B</option></select></label>
+            <label class="f err"><span>required 누락 → 422 (예시) <em class="req" aria-label="필수">*</em></span><input type="text" name="attrs[a_req]" value="" required aria-invalid="true"><small class="reason">값이 없다</small></label>
+          </div>
+        </fieldset>
+      </form>
+      <h3>표에서는 — 팩 속성 열은 코어 열 뒤에 같은 표로</h3>
+      <table class="grid compact"><thead><tr><th>품목 코드</th><th>품목명</th><th>단위</th><th class="pack-col">number (예시)</th><th class="pack-col">select (예시)</th></tr></thead>
+      <tbody><tr><td><code>ITM-0001</code></td><td>제품 A (예시)</td><td>EA</td><td class="num pack-col">12</td><td class="pack-col">선택 A</td></tr></tbody></table>
+    </section>
+    <section class="panel cmp" id="measure_fields" aria-labelledby="h-measure_fields">
+      <h2 id="h-measure_fields">측정값 (Web 읽기 전용 표시) <small><code>ui.measure_fields(process_id, values, readonly=True) — 개발2 소유</code></small></h2>
+      <p class="cmp-desc">입력 폼(POP 종료 화면)은 디자이너2 pop/ 가 그린다. Web 에서는 실적 · 검사 상세에 <b>읽기 전용 표</b>로 보인다: 항목 · 값 · 단위 · 범위 · 수집원 · 판정. 범위 이탈은 오류가 아니다 — 저장되고 <span class='deviated'>이탈</span> 로 표시(G-C24). 필수 누락만 422.</p>
+      <table class="grid compact">
+        <thead><tr><th>측정 항목</th><th class="num">값</th><th>단위</th><th class="num">하한</th><th class="num">상한</th><th>수집원</th><th>판정</th><th>측정 시각</th></tr></thead>
+        <tbody>
+          <tr><td>온도 (예시) <em class="req">*</em></td><td class="num">72.5</td><td>°C</td><td class="num">60</td><td class="num">80</td><td><span class="badge badge-kind">collect</span> <small>agg=avg</small></td><td><span class="badge badge-ok">범위 안</span></td><td>12:40:02</td></tr>
+          <tr><td>압력 (예시) <em class="req">*</em></td><td class="num"><span class="deviated">3.4</span></td><td>bar</td><td class="num">1.5</td><td class="num">3.0</td><td><span class="badge badge-kind">manual</span></td><td><span class="badge badge-warn">이탈 — 저장됨</span></td><td>12:40:02</td></tr>
+          <tr><td>외관 (예시)</td><td class="num">양호</td><td>—</td><td class="num">—</td><td class="num">—</td><td><span class="badge badge-kind">manual</span></td><td><span class="badge badge-neutral">문자</span></td><td>12:40:02</td></tr>
+          <tr class="dim"><td>진동 (예시)</td><td class="num muted">미수집</td><td>mm/s</td><td class="num">—</td><td class="num">2.0</td><td><span class="badge badge-kind">collect</span></td><td><span class="badge badge-none">값 없음</span></td><td class="muted">—</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="panel cmp" id="badge" aria-labelledby="h-badge">
+      <h2 id="h-badge">상태 배지 <small><code>(매크로 없음 — span.badge.badge-<의미>)</code></small></h2>
+      <p class="cmp-desc">색 + 글자. 의미와 색은 tokens.css §8~§11 에 고정 — 화면마다 다르게 쓰지 않는다. 점(dot)은 좁은 칸용.</p>
+      <table class="grid compact badge-table">
+        <tbody>
+          <tr><th scope="row">상태 4종</th><td><span class="badge badge-ok">정상</span> <span class="badge badge-warn">경고</span> <span class="badge badge-err">오류</span> <span class="badge badge-info">정보</span> <span class="badge badge-neutral">중립</span></td></tr>
+          <tr><th scope="row">LOT 상태 (v_lot_state)</th><td><span class="badge badge-stock">재고</span> <span class="badge badge-consumed">소진</span> <span class="badge badge-shipped">출하</span></td></tr>
+          <tr><th scope="row">검사 판정</th><td><span class="badge badge-pass">합격</span> <span class="badge badge-fail">불합격</span> <span class="badge badge-cond">조건부</span> <span class="badge badge-none">미검사</span></td></tr>
+          <tr><th scope="row">설비 상태</th><td><span class="badge badge-run">가동</span> <span class="badge badge-stop">정지</span> <span class="badge badge-check">점검</span> <span class="badge badge-fault">고장</span></td></tr>
+          <tr><th scope="row">작업지시 상태</th><td><span class="badge badge-neutral">대기</span> <span class="badge badge-info">진행</span> <span class="badge badge-ok">마감</span> <span class="badge badge-neutral">취소</span></td></tr>
+          <tr><th scope="row">수주 · 출하 · 이상</th><td><span class="badge badge-neutral">대기</span> <span class="badge badge-info">등록</span> <span class="badge badge-ok">승인 · 완료 · 종결</span> <span class="badge badge-warn">조치</span> <span class="badge badge-err">발생</span> <span class="badge badge-neutral">취소</span></td></tr>
+          <tr><th scope="row">ERP 큐</th><td><span class="badge badge-neutral">대기</span> <span class="badge badge-ok">전송</span> <span class="badge badge-err">실패</span> <span class="undecided">미확정 (D-02)</span></td></tr>
+          <tr><th scope="row">LOT 종류 (kind)</th><td><span class="badge badge-kind">MATERIAL</span> <span class="badge badge-kind">PRODUCT</span> <span class="badge badge-kind">SHIPMENT</span> <span class="badge badge-kind">(팩 종류)</span></td></tr>
+          <tr><th scope="row">수집원</th><td><span class="badge badge-kind">manual</span> <span class="badge badge-kind">collect</span></td></tr>
+          <tr><th scope="row">점 표기 (좁은 칸)</th><td><span style="color:var(--c-ok)"><i class="dot"></i>가동</span> <span style="color:var(--c-err)"><i class="dot"></i>고장</span> <span style="color:var(--c-neutral)"><i class="dot"></i>정지</span></td></tr>
+          <tr><th scope="row">태그</th><td><span class="tag">개발용</span> <span class="tag">팩</span> <span class="tag">고정</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="panel cmp" id="barcode" aria-labelledby="h-barcode">
+      <h2 id="h-barcode">바코드 자리 <small><code>printing.barcode_svg(text, height=40) — 개발2 소유</code></small></h2>
+      <p class="cmp-desc">Code128 인라인 SVG. 외부 CDN 0. 아래는 더미 막대 — 실제 값은 <code>printing</code> 이 만든다. 번호는 영문 대문자 · 숫자 · '-' 만(채번 규칙). 글자는 바코드 아래 모노.</p>
+      <div class="btn-row" style="gap:32px;align-items:flex-end">
+        <div><span class="barcode" aria-label="바코드 LM-20261009-001"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 74 36" width="111" height="36" fill="currentColor" shape-rendering="crispEdges"><rect x="0" y="0" width="2" height="36"/><rect x="5" y="0" width="3" height="36"/><rect x="11" y="0" width="3" height="36"/><rect x="16" y="0" width="3" height="36"/><rect x="20" y="0" width="2" height="36"/><rect x="24" y="0" width="3" height="36"/><rect x="30" y="0" width="1" height="36"/><rect x="34" y="0" width="1" height="36"/><rect x="37" y="0" width="2" height="36"/><rect x="42" y="0" width="3" height="36"/><rect x="48" y="0" width="3" height="36"/><rect x="53" y="0" width="3" height="36"/><rect x="57" y="0" width="2" height="36"/><rect x="61" y="0" width="3" height="36"/><rect x="67" y="0" width="1" height="36"/><rect x="71" y="0" width="1" height="36"/></svg></span><span class="bc-text">LM-20261009-001</span></div>
+        <div><span class="barcode" aria-label="바코드 LP-20261009-004"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 62 36" width="93" height="36" fill="currentColor" shape-rendering="crispEdges"><rect x="0" y="0" width="3" height="36"/><rect x="6" y="0" width="1" height="36"/><rect x="8" y="0" width="3" height="36"/><rect x="13" y="0" width="1" height="36"/><rect x="17" y="0" width="1" height="36"/><rect x="20" y="0" width="1" height="36"/><rect x="23" y="0" width="2" height="36"/><rect x="26" y="0" width="2" height="36"/><rect x="31" y="0" width="3" height="36"/><rect x="37" y="0" width="1" height="36"/><rect x="39" y="0" width="3" height="36"/><rect x="44" y="0" width="1" height="36"/><rect x="48" y="0" width="1" height="36"/><rect x="51" y="0" width="1" height="36"/><rect x="54" y="0" width="2" height="36"/><rect x="57" y="0" width="2" height="36"/></svg></span><span class="bc-text">LP-20261009-004</span></div>
+        <div><span class="barcode" aria-label="바코드 WO-20261009-002"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 66 36" width="99" height="36" fill="currentColor" shape-rendering="crispEdges"><rect x="0" y="0" width="2" height="36"/><rect x="4" y="0" width="1" height="36"/><rect x="8" y="0" width="2" height="36"/><rect x="13" y="0" width="3" height="36"/><rect x="17" y="0" width="2" height="36"/><rect x="20" y="0" width="3" height="36"/><rect x="25" y="0" width="2" height="36"/><rect x="29" y="0" width="1" height="36"/><rect x="33" y="0" width="2" height="36"/><rect x="37" y="0" width="1" height="36"/><rect x="41" y="0" width="2" height="36"/><rect x="46" y="0" width="3" height="36"/><rect x="50" y="0" width="2" height="36"/><rect x="53" y="0" width="3" height="36"/><rect x="58" y="0" width="2" height="36"/><rect x="62" y="0" width="1" height="36"/></svg></span><span class="bc-text">WO-20261009-002</span></div>
+      </div>
+      <p class="cmp-desc">라벨 · 작업지시서 · 성적서 양식은 디자이너3 print/. 스캔 왕복(G-C14): 이 번호를 스캔칸에 넣으면 그 LOT 이 열린다.</p>
+    </section>
+    <section class="panel cmp" id="tabs" aria-labelledby="h-tabs">
+      <h2 id="h-tabs">탭 <small><code>(매크로 없음 — nav.tabs 안 a[aria-current])</code></small></h2>
+      <p class="cmp-desc">탭은 링크다(?kind= · ?view=). JS 탭이 아니다 — 서버가 다시 그린다. 한 화면 한 작업: 탭이 3~4 를 넘으면 화면을 나눈다.</p>
+      <nav class="tabs" aria-label="예시"><a href="?kind=production" aria-current="page">생산</a><a href="?kind=quality">품질</a><a href="?kind=delivery">납기</a><a href="?kind=equipment">설비</a></nav>
+    </section>
+    <section class="panel cmp" id="confirm" aria-labelledby="h-confirm">
+      <h2 id="h-confirm">인라인 확인 (confirm 대체) <small><code>(매크로 없음 — details.confirm) · 브라우저 confirm() 금지</code></small></h2>
+      <p class="cmp-desc"><code>&lt;details&gt;</code> 하나. summary 가 첫 버튼, 펼치면 사유 한 줄 + 확정 버튼(POST 폼) + 취소. JS 는 취소가 details 를 닫는 것뿐. 키보드: Enter/Space 로 펼치고 Tab 으로 확정에 간다.</p>
+      <div class="btn-row">
+        <details class="confirm"><summary class="btn" role="button">삭제</summary><div class="confirm-box"><span>ITM-0001 을 삭제한다 — 참조가 있으면 422</span><form method="post" action="/bas/items/1/delete"><button type="submit" class="btn btn-sm btn-err">삭제 확인</button></form><button type="button" class="btn btn-sm" data-close-details>취소</button></div></details>
+        <details class="confirm"><summary class="btn" role="button">작업지시 취소</summary><div class="confirm-box"><span>실적이 하나라도 있으면 422</span><form method="post" action="/job/work-orders/3/cancel"><button type="submit" class="btn btn-sm btn-err">취소 확정</button></form><button type="button" class="btn btn-sm" data-close-details>취소</button></div></details>
+        <details class="confirm"><summary class="btn" role="button">출하 승인</summary><div class="confirm-box"><span>승인 후 스캔 · 취소 불가 · ERP 큐로</span><form method="post" action="/shp/shipments/2/approve"><button type="submit" class="btn btn-sm btn-ok">승인 확정</button></form><button type="button" class="btn btn-sm" data-close-details>취소</button></div></details>
+      </div>
+      <h3>펼친 상태 (고정형 — 폼이 길 때)</h3>
+      <details class="confirm" open>
+        <summary class="btn" role="button">불합격</summary>
+        <div class="confirm-box static">
+          <form method="post" action="#" class="form-grid">
+            <label class="f w-md"><span>불량코드 <em class="req" aria-label="필수">*</em></span><select name="d0c" required><option value="">선택</option><option value="1">D01 이물 (예시)</option><option value="2" selected>D02 규격 미달 (예시)</option></select></label>
+            <label class="f w-sm"><span>수량 <em class="req" aria-label="필수">*</em></span><input type="number" name="d0q" value="12" required></label>
+            <button type="submit" class="btn btn-err">불합격 확정</button>
+            <button type="button" class="btn btn-sm" data-close-details>취소</button>
+          </form>
+        </div>
+      </details>
+    </section>
+    <section class="panel cmp" id="alerts" aria-labelledby="h-alerts">
+      <h2 id="h-alerts">알림 <small><code>http.saved → flash(토스트 1회) · 422 → alert(항목별 사유)</code></small></h2>
+      <p class="cmp-desc">쓰기 성공: 303 뒤 토스트 한 번(8초 뒤 사라짐 · 닫기 버튼). 422: 본문 맨 위 알림 — 메시지 + <code>fields[]</code> 목록(label 은 t() 치환어, name 은 컬럼 식별자) + 틀린 칸 강조. 토스트는 화면 오른쪽 위에 고정(이 페이지 위에도 하나 떠 있다).</p>
+      <div class="toast" style="position:static;max-width:none;display:inline-flex" role="status"><strong>저장됨</strong><span>품목을 등록했다 — ITM-0007</span><button type="button" class="toast-x" aria-label="닫기">&times;</button></div>
+      <div class="toast warn" style="position:static;max-width:none;display:inline-flex;margin-left:8px" role="status"><strong>저장됨 · 주의</strong><span>측정값 1건이 범위를 벗어났다(저장됨)</span><button type="button" class="toast-x" aria-label="닫기">&times;</button></div>
+      <div class="toast err" style="position:static;max-width:none;display:inline-flex;margin-left:8px" role="status"><strong>실패</strong><span>ERP 재전송 — 미확정 (D-02) 501</span><button type="button" class="toast-x" aria-label="닫기">&times;</button></div>
+      <h3>422 — validation_error</h3>
+    <!-- 422 (폼 POST): 303 → 원래 화면 + 알림(메시지 · 항목별 사유). fields[].label 은 t() 치환어, name 은 컬럼 식별자 그대로 -->
+    <div class="alert" role="alert">
+      <button type="button" class="alert-x" data-alert-close aria-label="닫기">&times;</button>
+      <strong>저장하지 못했다</strong> — 필수값이 비었다
+      <ul class="fields">
+        <li><b>공급처</b> <code>partner_id</code> — 값이 없다</li>
+        <li><b>수량</b> <code>qty</code> — 0보다 커야 한다</li>
+      </ul>
+    </div>
+      <h3>422 — hook_rejected (팩 훅이 거부)</h3>
+      <div class="alert" role="alert"><strong>저장하지 못했다</strong> — (팩이 준 문장) <ul class="fields"><li><b>LOT</b> <code>lot_id</code> — 출하 조건 미충족 (예시)</li></ul></div>
+      <h3>정보 · 경고 (오류 아님)</h3>
+      <div class="alert info" role="status"><strong>안내</strong> — 어댑터가 없어 ERP 연계는 전부 <span class="undecided">대기 — 미확정 (D-02)</span> 로 남는다.</div>
+      <div class="alert warn" role="status"><strong>주의</strong> — 진행 중 지시 3건 포함 — 계획 대비는 마감 뒤 다시 센다.</div>
+    </section>
+    <section class="panel cmp" id="empty" aria-labelledby="h-empty">
+      <h2 id="h-empty">빈 상태 <small><code>미수집 · 미확정 (D-nn)</code></small></h2>
+      <p class="cmp-desc">데이터가 없으면 <b>미수집</b>, 정해지지 않았으면 <b>미확정 (D-nn)</b>. 빈 표 · 빈 칸 · 0 을 지어내지 않는다. 표는 한 칸으로, 칸 하나는 회색 글자로.</p>
+      <table class="grid"><thead><tr><th>설비</th><th>마지막 수신</th><th>최신 값</th></tr></thead>
+      <tbody><tr><td><code>EQ-006</code></td><td class="muted">미수집</td><td class="muted">미수집</td></tr><tr><td colspan="3" class="empty"><b>미수집</b>수집 메시지가 없다 — POST /ifc/collect</td></tr></tbody></table>
+      <p class="empty-inline">이 화면에 묶인 기능 줄이 없다</p>
+      <p><span class="undecided">ERP 연계 미확정 (D-02)</span></p>
+    </section>
+    <section class="panel cmp" id="kv" aria-labelledby="h-kv">
+      <h2 id="h-kv">키-값 · 집계 타일 · 계보 트리 <small><code>dl.kv · .tiles · ul.tree</code></small></h2>
+      <p class="cmp-desc">상세 패널의 키-값은 dl. 타일은 표의 보조(4~6개까지) · 숫자 tabular. 계보 트리는 TRC 원형(trc_backward.html) 참고.</p>
+      <div class="two">
+        <dl class="kv">
+          <dt>번호</dt><dd><code>LP-20261009-004</code> <span class="badge badge-stock">재고</span></dd>
+          <dt>품목</dt><dd>제품 A (예시)</dd>
+          <dt>수량</dt><dd>420 EA</dd>
+          <dt>검사</dt><dd><span class="badge badge-pass">합격</span> 10-09 13:00</dd>
+          <dt>링크</dt><dd><a href="#">지시</a> · <a href="#">실적</a> · <a href="#">측정값</a> · <a href="#">검사</a></dd>
+        </dl>
+        <div class="tiles" style="margin:0">
+          <div class="tile"><div class="l">양품률</div><div class="v">98.6<small>%</small></div><div class="s">목표 98.0</div></div>
+          <div class="tile warn"><div class="l">계획 대비</div><div class="v">69.5<small>%</small></div><div class="s">진행 중 포함</div></div>
+          <div class="tile err"><div class="l">고장</div><div class="v">1</div><div class="s">EQ-004</div></div>
+        </div>
+      </div>
+      <ul class="tree" style="margin-top:12px">
+        <li><span class="node start"><span class="badge badge-kind">SHIPMENT</span><span class="no">LS-20261009-001</span><span>출하 → 고객 A (예시)</span><span class="badge badge-shipped">출하</span></span>
+          <ul>
+            <li><details open><summary><span class="node"><span class="rel">출하 ←</span><span class="badge badge-kind">PRODUCT</span><span class="no">LP-20261009-004</span><span>제품 A (예시)</span><span class="qty">420 EA</span><span class="badge badge-shipped">출하</span><span class="links"><a href="#">지시</a><a href="#">실적</a><a href="#">측정값</a><a href="#">검사</a></span></span></summary>
+              <ul><li><span class="node"><span class="rel">투입 ←</span><span class="badge badge-kind">MATERIAL</span><span class="no">LM-20261009-001</span><span>원재료 R-1 (예시)</span><span class="qty">250 / 500 kg</span><span class="badge badge-stock">재고</span></span></li></ul>
+            </details></li>
+            <li><details><summary><span class="node"><span class="rel">출하 ←</span><span class="badge badge-kind">PRODUCT</span><span class="no">LP-20261009-003</span><span>제품 B (예시)</span><span class="qty">500 EA</span><span class="badge badge-shipped">출하</span></span></summary>
+              <ul><li><span class="node"><span class="rel">합병 ←</span><span class="badge badge-kind">PRODUCT</span><span class="no">LP-20261009-001</span><span class="qty">500 EA</span><span class="badge badge-consumed">소진</span></span></li></ul>
+            </details></li>
+          </ul>
+        </li>
+      </ul>
+    </section>
+  </main>
+
+  <!-- ── 우측 계약 패널 (개발 중 참고용 · 운영에서 숨김: settings.show_contract_panel) ── -->
+  <aside class="desc" id="desc-panel" data-env="dev" aria-label="계약">
+    <h2>계약 <span class="tag">개발용</span></h2>
+    <p class="empty-inline">이 화면에 묶인 기능 줄이 없다</p>
+  </aside>
+</div>
+
+<!-- 쓰기 성공: 303 → 원래 화면 + 알림 한 번 (api-contract.md §2). flash 는 세션에서 한 번 읽고 지운다 -->
+<div class="toast" role="status" aria-live="polite" data-auto>
+  <strong>저장됨</strong><span>예시 토스트 — 8초 뒤 사라진다</span>
+  <button type="button" class="toast-x" data-toast-close aria-label="닫기">&times;</button>
+</div>
+
+<footer class="ftr">{{ t("시스템명") }} · 갱신 시각 <b>2026-10-09 14:05:12</b> · 자동 로그아웃 30분 · 코어 0.1.0</footer>
+<script>
+/* 레이아웃 동작만 (이식: static/app.js 에 합친다). 데이터 · 검증 · 요청은 서버가 한다. */
+(function () {
+  var body = document.body;
+  // 좌측 메뉴 — 묶음 펴기/접기, 헤더의 ≡ 로 메뉴 전체 접기
+  document.querySelectorAll('.mg-h').forEach(function (h) {
+    h.addEventListener('click', function () {
+      var open = h.parentElement.classList.toggle('open');
+      h.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  });
+  var st = document.getElementById('side-toggle');
+  if (st) st.addEventListener('click', function () {
+    var collapsed = body.classList.toggle('side-collapsed');
+    st.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  });
+  // 우측 계약 패널 — 넓은 화면에서는 닫기, 좁은 화면(≤1180)에서는 덮개로 열기
+  var dt = document.getElementById('desc-toggle');
+  if (dt) dt.addEventListener('click', function () {
+    var narrow = window.matchMedia('(max-width: 1180px)').matches;
+    var shown = narrow ? body.classList.toggle('desc-open') : !body.classList.toggle('desc-closed');
+    dt.setAttribute('aria-expanded', shown ? 'true' : 'false');
+  });
+  // 토스트 — 닫기 · 8초 뒤 자동 닫힘(한 번만 뜬다: 서버가 flash 를 세션에서 지운다)
+  document.querySelectorAll('[data-toast-close]').forEach(function (b) {
+    b.addEventListener('click', function () { b.closest('.toast').remove(); });
+  });
+  setTimeout(function () {
+    document.querySelectorAll('.toast[data-auto]').forEach(function (t) { t.remove(); });
+  }, 8000);
+  // 422 알림 닫기
+  document.querySelectorAll('[data-alert-close]').forEach(function (b) {
+    b.addEventListener('click', function () { b.closest('.alert').remove(); });
+  });
+  // 인라인 확인 — "취소" 가 details 를 닫는다 (브라우저 confirm 금지)
+  document.querySelectorAll('[data-close-details]').forEach(function (b) {
+    b.addEventListener('click', function () { b.closest('details').removeAttribute('open'); });
+  });
+  // 원형 전용: 정적 파일이라 폼을 보내지 않는다 — 이식 때 이 블록을 지운다
+  document.addEventListener('submit', function (e) {
+    if (body.hasAttribute('data-prototype')) e.preventDefault();
+  });
+  body.setAttribute('data-prototype', '');
+})();
+
+</script>
+</body>
+</html>

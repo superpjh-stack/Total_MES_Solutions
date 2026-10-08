@@ -1,0 +1,15 @@
+equip_code,equip_name,process_code,collect_yn,use_yn,equip_type,comm_type,maker_model,storage_kind,temp_limit,note
+EQ-STIR-01,EV형 인덕션 교반기 #1,,Y,Y,조리설비,Ethernet,지디엠인덕션 EV형,,,AD2-050 · PLC Ethernet · 가공(취사)·가공(볶음) 겸용 — 공정 배정 (미확정 D-514 · 니즈푸드 D-08)
+EQ-STIR-02,EV형 인덕션 교반기 #2,,Y,Y,조리설비,Ethernet,지디엠인덕션 EV형,,,〃
+EQ-THS-01,온습도센서 #1,,Y,Y,계측기,RS-485,오토닉스 THD-WD1-T,,,AD2-052 · 태그 TEMP · HUMI · 임계치 (미확정 — AD2-052 '명시되어 있지 않다')
+EQ-THS-02,온습도센서 #2,,Y,Y,계측기,RS-485,오토닉스 THD-WD1-T,,,〃
+EQ-THS-03,온습도센서 #3,,Y,Y,계측기,RS-485,오토닉스 THD-WD1-T,,,〃
+EQ-THS-04,온습도센서 #4,,Y,Y,계측기,RS-485,오토닉스 THD-WD1-T,,,〃
+EQ-THS-05,온습도센서 #5,,Y,Y,계측기,RS-485,오토닉스 THD-WD1-T,,,〃
+EQ-TC-01,온도조절기 #1,,Y,Y,계측기,RS-485,FOX-2003CC,,,AD2-053 · 태그 PV_TEMP · 냉장/냉동 구분 (미확정 D-10)
+EQ-TC-02,온도조절기 #2,,Y,Y,계측기,RS-485,FOX-2003CC,,,〃
+EQ-TC-03,온도조절기 #3,,Y,Y,계측기,RS-485,FOX-2003CC,,,〃
+EQ-TC-04,온도조절기 #4,,Y,Y,계측기,RS-485,FOX-2003CC,,,〃
+EQ-TC-05,온도조절기 #5(냉장),,Y,Y,계측기,RS-485,FOX-2003CC,냉장,5,TD3-033 목업 '온도조절기 #5(냉장)' · 임계 냉장 5 ℃ 이하 (AD2-053)
+EQ-TC-06,온도조절기 #6,,Y,Y,계측기,RS-485,FOX-2003CC,,,냉장/냉동 구분 (미확정 D-10) — 냉동이면 -18 ℃ (AD2-053)
+EQ-TC-07,온도조절기 #7,,Y,Y,계측기,RS-485,FOX-2003CC,,,〃

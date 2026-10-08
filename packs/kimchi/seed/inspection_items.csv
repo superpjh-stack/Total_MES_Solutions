@@ -1,0 +1,10 @@
+insp_type,item_code,process_code,item_key,label,unit,value_type,standard,min_value,max_value,seq,note
+입고,,,foreign_matter,이물,,select,합격,,,1,TD5 RCV_INSPECT.INSPECT_ITEM 이물 — 값 합격/불합격
+입고,,,decay,부패,,select,합격,,,2,TD5 RCV_INSPECT.INSPECT_ITEM 부패
+입고,,,appearance,외관,,select,합격,,,3,TD5 RCV_INSPECT.INSPECT_ITEM 외관
+공정,,P06,mix_ccp,덤퍼·버무림 CCP 측정값,,number,,,,1,TD5 MIX_CCP_RESULT.MEASURE_VALUE · BAS_CCP_STD — 상·하한 (미확정 임진강 D-08)
+공정,,P07,metal_detect,금속검출 결과,,select,OK,,,1,TD5 QUA_METAL_LOG.DETECT_RESULT OK/NG — NG 면 불합격 · validate_shipment 가 막는다
+공정,,P07,inspect_qty,검사 수량,박스,number,0,,,2,TD5 QUA_METAL_LOG.INSPECT_QTY
+공정,,P07,ng_qty,불합격 수량,박스,number,0,,,3,TD5 QUA_METAL_LOG.NG_QTY
+공정,,P03,salinity_check,절임 완료 염도 확인,%,number,,,,1,절임 완료 판정(수기) — 기준은 x_kimchi_item_std. 선택 항목
+최종,,P08,pack_weight_kg,포장 중량,kg,number,,,,1,TD5 PKG_WEIGHT_INSP.MEASURE_WEIGHT — 허용범위 (미확정). 합격/미달/초과

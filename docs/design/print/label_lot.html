@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ko">
+<!--
+  LOT 라벨 — print/label_lot.html 정적 원형 (디자이너3 · 2026-10-09)
+  MAT-07 `GET /mat/lots/{id}/label`(원재료 LOT) · POP-08 `GET /pop/labels?lot=`(생산 LOT · 분할 · 합병 LOT 도 같은 양식). 담당 개발2.
+  printing.render_print(request, "label_lot", printing.label_for(lot_id), screen_id=…).
+
+  두 크기 — 100×50mm(기본) · 50×30mm. 한 요청은 한 크기만 그린다(`?size=50x30`). 원형은 검토용으로 둘을 같이 보여 준다.
+    · 템플릿은 <body data-size="100x50|50x30"> 와 <style>@page{size:{{w}}mm {{h}}mm;margin:0}</style> 를 그 크기로 찍는다.
+    · 한 장에 여러 라벨(labels[])이면 .label 을 반복하고 각 .label 이 한 페이지(page-break-after:always).
+  데이터(printing.label_for(lot_id) — 가설, 개발2 가 확정)
+    lot_no · kind(MATERIAL/PRODUCT/SHIPMENT + 팩 등록 → 표시는 t("원재료 LOT") 등 kind_label) · item_code · item_name · spec
+    qty · unit · made_at · insp_status · work_order_no(생산 LOT) · partner_name(원재료 LOT 공급처)
+    attrs: [{label, value}] 팩 속성 중 라벨 표시로 선언한 것 — 두 줄까지만 그린다(넘치면 버린다. 줄 수는 양식이 정한다)
+    barcode: printing.barcode_svg(lot_no, height=…) ← 값은 lot_no 글자 그대로. POP 스캔칸에 넣으면 그 LOT 이 열린다(G-C14)
+  규격은 barcode_spec.md. 더미는 (예시).
+-->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LOT 라벨</title>
+<link rel="stylesheet" href="../tokens.css"><!-- 디자이너1 토큰. 개발: /static/tokens.css -->
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:var(--c-bg);color:var(--c-ink);font-family:var(--font-sans)}
+.toolbar{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;max-width:900px;margin:0 auto}
+.toolbar .cap{font-size:13px;color:var(--c-ink-2)}
+.btn{font:inherit;font-size:14px;padding:8px 18px;border:1px solid var(--c-accent);background:var(--c-accent);color:var(--c-ink-inverse);border-radius:8px;cursor:pointer}
+.review{display:flex;flex-wrap:wrap;gap:32px;padding:8px 24px 40px;max-width:900px;margin:0 auto;align-items:flex-start}
+.review figure{margin:0}
+.review figcaption{font-size:13px;color:var(--c-ink-2);margin-bottom:8px}
+.review figcaption code{color:var(--c-ink-3)}
+
+/* 라벨 본체 — mm 단위 고정. 안쪽 여백 3mm 는 라벨 프린터 절단 오차 자리 */
+.label{background:var(--c-surface);color:var(--c-print-ink);overflow:hidden;position:relative;box-shadow:0 0 0 1px var(--c-line);page-break-after:always;display:grid}
+.barcode{display:block;width:100%}
+.barcode rect{fill:#000}
+.lotno{font-family:var(--font-mono);font-weight:600;letter-spacing:.06em;text-align:center;white-space:nowrap}
+.kind{display:inline-block;border:1px solid var(--c-print-line);padding:0 1.2mm;font-weight:600;white-space:nowrap}
+.ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.attrs{color:var(--c-print-ink);line-height:1.25}
+.attrs div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.attrs b{font-weight:600}
+
+/* 100×50mm */
+.label[data-size="100x50"]{width:100mm;height:50mm;padding:3mm 4mm;grid-template-rows:auto auto 13mm auto 1fr;row-gap:1mm;font-size:9pt}
+.label[data-size="100x50"] .row1{display:flex;justify-content:space-between;align-items:baseline;font-size:8.5pt;color:var(--c-print-ink)}
+.label[data-size="100x50"] .item{font-size:14pt;font-weight:700;line-height:1.15}
+.label[data-size="100x50"] .barcode{height:13mm;width:80mm;margin:0 auto}     /* 좌우 10mm 씩 quiet zone 이 남는다 */
+.label[data-size="100x50"] .lotno{font-size:12pt}
+.label[data-size="100x50"] .row5{display:grid;grid-template-columns:30mm 1fr;align-items:end;column-gap:3mm}
+.label[data-size="100x50"] .qty{font-size:16pt;font-weight:700;line-height:1}
+.label[data-size="100x50"] .qty small{font-size:9pt;font-weight:400;margin-left:1mm}
+.label[data-size="100x50"] .attrs{font-size:8pt}
+
+/* 50×30mm */
+.label[data-size="50x30"]{width:50mm;height:30mm;padding:2mm 2.5mm;grid-template-rows:auto 8mm auto auto 1fr;row-gap:.6mm;font-size:6.5pt}
+.label[data-size="50x30"] .row1{display:flex;justify-content:space-between;align-items:baseline;gap:1mm;font-size:6.5pt}
+.label[data-size="50x30"] .row1 .item{font-weight:700;font-size:7.5pt}
+.label[data-size="50x30"] .barcode{height:8mm;width:42mm;margin:0 auto}        /* 좌우 ≥ 2.5mm quiet zone */
+.label[data-size="50x30"] .lotno{font-size:8pt;letter-spacing:.04em}
+.label[data-size="50x30"] .row4{display:flex;justify-content:space-between;font-size:6.5pt}
+.label[data-size="50x30"] .qty{font-weight:700;font-size:8pt}
+.label[data-size="50x30"] .attrs{font-size:6pt}
+.label[data-size="50x30"] .kind{padding:0 .8mm;font-size:6pt}
+
+@media print{
+  /* 템플릿은 @page{size:{{w}}mm {{h}}mm;margin:0} 을 요청한 크기로 찍는다. 원형은 100×50 고정 */
+  @page{size:100mm 50mm;margin:0}
+  body{background:var(--c-print-bg)}
+  .no-print{display:none!important}
+  .review{display:block;padding:0;margin:0;max-width:none}
+  .review figure{margin:0}
+  .label{box-shadow:none}
+  body[data-size="100x50"] .label:not([data-size="100x50"]){display:none}
+  body[data-size="50x30"]  .label:not([data-size="50x30"]){display:none}
+}
+</style>
+</head>
+<body data-size="100x50">
+
+<div class="toolbar no-print">
+  <span class="cap">LOT 라벨 · 100×50mm(기본) · 50×30mm — 한 요청은 한 크기만. 바코드 값 = LOT 번호 글자 그대로.</span>
+  <button class="btn" type="button" onclick="window.print()">인쇄</button>
+</div>
+
+<div class="review">
+
+  <figure>
+    <figcaption>100×50mm — 생산 LOT <code>?size=100x50 (기본)</code></figcaption>
+    <section class="label" data-size="100x50" data-lot="LOT-20261009-0007">
+      <div class="row1">
+        <span><span class="kind">생산 LOT</span>&nbsp; 합격</span>
+        <span>2026-10-09 13:42</span>
+      </div>
+      <div class="item ell"><span style="font-family:var(--font-mono);font-weight:500;font-size:10pt;margin-right:2mm">ITM-0001</span>품목 A (예시)</div>
+      <!-- printing.barcode_svg(lot_no, height=13mm) 자리 — 더미 막대 -->
+      <svg class="barcode" viewBox="0 0 250 100" preserveAspectRatio="none" shape-rendering="crispEdges" aria-label="LOT-20261009-0007"><rect x="10" width="2" height="100"/><rect x="13" width="1" height="100"/><rect x="18" width="1" height="100"/><rect x="21" width="1" height="100"/><rect x="23" width="1" height="100"/><rect x="30" width="1" height="100"/><rect x="32" width="6" height="100"/><rect x="39" width="1" height="100"/><rect x="41" width="1" height="100"/><rect x="43" width="2" height="100"/><rect x="46" width="4" height="100"/><rect x="52" width="1" height="100"/><rect x="54" width="1" height="100"/><rect x="56" width="1" height="100"/><rect x="63" width="1" height="100"/><rect x="65" width="2" height="100"/><rect x="68" width="1" height="100"/><rect x="71" width="2" height="100"/><rect x="74" width="1" height="100"/><rect x="76" width="6" height="100"/><rect x="83" width="1" height="100"/><rect x="85" width="1" height="100"/><rect x="87" width="6" height="100"/><rect x="94" width="1" height="100"/><rect x="96" width="6" height="100"/><rect x="103" width="1" height="100"/><rect x="105" width="1" height="100"/><rect x="107" width="1" height="100"/><rect x="109" width="1" height="100"/><rect x="116" width="1" height="100"/><rect x="118" width="1" height="100"/><rect x="120" width="6" height="100"/><rect x="127" width="1" height="100"/><rect x="129" width="1" height="100"/><rect x="136" width="1" height="100"/><rect x="138" width="1" height="100"/><rect x="140" width="6" height="100"/><rect x="147" width="1" height="100"/><rect x="149" width="1" height="100"/><rect x="151" width="1" height="100"/><rect x="153" width="1" height="100"/><rect x="155" width="1" height="100"/><rect x="162" width="1" height="100"/><rect x="169" width="1" height="100"/><rect x="171" width="1" height="100"/><rect x="173" width="1" height="100"/><rect x="175" width="6" height="100"/><rect x="182" width="1" height="100"/><rect x="184" width="1" height="100"/><rect x="186" width="1" height="100"/><rect x="193" width="1" height="100"/><rect x="195" width="1" height="100"/><rect x="202" width="1" height="100"/><rect x="204" width="1" height="100"/><rect x="206" width="2" height="100"/><rect x="209" width="1" height="100"/><rect x="212" width="3" height="100"/><rect x="216" width="1" height="100"/><rect x="218" width="1" height="100"/><rect x="220" width="6" height="100"/><rect x="227" width="2" height="100"/><rect x="232" width="3" height="100"/><rect x="236" width="1" height="100"/><rect x="238" width="2" height="100"/></svg>
+      <div class="lotno">LOT-20261009-0007</div>
+      <div class="row5">
+        <div class="qty">480<small>EA</small></div>
+        <div class="attrs">
+          <!-- 팩 attrs 두 줄 자리 — attrs[0..1]. 없으면 비워 둔다(지어내지 않는다) -->
+          <div><b>지시</b> WO-20261009-0001 · <b>공정</b> 공정 1 (예시)</div>
+          <div><b>속성 1</b> 값 (예시) · <b>속성 2</b> 값 (예시)</div>
+        </div>
+      </div>
+    </section>
+  </figure>
+
+  <figure>
+    <figcaption>100×50mm — 원재료 LOT(공급처 · 검사 상태) <code>MAT-07</code></figcaption>
+    <section class="label" data-size="100x50" data-lot="LOT-20261009-0008">
+      <div class="row1">
+        <span><span class="kind">원재료 LOT</span>&nbsp; 미검사</span>
+        <span>2026-10-09 08:05</span>
+      </div>
+      <div class="item ell"><span style="font-family:var(--font-mono);font-weight:500;font-size:10pt;margin-right:2mm">MAT-0011</span>원재료 A (예시)</div>
+      <svg class="barcode" viewBox="0 0 251 100" preserveAspectRatio="none" shape-rendering="crispEdges" aria-label="LOT-20261009-0008"><rect x="10" width="2" height="100"/><rect x="13" width="1" height="100"/><rect x="18" width="1" height="100"/><rect x="21" width="6" height="100"/><rect x="28" width="1" height="100"/><rect x="30" width="1" height="100"/><rect x="32" width="1" height="100"/><rect x="34" width="1" height="100"/><rect x="36" width="6" height="100"/><rect x="43" width="6" height="100"/><rect x="50" width="1" height="100"/><rect x="52" width="1" height="100"/><rect x="54" width="1" height="100"/><rect x="56" width="1" height="100"/><rect x="58" width="1" height="100"/><rect x="65" width="1" height="100"/><rect x="67" width="1" height="100"/><rect x="69" width="4" height="100"/><rect x="75" width="6" height="100"/><rect x="82" width="1" height="100"/><rect x="84" width="1" height="100"/><rect x="86" width="1" height="100"/><rect x="93" width="1" height="100"/><rect x="95" width="1" height="100"/><rect x="97" width="1" height="100"/><rect x="99" width="1" height="100"/><rect x="101" width="6" height="100"/><rect x="108" width="1" height="100"/><rect x="110" width="6" height="100"/><rect x="117" width="1" height="100"/><rect x="119" width="1" height="100"/><rect x="121" width="1" height="100"/><rect x="123" width="1" height="100"/><rect x="130" width="1" height="100"/><rect x="132" width="1" height="100"/><rect x="134" width="1" height="100"/><rect x="141" width="1" height="100"/><rect x="148" width="1" height="100"/><rect x="150" width="1" height="100"/><rect x="152" width="1" height="100"/><rect x="154" width="1" height="100"/><rect x="156" width="6" height="100"/><rect x="163" width="1" height="100"/><rect x="170" width="1" height="100"/><rect x="172" width="1" height="100"/><rect x="174" width="6" height="100"/><rect x="181" width="1" height="100"/><rect x="183" width="1" height="100"/><rect x="185" width="1" height="100"/><rect x="187" width="2" height="100"/><rect x="190" width="2" height="100"/><rect x="195" width="6" height="100"/><rect x="202" width="1" height="100"/><rect x="204" width="1" height="100"/><rect x="206" width="6" height="100"/><rect x="213" width="1" height="100"/><rect x="215" width="1" height="100"/><rect x="217" width="6" height="100"/><rect x="224" width="1" height="100"/><rect x="226" width="1" height="100"/><rect x="228" width="2" height="100"/><rect x="233" width="3" height="100"/><rect x="237" width="1" height="100"/><rect x="239" width="2" height="100"/></svg>
+      <div class="lotno">LOT-20261009-0008</div>
+      <div class="row5">
+        <div class="qty">250.0<small>kg</small></div>
+        <div class="attrs">
+          <div><b>공급처</b> 거래처 B (예시) · <b>입고</b> RCV-20261009-0002</div>
+          <div><b>속성 1</b> 값 (예시)</div>
+        </div>
+      </div>
+    </section>
+  </figure>
+
+  <figure>
+    <figcaption>50×30mm — 같은 생산 LOT <code>?size=50x30</code></figcaption>
+    <section class="label" data-size="50x30" data-lot="LOT-20261009-0007">
+      <div class="row1">
+        <span class="item ell">품목 A (예시)</span>
+        <span class="kind">생산 LOT</span>
+      </div>
+      <!-- printing.barcode_svg(lot_no, height=8mm) 자리 -->
+      <svg class="barcode" viewBox="0 0 250 100" preserveAspectRatio="none" shape-rendering="crispEdges" aria-label="LOT-20261009-0007"><rect x="10" width="2" height="100"/><rect x="13" width="1" height="100"/><rect x="18" width="1" height="100"/><rect x="21" width="1" height="100"/><rect x="23" width="1" height="100"/><rect x="30" width="1" height="100"/><rect x="32" width="6" height="100"/><rect x="39" width="1" height="100"/><rect x="41" width="1" height="100"/><rect x="43" width="2" height="100"/><rect x="46" width="4" height="100"/><rect x="52" width="1" height="100"/><rect x="54" width="1" height="100"/><rect x="56" width="1" height="100"/><rect x="63" width="1" height="100"/><rect x="65" width="2" height="100"/><rect x="68" width="1" height="100"/><rect x="71" width="2" height="100"/><rect x="74" width="1" height="100"/><rect x="76" width="6" height="100"/><rect x="83" width="1" height="100"/><rect x="85" width="1" height="100"/><rect x="87" width="6" height="100"/><rect x="94" width="1" height="100"/><rect x="96" width="6" height="100"/><rect x="103" width="1" height="100"/><rect x="105" width="1" height="100"/><rect x="107" width="1" height="100"/><rect x="109" width="1" height="100"/><rect x="116" width="1" height="100"/><rect x="118" width="1" height="100"/><rect x="120" width="6" height="100"/><rect x="127" width="1" height="100"/><rect x="129" width="1" height="100"/><rect x="136" width="1" height="100"/><rect x="138" width="1" height="100"/><rect x="140" width="6" height="100"/><rect x="147" width="1" height="100"/><rect x="149" width="1" height="100"/><rect x="151" width="1" height="100"/><rect x="153" width="1" height="100"/><rect x="155" width="1" height="100"/><rect x="162" width="1" height="100"/><rect x="169" width="1" height="100"/><rect x="171" width="1" height="100"/><rect x="173" width="1" height="100"/><rect x="175" width="6" height="100"/><rect x="182" width="1" height="100"/><rect x="184" width="1" height="100"/><rect x="186" width="1" height="100"/><rect x="193" width="1" height="100"/><rect x="195" width="1" height="100"/><rect x="202" width="1" height="100"/><rect x="204" width="1" height="100"/><rect x="206" width="2" height="100"/><rect x="209" width="1" height="100"/><rect x="212" width="3" height="100"/><rect x="216" width="1" height="100"/><rect x="218" width="1" height="100"/><rect x="220" width="6" height="100"/><rect x="227" width="2" height="100"/><rect x="232" width="3" height="100"/><rect x="236" width="1" height="100"/><rect x="238" width="2" height="100"/></svg>
+      <div class="lotno">LOT-20261009-0007</div>
+      <div class="row4"><span class="qty">480 EA</span><span>2026-10-09 13:42</span></div>
+      <div class="attrs">
+        <div><b>지시</b> WO-20261009-0001 · 공정 1 (예시)</div>
+        <div><b>속성 1</b> 값 (예시)</div>
+      </div>
+    </section>
+  </figure>
+
+</div>
+</body>
+</html>

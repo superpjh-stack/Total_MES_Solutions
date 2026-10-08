@@ -1,0 +1,154 @@
+# 니즈푸드 운영 DB → 표준 Import 파일 헤더 매핑 초안 — migration-files.md §6 형식 (기획자1 · 2026-10-09)
+# 이관 자체는 범위 밖(spec.md §13 · goal.md §2.8). 이 파일은 경로만 정한다.
+# 순서: packs/foodservice/migrate_export.py (이관 단계에 작성) 가 needsfood_db 37 테이블에서 4종 파일을 뽑고 → 표준 적재 → 행 수 · 계보 행 수 대조.
+# 니즈푸드 컬럼명은 TD5 design.json td5.details 그대로(대문자 SNAKE_CASE). 코드성 컬럼(*_CD)은 CODE_VAL 문자열이다(니즈푸드 D-22).
+
+rename:                       # 니즈푸드 헤더 → 표준 헤더 (파일별로 같은 이름이 다른 뜻이면 파일 접두로 구분)
+  # 01_items.csv ← BAS_MENU (item_type=제품) ∪ BAS_MATERIAL (item_type=원재료|부자재)
+  MENU_CD: item_code
+  MENU_NM: item_name
+  MATERIAL_CD: item_code
+  MATERIAL_NM: item_name
+  SPEC: spec
+  SERVE_UNIT: unit            # 메뉴 — '인분'
+  BASE_UNIT: unit             # 원부자재
+  USE_YN: use_yn
+  # 02_partners.csv ← BAS_PARTNER
+  PARTNER_CD: partner_code
+  PARTNER_NM: partner_name
+  PARTNER_TYPE_CD: partner_type       # 값 매핑은 아래 values
+  # 03_processes.csv ← BAS_PROCESS_STD
+  PROCESS_CD: process_code
+  PROCESS_NM: process_name
+  PROCESS_SEQ: seq
+  # 04_process_params.csv ← BAS_PROCESS_STD.CTRL_ITEM/STD_LOWER/STD_UPPER (관리항목 1행 → 키 1행으로 풀어 쓴다: CTRL_ITEM '교반속도(RPM)/교반시간/온도' → RPM · STIR_TIME · TEMP)
+  CTRL_ITEM: label
+  STD_LOWER: min_value
+  STD_UPPER: max_value
+  # 05_equipment.csv ← EQP_STATUS
+  EQUIP_CD: equip_code
+  EQUIP_NM: equip_name
+  COLLECT_YN: collect_yn
+  # 06_bom.csv ← BAS_RECIPE_BOM (+ BAS_MENU.MENU_CD · BAS_MATERIAL.MATERIAL_CD 조인)
+  BOM_VER: version
+  MIX_QTY: qty
+  MIX_UNIT: unit
+  SEQ_NO: seq
+  # 07_workers.csv ← BAS_WORKER
+  WORKER_NO: worker_code
+  WORKER_NM: worker_name
+  # 09_codes.csv ← BAS_COMMON_CODE
+  GROUP_CD: group_code
+  CODE_VAL: code
+  CODE_NM: code_name
+  SORT_ORDER: seq
+  # 11_orders.csv ← SAL_ORDER + SAL_ORDER_DTL
+  ORDER_NO: order_no
+  ORDER_DT: order_date
+  DUE_DT: due_date
+  ORDER_QTY: qty              # 수주인분 — unit '인분'
+  ORDER_STATUS_CD: status
+  # 12_work_orders.csv ← PRD_WORK_ORDER (+ PRD_PLAN.PLAN_DT) — D-501: 같은 계획의 솥 N건을 지시 1건으로 접고 솥은 31_work_results 로
+  WO_NO: work_order_no
+  WO_QTY: plan_qty
+  WO_DT: plan_date
+  WO_STATUS_CD: status
+  # 21_lots.csv ← MAT_RECEIPT (kind MATERIAL) ∪ PRD_BATCH_RESULT (kind BATCH) ∪ SAL_SHIP (kind SHIPMENT)
+  LOT_NO: lot_no              # 원료
+  PROD_LOT_NO: lot_no         # 완제품(배치)
+  RECEIPT_QTY: qty
+  GOOD_QTY: qty               # 배치 LOT 수량 = 양품 인분
+  INSP_RESULT_CD: insp_status
+  RECEIPT_DT: made_at
+  END_DT: made_at
+  # 22_genealogy.csv ← PRD_WORK_ORDER.USE_LOT_NO → PRD_BATCH_RESULT.PROD_LOT_NO (투입) · SAL_SHIP.PROD_LOT_NO → 출고 LOT (출하)
+  USE_LOT_NO: parent_lot_no
+  # 31_work_results.csv ← PRD_BATCH_RESULT
+  START_DT: started_at
+  DEFECT_QTY: scrap_qty
+  # 32_measures.csv ← PRD_BATCH_RESULT.AVG_RPM / STIR_MIN / AVG_TEMP (열 3 → 행 3: param_key RPM · STIR_TIME · TEMP)
+  AVG_RPM: value
+  STIR_MIN: value
+  AVG_TEMP: value
+  # 33_inspections.csv ← QUA_INSP_RESULT (+ MAT_RECEIPT 입고검사 판정)
+  INSP_DT: inspected_at
+  INSP_STAGE_CD: insp_type
+  JUDGE_CD: judgement
+  MEASURE_TEMP: item_value    # item_key measure_temp
+  SENSORY_SCORE: item_value   # item_key sensory_score
+  FOREIGN_YN: item_value      # item_key foreign_yn
+  # 34_shipments.csv ← SAL_SHIP
+  SHIP_NO: shipment_no
+  PLAN_SHIP_DT: ship_date
+  SHIP_STATUS_CD: status
+  ACT_SHIP_DT: approved_at
+
+values:                       # 니즈푸드 코드값 → 코어 값 (파일 로더가 열 단위로 적용 — 형식은 이관 단계 확정 (미확정))
+  item_type: { 메뉴: 제품, 원물: 원재료, 공산품: 원재료, 부자재: 부자재, 포장재: 부자재 }
+  partner_type: { 공급사: 공급, 납품처: 고객 }
+  insp_status: { 합격: 합격, 불합격: 불합격, 보류: 조건부, 재검: 미검사 }
+  insp_type: { 수입검사: 입고, "공정중 검사": 공정, 최종검사: 최종 }
+  order_status: { 접수: 등록, 확정: 진행, 변경: 진행, 취소: 취소 }
+  work_order_status: { 대기: 대기, 작업중: 진행, 완료: 마감, 보류: 대기 }
+  shipment_status: { 지시: 등록, 포장완료: 등록, 출고완료: 승인 }
+
+kinds:                        # 기존 구분값 → lot.kind
+  원료: MATERIAL
+  완제품: BATCH               # 완제품LOT = 배치(솥) (D-501)
+  출고: SHIPMENT
+
+relations:                    # 기존 관계명 → 코어/팩 relation (급식에 분할 · 합병 없음)
+  투입: 투입
+  출고: 출하
+
+ext:                          # 표준 밖 헤더 → 확장 테이블 컬럼 (attrs 대신) — schema_ext.md
+  item:
+    COOK_PROC_CD: x_foodservice_item_ext.cook_process_id        # 코드값 무침/취사/조리/볶음 → bas_process.id (PRC-030/040/050/060)
+    STORAGE_TEMP: x_foodservice_item_ext.storage_temp
+  bom:
+    BATCH_SERVE_QTY: x_foodservice_bom_ext.batch_serve_qty
+  process:
+    STD_LEAD_MIN: x_foodservice_process_ext.std_lead_min
+    BATCH_STD_QTY: x_foodservice_process_ext.batch_std_qty
+    COLLECT_TYPE_CD: x_foodservice_process_ext.collect_type
+  equipment:
+    COLLECT_PATH_CD: x_foodservice_equipment_ext.collect_path
+  order:
+    DUE_TM: x_foodservice_order_ext.due_time
+    SERVICE_TYPE_CD: x_foodservice_order_ext.service_type
+  lot:
+    EXPIRY_DT: x_foodservice_lot_ext.expiry_date
+    BATCH_NO: x_foodservice_lot_ext.batch_no
+    INPUT_TYPE_CD: x_foodservice_lot_ext.input_type
+  insp_plan:
+    SAMPLE_FREQ: x_foodservice_insp_plan_ext.sample_freq
+    SAMPLE_QTY: x_foodservice_insp_plan_ext.sample_qty
+    APPLY_FROM_DT: x_foodservice_insp_plan_ext.apply_from
+
+attrs_passthrough:            # 표준 밖 헤더 중 attrs 로 들어가는 것 (매핑 없음 — 로더 기본 동작. 기록용)
+  item: [MENU_TYPE_CD, SERVE_QTY_G, ALLERGY_NOTE, MATERIAL_TYPE_CD, STORAGE_COND_CD, EXPIRY_MNG_YN, SPARE_RATE]
+  bom: [COOK_STEP_DESC, CAUTION_NOTE]
+  partner: [BIZ_NO, DELIVERY_ADDR]
+  worker: [JOB_CD, LINE_CD, JOIN_DT]
+  equipment: [EQUIP_TYPE_CD, MAKER_MODEL, COMM_TYPE_CD, INSTALL_LOC]
+  work_order: [LINE_CD, CAUTION_NOTE, BATCH_NO]     # D-501: 솥별 지시를 접을 때 BATCH_NO 는 실적 쪽 lot ext 로
+  issue: [ISSUE_TYPE_CD, PARTNER_ID]
+
+not_migrated:                 # 범위 밖 · 코어 대응 없음
+  - MAT_PO                    # 발주 — 코어에 없음 (D-507 x_foodservice_po 후보)
+  - MAT_PROD_STOCK            # 뷰 v_lot_stock 로 계산 — CLOSE_YN(일마감)은 버린다 (D-507)
+  - MAT_STOCK_MOVE            # 이관 시 mat_stock_trx(조정) 로 — 표준 파일 4종에 재고 거래 파일이 없어 (미확정)
+  - QUA_INSP_PLAN             # 일자별 검식 계획 — 코어 대응 없음 (D-507)
+  - PRC_PROGRESS              # 실적 started_at/ended_at 으로 대체 — 단계별 행은 버린다
+  - PRC_DELAY                 # pop_stop — 표준 파일에 정지 파일이 없어 (미확정)
+  - EQP_COLLECT               # 시계열 — ifc_collect_raw 재적재는 이관 대상 아님(보존기간 미확정 D-10)
+  - KPI_RESULT                # 재집계로 만든다
+  - AIA_QUERY · AIA_ANSWER · AIA_REPORT · AIA_VECTOR_DOC   # 범위 밖(agent 팩)
+  - SYS_LOG · SYS_BACKUP_HIST # 이관하지 않는다
+
+checks:                       # 적재 후 대조 (이관 단계 QA2)
+  - bas_item 수 = BAS_MENU + BAS_MATERIAL
+  - bas_bom 수 = BAS_RECIPE_BOM 의 (MENU_ID, BOM_VER) 수 · bas_bom_dtl 수 = BAS_RECIPE_BOM 행 수
+  - lot(kind=MATERIAL) 수 = MAT_RECEIPT · lot(kind=BATCH) 수 = PRD_BATCH_RESULT · lot(kind=SHIPMENT) 수 = SAL_SHIP(출고완료)
+  - lot_genealogy(투입) 수 = PRD_WORK_ORDER.USE_LOT_NO not null 인 배치 수 · (출하) 수 = SAL_SHIP.PROD_LOT_NO not null
+  - pop_measure 수 = PRD_BATCH_RESULT 의 AVG_RPM/STIR_MIN/AVG_TEMP not null 셀 수

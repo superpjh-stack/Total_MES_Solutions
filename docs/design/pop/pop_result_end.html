@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>작업 종료 · POP</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="pop.css">
+</head>
+<!--
+  POP-02 작업 종료 — 현장 POP 원형 (디자이너2). F-POP-03 POST /pop/result/{id}/end. 수량 + 측정값 자동 폼(ui.measure_fields(process_id)) → pop_measure → 생산 LOT → 라벨 안내. 측정값 칸의 모든 상태를 한 폼에 모았다 — 점선 표시는 상태 이름(시연).
+  Jinja 로 옮길 때: body.ch-pop 는 templating.render 가 채널별로 붙인다 · 상단 탭은 nav.SCREENS 중 channels.pop 에 있는 화면만 ·
+  스캔칸은 ui.scan_box 하나(data-scan) · 알림은 base 의 #popup-layer + #flash-data · 문구는 전부 t() · 더미 값은 (예시).
+-->
+<body class="ch-pop" data-screen="POP-02">
+<header class="topbar">
+  <a class="btn back" href="pop_work.html">← 뒤로</a>
+  <nav class="tabs" aria-label="작업 전환">
+    <a class="tab on" href="pop_work.html">작업</a>
+    <a class="tab" href="pop_inputs.html">투입</a>
+    <a class="tab" href="pop_labels.html">라벨</a>
+    <a class="tab" href="mat_receipts_pop.html">입고</a>
+    <a class="tab" href="mat_inspections_pop.html">입고검사</a>
+    <a class="tab" href="qua_inspections_pop.html">검사</a>
+    <a class="tab" href="shp_scan.html">출하</a>
+    <a class="tab" href="eqp_status_pop.html">설비</a>
+  </nav>
+  <div class="who" aria-label="현재 상태">
+    <span class="who-item"><small>작업자</small><b>김현장 (예시)</b></span>
+    <span class="who-item"><small>설비</small><b>EQ-001 (예시)</b></span>
+    <span class="who-item"><small>시각</small><b>10:42 (예시)</b></span>
+    <span class="who-item conn on"><small>연결</small><b>정상</b></span>
+  </div>
+</header>
+<div class="offline-bar" id="offline-bar" hidden role="alert">서비스 일시 중단 (503) — 연결이 돌아오면 스캔을 이어서 한다</div>
+<main class="pop-main">
+  <h1 class="screen-title">작업 종료 <small>POP-02</small></h1>
+  <form class="scan" method="get" action="/pop/work" autocomplete="off" data-demo>
+    <label for="scan">다른 지시로 바꾸려면 지시 번호 스캔</label>
+    <div class="scan-row">
+      <input id="scan" type="text" name="no" data-scan autofocus inputmode="text" autocomplete="off" placeholder="WO-…">
+      <button type="submit" class="btn btn-primary">확인</button>
+    </div>
+  </form>
+  <section class="result" role="status" id="scan-result" hidden><p class="result-msg"></p></section>
+
+  <section class="panel">
+    <h2>실적 #17 <small><code>WO-20261009-001</code> · 품목 A (예시)</small></h2>
+    <dl class="kv">
+      <dt>시작</dt><dd>08:10 · 김현장 (예시)</dd>
+      <dt>설비</dt><dd>EQ-001 설비 1 (예시)</dd>
+      <dt>투입</dt><dd>3건 <a class="btn" style="min-height:44px;padding:0 12px;margin-left:8px" href="pop_inputs.html">투입 화면</a></dd>
+      <dt>정지</dt><dd>1건 · 12분</dd>
+    </dl>
+  </section>
+
+  <form method="post" action="/pop/result/17/end" id="end-form" data-demo>
+    <section class="panel">
+      <h2>수량</h2>
+      <div class="qty-row">
+        <div class="field"><label for="good_qty">양품 <span class="unit">EA</span> <span class="badge b-err">필수</span></label><input id="good_qty" type="number" name="good_qty" inputmode="decimal" step="any" min="0" required placeholder="0"></div>
+        <div class="field"><label for="defect_qty">불량 <span class="unit">EA</span></label><input id="defect_qty" type="number" name="defect_qty" inputmode="decimal" step="any" min="0" value="0"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>측정값 <small>공정 1 의 선언 (bas_process_param) 에서 자동 — 칸을 손으로 만들지 않는다</small></h2>
+      <div class="measure">
+        <!-- 1. number · 필수 · 범위 있음 · 비어 있음 -->
+        <div class="m-field">
+          <div class="lbl">온도 <span class="unit">℃</span> <span class="badge b-err">필수</span> <span class="demo-tag">number · 필수 · 빈 칸</span></div>
+          <div class="range">기준 60 ~ 80</div>
+          <input type="number" name="m_temp" inputmode="decimal" step="any" required placeholder="숫자">
+          <div class="state">비우고 종료 → 422 「필수 측정값이 비었습니다」 + 항목 사유. 범위 안 → 저장.</div>
+        </div>
+        <!-- 2. number · 범위 이탈 (값은 들어갔고 범위 밖) -->
+        <div class="m-field deviated">
+          <div class="lbl">무게 <span class="unit">kg</span> <span class="badge b-warn">이탈</span> <span class="demo-tag">number · 범위 이탈</span></div>
+          <div class="range">기준 10 ~ 12</div>
+          <input type="number" name="m_weight" inputmode="decimal" step="any" value="12.8">
+          <div class="state">범위 밖은 422 가 아니다 — 저장되고 <code>pop_measure.deviated = true</code>. 「이탈」 배지는 저장 뒤 조회 · 재렌더에서 보인다.</div>
+        </div>
+        <!-- 3. number · 선택(필수 아님) · 하한만 -->
+        <div class="m-field">
+          <div class="lbl">두께 <span class="unit">mm</span> <span class="demo-tag">number · 선택 · 하한만</span></div>
+          <div class="range">기준 0.5 이상</div>
+          <input type="number" name="m_thick" inputmode="decimal" step="any" placeholder="비워도 된다">
+          <div class="state">비우면 행을 만들지 않는다. 하한 · 상한이 둘 다 비면 기준 줄이 없다.</div>
+        </div>
+        <!-- 4. text -->
+        <div class="m-field">
+          <div class="lbl">외관 메모 <span class="demo-tag">text</span></div>
+          <input type="text" name="m_note" maxlength="100" placeholder="글자">
+          <div class="state"><code>value_text</code> 에 저장. 단위 · 범위 · 이탈 없음.</div>
+        </div>
+        <!-- 5. bool -->
+        <div class="m-field">
+          <div class="lbl">포장 이상 없음 <span class="badge b-err">필수</span> <span class="demo-tag">bool · 2버튼</span></div>
+          <div class="choice c2">
+            <label class="ok"><input type="radio" name="m_pack_ok" value="true" required><span>예</span></label>
+            <label class="err"><input type="radio" name="m_pack_ok" value="false"><span>아니오</span></label>
+          </div>
+          <div class="state"><code>value_num</code> 1/0. 체크박스가 아니라 2버튼 — 「안 누름」과 「아니오」를 구분한다.</div>
+        </div>
+        <!-- 6. select -->
+        <div class="m-field">
+          <div class="lbl">포장 형태 <span class="demo-tag">select · choices ≤ 5 → 버튼</span></div>
+          <div class="choice c3">
+            <label><input type="radio" name="m_pack_type" value="BOX"><span>상자</span></label>
+            <label><input type="radio" name="m_pack_type" value="BAG"><span>봉지</span></label>
+            <label><input type="radio" name="m_pack_type" value="BULK"><span>벌크</span></label>
+          </div>
+          <div class="state"><code>choices jsonb</code> 가 5개 이하면 버튼, 6개 이상이면 <code>&lt;select&gt;</code>(56px). <code>value_text</code> 에 코드 저장.</div>
+        </div>
+        <!-- 7. collect · 수신 있음 -->
+        <div class="m-field collect">
+          <div class="lbl">설비 압력 <span class="unit">bar</span> <span class="badge b-off">수집값 자동</span> <span class="demo-tag">collect · 수신 중</span></div>
+          <div class="range">기준 2.0 ~ 3.5 · 집계 평균(agg)</div>
+          <input type="text" readonly value="최근 수신 2.8 bar · 10:41 (예시)" tabindex="-1">
+          <div class="state">읽기 전용. 종료 때 <code>on_result_closed</code> 전에 코어가 시작~종료 구간 · 같은 설비의 <code>eqp_collect</code> 대표값을 채운다. 사람이 고치지 못한다.</div>
+        </div>
+        <!-- 8. collect · 미수신 -->
+        <div class="m-field collect">
+          <div class="lbl">설비 온도 <span class="unit">℃</span> <span class="badge b-off">수집값 자동</span> <span class="badge b-off">미수집</span> <span class="demo-tag">collect · 미수신</span></div>
+          <div class="range">기준 60 ~ 80 · 집계 최종(agg)</div>
+          <input type="text" readonly value="미수집" tabindex="-1">
+          <div class="state">구간에 수신이 없으면 행은 <code>value_num NULL · source=collect</code> 로 남고 「미수집」. 필수여도 422 가 아니다 — 사람이 넣을 값이 아니다.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>생산 LOT <small>종료하면 번호 LOT_PRODUCT 로 하나 생긴다</small></h2>
+      <div class="actions">
+        <span class="field"><span class="lbl">LOT 수량 <span class="unit">EA</span></span><input type="number" name="lot_qty" inputmode="decimal" step="any" placeholder="양품 수량과 같게" style="width:220px"></span>
+        <button type="button" class="btn" disabled title="D-12 — 코어 화면 기능에 세지 않는다">분할</button>
+        <button type="button" class="btn" disabled title="D-12 — 코어 화면 기능에 세지 않는다">합병</button>
+      </div>
+      <ul class="notes"><li>분할 · 합병 버튼은 <code>ui.write_button</code> — 권한이 있을 때만 활성(D-12). 화면은 팩이 만든다.</li></ul>
+    </section>
+
+    <button type="submit" class="btn btn-primary btn-big">작업 종료 → 생산 LOT 만들기</button>
+  </form>
+
+  <section class="panel" style="margin-top:14px">
+    <h2>종료 뒤 <small>303 → 이 화면 + 알림 → 라벨 안내</small></h2>
+    <div class="result ok" role="status" style="margin:0 0 10px"><p class="result-msg">작업을 종료했습니다 — 생산 LOT <code>LP-20261009-005</code> (예시)</p></div>
+    <div class="actions"><a class="btn btn-primary" href="pop_labels.html">라벨 출력 (POP-04)</a><a class="btn" href="pop_work.html">작업 목록</a></div>
+  </section>
+  <section class="demo">
+    <h3>시연 — 템플릿에 옮기지 않는다</h3>
+    <div class="actions"><button type="button" class="btn" data-demo-popup="필수 측정값이 비었습니다" data-title="작업 종료" data-fields='[{"label":"온도 (℃)","reason":"필수"},{"label":"포장 이상 없음","reason":"필수"}]'>422 필수 측정값 누락</button><button type="button" class="btn" data-demo-popup="양품 수량을 넣어 주세요" data-title="작업 종료" data-fields='[{"label":"양품","reason":"필수"}]'>422 양품 수량 누락</button><button type="button" class="btn" data-demo-popup="작업을 종료했습니다 — 생산 LOT LP-20261009-005 (예시)" data-title="작업 종료" data-kind="ok">종료 성공 알림</button></div>
+  </section>
+</main>
+
+<div class="popup-layer" id="popup-layer" hidden>
+  <div class="popup" role="alertdialog" aria-labelledby="popup-title" aria-describedby="popup-body">
+    <h2 id="popup-title">알림</h2>
+    <div id="popup-body"></div>
+    <p class="scan-hint">알림이 떠 있어도 바코드를 쏘면 스캔칸에 들어간다. 글자가 오면 알림은 닫힌다.</p>
+    <div class="actions"><button type="button" class="btn btn-primary" data-popup-close>확인</button></div>
+  </div>
+</div>
+<script type="application/json" id="flash-data">{}</script>
+<script src="pop.js"></script>
+</body>
+</html>

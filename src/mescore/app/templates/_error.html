@@ -1,0 +1,52 @@
+{# 공통 오류 화면 (CMN-03) — contracts/api-contract.md. DB 가 끊겨도 그려져야 하므로 base.html 을 쓰지 않는다.
+   현황판 채널(ch-board)에서는 오류 화면에서도 자동 새로고침이 이어진다. #}
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ status }} {{ message }} · {{ system_name }}</title>
+{% if device == 'board' and board_refresh_seconds %}<noscript><meta http-equiv="refresh" content="{{ board_refresh_seconds }}"></noscript>{% endif %}
+<link rel="stylesheet" href="/static/style.css?v={{ asset_v }}">
+</head>
+<body class="login-body ch-{{ device or 'web' }}"{% if device == 'board' and board_refresh_seconds %} data-refresh-seconds="{{ board_refresh_seconds }}"{% endif %}>
+<div class="login-wrap{% if guide %} wide{% endif %}">
+  <div class="login-card err-card">
+    {% if guide %}
+    <h1 class="guide">오류 안내</h1>
+    <p class="sub">이 시스템이 오류를 알리는 방식이다. 실제 오류가 나면 아래 중 하나가 이 화면에 나온다.</p>
+    {% else %}
+    <h1>{{ status }}</h1>
+    <p class="err big">{{ message }}</p>
+    {% if code %}<p class="sub">code: <code>{{ code }}</code></p>{% endif %}
+    {% if fields %}
+    <ul class="notes">{% for f in fields %}<li>{{ f.label or f.name }} — {{ f.reason }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if detail_note %}<p class="sub">{{ detail_note }}</p>{% endif %}
+    {% endif %}
+    <div class="login-actions">
+      <a class="btn" href="/">메인으로</a>
+      <a class="btn" href="/login">로그인</a>
+    </div>
+  </div>
+  {% if guide %}
+  <div class="login-desc">
+    <div class="desc-block">
+      <h3>오류 계약 (contracts/api-contract.md)</h3>
+      <ul>
+        <li>422 validation_error — {{ t('필수값 누락 · 코드 중복 · 없는 LOT 스캔 · 이미 출하된 LOT · 자기 자신 계보 · 측정값 필수 누락') }}</li>
+        <li>422 hook_rejected — 팩 훅이 거부</li>
+        <li>401 — 로그인이 필요합니다 (브라우저 GET 은 로그인 화면으로)</li>
+        <li>403 — 접근 권한이 없습니다 (권한 없음 · 팩이 숨긴 메뉴 · 채널 밖)</li>
+        <li>404 — 대상을 찾을 수 없습니다</li>
+        <li>503 — 서비스 일시 중단 (DB 연결 실패)</li>
+        <li>501 — 미확정 (D-nn) — 아직 정해지지 않은 연계</li>
+        <li>500 — 예상하지 못한 오류 (로그 기록)</li>
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% if device == 'board' and board_refresh_seconds %}<script src="/static/app.js?v={{ asset_v }}"></script>{% endif %}
+</body>
+</html>

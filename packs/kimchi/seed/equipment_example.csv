@@ -1,0 +1,34 @@
+equip_code,equip_name,process_code,collect_yn,use_yn,equip_type,comm_type,collect_tags,note
+TK-01,절임통 1호 (예시),P03,N,Y,절임통,,,절임통 8기 (정본). 염도는 센서 SS-01/02 가 보낸다 — 센서↔절임통 매핑 (미확정 D-206)
+TK-02,절임통 2호 (예시),P03,N,Y,절임통,,,
+TK-03,절임통 3호 (예시),P03,N,Y,절임통,,,
+TK-04,절임통 4호 (예시),P03,N,Y,절임통,,,
+TK-05,절임통 5호 (예시),P03,N,Y,절임통,,,
+TK-06,절임통 6호 (예시),P03,N,Y,절임통,,,
+TK-07,절임통 7호 (예시),P03,N,Y,절임통,,,
+TK-08,절임통 8호 (예시),P03,N,Y,절임통,,,
+SS-01,염도센서 1 (예시),P03,Y,Y,염도센서,RS-485,salinity_pct,염도센서 2식 (정본)
+SS-02,염도센서 2 (예시),P03,Y,Y,염도센서,RS-485,salinity_pct,
+CR-01,원품 냉장고 (예시),P01,N,Y,냉장고,,,냉장고 3종 (정본) — 센서는 TH-nn 이 보낸다
+CR-02,숙성 냉장고 (예시),P09,N,Y,냉장고,,,TD3 004 목업 예시
+CR-03,탈수 냉장고 (예시),P05,N,Y,냉장고,,,
+TH-01,온습도센서 1 (예시),P01,Y,Y,온습도센서,RS-485,temp_c;humidity_pct,온습도센서 10식 (정본) · 공정 배치는 TD2 hardware (입고 3·전처리 3·세척 1·절임 1·혼합 1·포장 1)
+TH-02,온습도센서 2 (예시),P01,Y,Y,온습도센서,RS-485,temp_c;humidity_pct,
+TH-03,온습도센서 3 (예시),P01,Y,Y,온습도센서,RS-485,temp_c;humidity_pct,
+TH-04,온습도센서 4 (예시),P02,Y,Y,온습도센서,RS-485,temp_c;humidity_pct,
+TH-05,온습도센서 5 (예시),P02,Y,Y,온습도센서,RS-485,temp_c;humidity_pct,
+TH-06,온습도센서 6 (예시),P02,Y,Y,온습도센서,RS-485,temp_c;humidity_pct,
+TH-07,온습도센서 7 (예시),P04,Y,Y,온습도센서,RS-485,temp_c;humidity_pct,
+TH-08,온습도센서 8 (예시),P03,Y,Y,온습도센서,RS-485,temp_c;humidity_pct,
+TH-09,온습도센서 9 (예시),P06,Y,Y,온습도센서,RS-485,temp_c;humidity_pct,
+TH-10,온습도센서 10 (예시),P08,Y,Y,온습도센서,RS-485,temp_c;humidity_pct,
+TC-01,온도조절기 1 (예시),P09,Y,Y,온도조절기,RS-485,set_temp_c;temp_c,온도조절기 4식 (정본) — 냉장고 연결 (미확정 D-206)
+TC-02,온도조절기 2 (예시),P09,Y,Y,온도조절기,RS-485,set_temp_c;temp_c,
+TC-03,온도조절기 3 (예시),P09,Y,Y,온도조절기,RS-485,set_temp_c;temp_c,
+TC-04,온도조절기 4 (예시),P09,Y,Y,온도조절기,RS-485,set_temp_c;temp_c,
+SW-01,소독수 Interface Module (예시),P03,Y,Y,소독수공급장치,Ethernet(TCP/IP),sanitizer_ppm;contact_min,1식 (정본) · contact_min 은 코어 param 이 아니라 x_kimchi_sanitizer_log 로
+MD-01,금속검출기 (예시),P07,N,Y,금속검출기,RS-485,metal_detect;inspect_qty;ng_qty,대수·통신 지원 (미확정 D-08) → 1차 수기 QUA-02 (D-509)
+WS-01,중량 저울 (예시),P08,N,Y,중량저울,,pack_weight_kg,연동 사양 (미확정) → 1차 수기
+FL-01,충진기 (예시),P06,N,Y,충진기,,work_speed;set_volume,통신 인터페이스 (미확정)
+SF-01,속넣기기계 (예시),P06,N,Y,속넣기기계,,work_speed;set_volume,(미확정)
+AP-01,아이스박스자동포장기 (예시),P08,Y,Y,자동테이핑기,Ethernet(TCP/IP),pack_count;run_state,1대 (정본) · OPC-UA 병행

@@ -1,0 +1,132 @@
+# printfilm 팩 매니페스트 — pack-contract.md §2 의 키 전부 (기획자2 · 2026-10-09)
+# 근거: ../lcomFine MES (goal.md §6 권한 표 · nav.py · seed_dev1.py D-101 채번 · screen-map.md · decisions.md D-417/D-418)
+# 값에 (미확정) 이 있으면 엘컴화인 산출물에 없는 값이다. 실 고객 · 품목 · 규격값은 없다.
+
+pack: printfilm
+name: 인쇄필름 MES
+company: 엘컴화인(주)
+requires_core: ">=0.1,<1.0"
+env_prefix: MES_
+
+# ── E1 용어 사전 — 키는 spec.md §12 중립어 26 안에서만. 원문과 같은 것(원재료 LOT · 출하 LOT · 검사 · 현황판 · 작업자)은 적지 않는다 ──
+terms:
+  작업지시: Job
+  생산 LOT: Roll
+  성적서: COA
+  분할: 슬리팅
+  합병: splice
+  실적: 작업 실적          # 엘컴화인 중메뉴 "작업 실적"
+  투입: 자재 투입          # 엘컴화인 중메뉴 "자재 투입"
+  거래처: 고객             # 엘컴화인 "고객 관리" (공급처는 같은 화면의 partner_type=공급)
+  추적: LOT 추적
+
+# ── E1 메뉴 — 엘컴화인 대메뉴 12 + 영업관리(D-418). 순서는 nav.SIDEBAR 일하는 순서(D-417) ──
+menus:
+  hide: [eqp]              # 엘컴화인 G-12: 설비는 기준정보(BAS-05)까지. 가동 · 점검 · 고장 · 수집값 화면은 숨긴다. ord 는 숨기지 않는다(영업관리 확장)
+  rename:
+    bas: 기준정보 관리
+    ord: 영업관리
+    job: 작업지시 관리
+    mat: 자재 · 입고
+    pop: 생산 실적 (POP)
+    qua: 품질 검사 기록
+    shp: 출하
+    trc: LOT 추적
+    kpi: 실적 현황
+    sys: 시스템 관리
+  order: [kpi, ord, job, mat, clr, pop, rll, qua, shp, trc, bas, prt, sys, ifc]
+  add:
+    - { code: prt, name: 인쇄 기준 관리, after: bas }
+    - { code: clr, name: 조색 기록, after: mat }
+    - { code: rll, name: 후가공 · 슬리팅 롤 이력, after: pop }
+
+# ── E4 팩 화면 7 — 엘컴화인 screen-map.md 의 경로 · 채널 · 기능 수 그대로. 담당은 팩 담당 개발2 ──
+screens:
+  - { id: X-PRT-01, name: 판사양 관리,   module: prt, path: /prt/plates,    channels: [web],      owner: 개발2 }   # F-X-PRT-01~04
+  - { id: X-PRT-02, name: 아니록스 관리, module: prt, path: /prt/anilox,    channels: [web],      owner: 개발2 }   # F-X-PRT-05~08
+  - { id: X-PRT-03, name: 잉크조성 관리, module: prt, path: /prt/inks,      channels: [web],      owner: 개발2 }   # F-X-PRT-09~12
+  - { id: X-CLR-01, name: 조색 기록,     module: clr, path: /clr/records,   channels: [pop],      owner: 개발2 }   # F-X-CLR-01~05
+  - { id: X-RLL-01, name: 후가공,        module: rll, path: /rll/finishing, channels: [pop],      owner: 개발2 }   # F-X-RLL-01~03
+  - { id: X-RLL-02, name: 슬리팅,        module: rll, path: /rll/slitting,  channels: [pop],      owner: 개발2 }   # F-X-RLL-04~05
+  - { id: X-RLL-03, name: 롤 이력,       module: rll, path: /rll/history,   channels: [pop],      owner: 개발2 }   # F-X-RLL-06~07
+
+# ── E1 역할 4 — 엘컴화인 seed.py ROLES 코드 그대로(D-20). 코어 기본 4 를 대체 ──
+roles:
+  - { code: ADMIN, name: 관리자 }
+  - { code: PROD,  name: 생산 }
+  - { code: QC,    name: 품질 }
+  - { code: FIELD, name: 현장 }
+permissions: seed/permissions.csv   # 메뉴 15 × 역할 4 = 60칸 (엘컴화인 48칸 + ord(=job 칸) · eqp · ifc)
+
+# ── E1 채번 — 엘컴화인 D-101 조립식 → 코어 종류명 (README §5). 전부 가설(D-05) ──
+numbering:
+  WORK_ORDER:   { prefix: J,  date: YYMMDD-, digits: 3 }   # JOB      예 J261003-001
+  JOB_LOT:      { prefix: L,  date: YYMMDD-, digits: 3 }   # 팩 추가 종류 — 생산 LOT. CR-1 전까지 발번하는 기능 없음(D-503)
+  LOT_MATERIAL: { prefix: M,  date: YYMMDD-, digits: 3 }   # MAT_LOT  예 M261003-001
+  LOT_PRODUCT:  { prefix: R,  date: YYMMDD-, digits: 4 }   # ROLL     예 R261003-0001 — ROLL kind(base PRODUCT)는 이 형식
+  SHIPMENT:     { prefix: S,  date: YYMMDD-, digits: 3 }   # SHIPMENT 예 S261003-001
+  DOCUMENT:     { prefix: C,  date: YYMMDD-, digits: 3 }   # COA      예 C261003-001
+  ORDER:        { prefix: SO, date: YYMMDD-, digits: 3 }   # SALES_ORDER (D-418) 예 SO261008-001
+  # LOT_SHIPMENT · PLAN 은 코어 기본값 그대로 (미확정 · D-501)
+
+# ── E1 채널 — 엘컴화인 screen-map.md §1 의 채널 열. 주면 코어 기본을 대체한다. web 은 기본 ──
+channels:
+  pop:    [MAT-01, MAT-02, MAT-03, POP-01, POP-02, POP-03, POP-04, QUA-02, SHP-01, SHP-02, X-CLR-01, X-RLL-01, X-RLL-02, X-RLL-03]
+  mobile: [TRC-01, TRC-02, TRC-03, KPI-02]
+  board:  [KPI-01]
+
+# ── E2 표시용 속성 (검색 · 집계 · 제약에 쓰지 않는다 — D-05 · D-502) ──
+attrs:
+  lot:
+    - { key: length_m,  label: 길이(m), type: number, required: false }   # 엘컴화인 roll.length_m (가설 컬럼 D-18)
+    - { key: width_mm,  label: 폭(mm),  type: number, required: false }   # 엘컴화인 roll.width_mm (슬리팅 분할 폭)
+    - { key: supplier_lot_no, label: 공급사 LOT, type: text, required: false }   # 엘컴화인 material_lot.supplier_lot_no (MATERIAL 만 쓴다)
+  bas_process:
+    - { key: process_type, label: 공정 구분, type: select, required: true, choices: [인쇄, 후가공, 슬리팅, 기타] }   # 엘컴화인 process.process_type
+  bas_defect_code:
+    - { key: defect_group, label: 분류, type: text, required: false }   # 엘컴화인 defect_code.defect_group
+  job_work_order:
+    # 판사양 · 아니록스 · 잉크조성 코드 — 입력칸만 attrs. validate_job_work_order 가 코드를 검증해 x_printfilm_job_work_order_ext 에 FK 로 옮긴다(hooks.md §2 · CR-4)
+    - { key: plate_code,  label: 판사양,   type: text, required: false }
+    - { key: anilox_code, label: 아니록스, type: text, required: false }
+    - { key: ink_code,    label: 잉크조성, type: text, required: false }
+
+# ── E3 공정 측정값 · 검사 항목 ──
+process_params: seed/process_params.csv      # 인쇄: ΔE(선택) · 인쇄 속도(단위 미확정)
+inspection_items: seed/inspection_items.csv  # 최종: ΔE · 불량 위치 / 입고: 비고
+
+# ── E6 계보 — 엘컴화인 roll_genealogy relation 5 중 투입 · 출하는 코어, 나머지 3 을 등록 ──
+lineage:
+  lot_kinds:
+    - { kind: ROLL, base: PRODUCT, label: 롤 }
+  relations:
+    - { name: splice, base: 합병 }     # 후가공 N:1 (N ≥ 2) — F-X-RLL-02
+    - { name: 후가공, base: 합병 }     # 후가공 1:1 — F-X-RLL-01 (D-511)
+    - { name: 슬리팅, base: 분할 }     # 1:N — F-X-RLL-04
+  states: { IN_STOCK: 재고, CONSUMED: 소진, SHIPPED: 출하 }   # 엘컴화인 v_roll_state 표시어 그대로
+
+# ── 팩 라우터 · 훅이 쓸 수 있는 코어 테이블 (spec.md §2.3). lot_genealogy 는 lineage 경유만 ──
+write_scope:
+  prt: []                          # x_printfilm_plate · anilox · ink_formula(_component) 만
+  clr: []                          # x_printfilm_color_record(_mix) 만
+  rll: [lot, lot_genealogy]        # lineage.split/merge 경유. lot 은 split/merge 직후 같은 tx 의 attrs · process_id · equipment_id 갱신(D-514 · CR-2)
+  hooks: [lot]                     # on_result_closed: lineage.retag(ROLL) — lineage 경유
+
+hooks: hooks.py                    # hooks.md 의 훅 6
+adapters:
+  printing: adapters/label_html.py # 브라우저 인쇄(엘컴화인 D-04) — 라벨 3종 · COA · 작업지시서 양식은 templates/print/
+  erp: null                        # 코어 기본 501 (엘컴화인 D-02)
+  collect: null                    # 수집 없음 (엘컴화인 G-12)
+seeds:
+  - seed/codes.csv
+  - seed/items_example.csv
+  - seed/partners_example.csv
+  - seed/processes_example.csv
+  - seed/equipment_example.csv
+  - seed/defect_codes_example.csv
+  - seed/plates_example.csv
+  - seed/anilox_example.csv
+  - seed/inks_example.csv
+  - seed/ink_components_example.csv
+tests: tests/
+gates: gates.yaml

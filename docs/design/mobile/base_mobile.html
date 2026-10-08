@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>모바일 기본 레이아웃 · 모바일</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="mobile.css">
+</head>
+<!--
+  base 모바일 기본 레이아웃 — 모바일 원형 (디자이너2). 레이아웃 원형 — templates/base.html 의 모바일 채널 분기(개발자: 아키텍트 base 에 ch-mobile 블록으로 합친다).
+  규칙: 폭 390px · 가로 넘침 0(칩 줄만 옆으로 민다) · 쓰기 버튼 0 · JS 0(접기는 details/summary) · 표를 쓰지 않고 카드로 접는다(README "모바일 접힘 규칙").
+  Jinja 로 옮길 때: body.ch-mobile 는 templating.render 가 붙인다 · 하단 탭 4 = channels.mobile 화면을 추적 · 현황 · 지시 · 재고 로 묶은 것 · 문구는 t() · 더미 값은 (예시).
+-->
+<body class="ch-mobile" data-screen="base">
+<div class="m-frame">
+<header class="m-top">
+  <div class="row"><h1>모바일 기본 레이아웃 <small>base</small></h1><span class="who">김조회 · 조회 (예시)</span></div>
+  <form class="m-search" method="get" action="/trc/search" role="search">
+    <input type="search" name="q" placeholder="LOT · 지시 · 출하 번호 검색" aria-label="LOT · 지시 · 출하 번호 검색" autocomplete="off">
+    <button type="submit">검색</button>
+  </form>
+</header>
+<main class="m-main">
+
+  <section class="m-sec">
+    <h2>레이아웃 규칙</h2>
+    <div class="m-card">
+      <ol class="notes" style="font-size:14px;color:var(--fg);padding-left:18px">
+        <li><b>폭 390px · 가로 넘침 0.</b> 모든 상자는 <code>min-width:0</code> · 긴 번호는 <code>overflow-wrap:anywhere</code>. 표(<code>table</code>)를 쓰지 않는다 — 행 하나가 카드 하나.</li>
+        <li><b>상단 = 제목 + 검색.</b> 검색은 TRC-03 번호 검색으로 간다. 어느 화면에서든 번호를 치면 추적으로.</li>
+        <li><b>하단 탭 4.</b> 추적(TRC-01 · 02 · 03) · 현황(KPI-02 · SHP-03 · ORD-03) · 지시(JOB-02) · 재고(MAT-04). <code>channels.mobile</code> 에 선언한 화면만 — 없는 화면을 열면 403.</li>
+        <li><b>조회 중심.</b> 쓰기 버튼 0. 링크는 조회 화면끼리만. 스캔칸(<code>data-scan</code>) 없음.</li>
+        <li><b>접기.</b> 깊이 · 분기 · 주 단위 · LOT 목록은 <code>details/summary</code>. JS 0.</li>
+        <li><b>터치.</b> 탭 56px · 버튼 · 링크 · 요약 줄 44~48px · 글자 16px(번호는 15px 고정폭).</li>
+        <li><b>422 재렌더.</b> 추적 화면의 없는 번호는 같은 화면 422 + 빨간 배너. 503 은 오류 화면.</li>
+      </ol>
+    </div>
+  </section>
+  <section class="m-sec">
+    <h2>구성 요소</h2>
+    <div class="chips"><a class="chip on" href="#">오늘</a><a class="chip" href="#">이번 주</a><a class="chip" href="#">이번 달</a><a class="chip" href="#">필터 칩 줄만 옆으로 민다</a></div>
+    <div class="m-card">
+      <h3><code>LP-20261009-005</code> <span class="badge b-ok">재고</span></h3>
+      <dl class="kv"><dt>품목</dt><dd>품목 A (예시)</dd><dt>수량</dt><dd class="num">480 EA</dd><dt>지시</dt><dd><code>WO-20261009-001</code></dd></dl>
+      <div class="links"><a class="primary" href="trc_backward_m.html">역추적</a><a href="#">정추적</a></div>
+    </div>
+    <details class="fold" open>
+      <summary><span class="grow">접기 상자 (details/summary)</span><span class="badge b-off">3</span></summary>
+      <div class="body"><p class="notes" style="margin:6px 0 0;padding:0">요약 줄은 48px · 열림 상태는 서버가 <code>open</code> 속성으로 정한다(오늘 주 · 깊이 1).</p></div>
+    </details>
+    <div class="stat-grid"><div class="stat"><small>양품률</small><b>98.2<span class="u">%</span></b></div><div class="stat"><small>지연</small><b>2<span class="u">건</span></b></div></div>
+    <p><span class="badge b-wait">대기</span> <span class="badge b-ok">진행</span> <span class="badge b-off">완료</span> <span class="badge b-warn">지연</span> <span class="badge b-err">불합격</span></p>
+    <div class="result err">없는 번호입니다 — <code>LP-2026X</code></div>
+  </section>
+
+</main>
+<nav class="m-tabs" aria-label="하단 탭">
+    <a href="trc_search_m.html"><span class="ico" aria-hidden="true">⌕</span>추적</a>
+    <a href="kpi_summary_m.html"><span class="ico" aria-hidden="true">▤</span>현황</a>
+    <a href="job_status_m.html"><span class="ico" aria-hidden="true">☰</span>지시</a>
+    <a href="mat_stock_m.html"><span class="ico" aria-hidden="true">▦</span>재고</a>
+</nav>
+</div>
+</body>
+</html>
