@@ -423,10 +423,11 @@
 - 결과: 현장 역할이 재고량 · 생산량 · 입고량 · 불량률 · 작업지시 현황을 조회한다. 출하량은 거래처(`bas_partner`)가 필요해 여전히 막힌다. 그 밖의 기준정보(BOM · 공정 측정값 · 거래처) · 시스템 테이블도 그대로 막힌다.
 
 ## D-50 Docker 배포 — PostgreSQL 17 + 앱 + Caddy HTTPS · 상태: 확정
-- 사용자 요청(2026-10-10). Hostinger VPS Docker Manager 배포용으로 `Dockerfile` · `docker-compose.yml` · `docker/entrypoint.sh` · `docker/Caddyfile` 을 둔다.
+- 사용자 요청(2026-10-10). Hostinger VPS Docker Manager 배포용으로 `Dockerfile` · `docker-compose.yml` · `docker/entrypoint.sh` 를 둔다. Caddy 설정은 compose 명령줄이라 서버에 저장소 파일이 없어도 된다(`MES_BUILD_CONTEXT` 로 GitHub 주소에서 빌드).
 - D-42 의 두 갈래 중 **TLS 종단(리버스 프록시 · HTTPS)** 을 택했다 — Caddy 가 `MES_DOMAIN` 으로 인증서를 받고 앱은 `MES_ENV=prod`(Secure 쿠키) 그대로. 「Secure 끄기」 설정은 만들지 않았다(사내망 HTTP 운영은 D-42 그대로 결정 대기).
 - 앱은 Caddy 고정 주소(172.30.0.10)의 전달 헤더만 믿는다(`--forwarded-allow-ips`). DB 는 내부망에만 있고 포트를 열지 않는다.
 - 비밀값은 이미지 · 저장소에 넣지 않는다. 환경변수로 주지 않으면 첫 기동 때 난수로 만들어 볼륨 `/data/secrets.env` 에 두고 시드 비밀번호를 앱 로그에 한 번 찍는다.
 - 빈 DB 면 스키마 · 뷰 · 시드(팩 포함)를 만든다. `MES_SAMPLE=1` 이면 샘플(예시)과 오늘 데이터를 넣는다. 샘플 스크립트는 운영 Secure 쿠키 때문에 내부 클라이언트를 https 주소로 쓴다.
 - 시간대 Asia/Seoul (앱 · DB) — 「오늘」 지표가 한국 날짜로 잡힌다.
 - 로컬 검증(2026-10-10): 새 볼륨 기동 → HTTPS 200 · 비밀값 생성 · 로그인(Secure 쿠키) · AI Agent 지표 답 · 재기동 후 세션 유지 · HTTP → HTTPS 308 · `/login/as` 404.
+- Hostinger VPS(srv1934103) 사정: 80 은 다른 앱(afc200)이 쓴다 → `MES_HTTP_PORT` 를 다른 번호로 두고 443 만으로 인증서를 받는다(TLS-ALPN-01).

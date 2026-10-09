@@ -110,9 +110,11 @@ docker compose logs app | grep "첫 기동"      # 시드 계정 비밀번호 (�
 | `MES_SAMPLE` | `1` 이면 빈 DB 에 샘플 데이터(예시)를 넣고, 기동할 때마다 오늘 날짜 데이터를 하루 한 번 채운다 |
 | `MES_PACK` | 업종 팩. 비우면 코어 단독 |
 | `ANTHROPIC_API_KEY` | AI Agent 자유 질문용 키 (선택) |
+| `MES_BUILD_CONTEXT` | 이미지 소스. 서버에 저장소가 없으면 `https://github.com/superpjh-stack/Total_MES_Solutions.git#main` |
+| `MES_HTTP_PORT` · `MES_HTTPS_PORT` | 기본 80 · 443. 80 을 다른 앱이 쓰면 다른 번호로 둔다(인증서는 443 만으로 받는다) |
 | `MES_SESSION_SECRET` · `MES_SEED_PASSWORD` | 비우면 첫 기동 때 난수로 만들어 볼륨 `appdata` 에 둔다 |
 
-- 서버의 80 · 443 포트가 비어 있어야 하고, 도메인의 DNS A 레코드가 서버 IP 를 가리켜야 인증서가 나옵니다.
+- 서버의 443 포트가 비어 있고 밖에서 열려 있어야 하며, 도메인의 DNS A 레코드가 서버 IP 를 가리켜야 인증서가 나옵니다.
 - DB 는 compose 내부망에만 있고 밖으로 열지 않습니다. 데이터는 볼륨 `pgdata` 에 남습니다.
 - 로컬에서 `docker compose` 를 돌리면 저장소의 `.env` 가 값으로 읽힙니다. 운영 서버에는 `.env` 를 두지 않습니다.
 

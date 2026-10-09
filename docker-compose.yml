@@ -1,6 +1,9 @@
 # Rodem MES Solution — 운영 배포 (PostgreSQL 17 + 앱 + Caddy HTTPS). 사용법은 README 「배포」.
 #   필수: MES_DOMAIN (이 서버를 가리키는 도메인 — 예: Hostinger VPS 호스트 이름 srvNNNN.hstgr.cloud)
 #   선택: MES_PACK · MES_SAMPLE=1(샘플 데이터) · ANTHROPIC_API_KEY · MES_SESSION_SECRET · MES_SEED_PASSWORD
+#         MES_BUILD_CONTEXT — 이미지 소스. 기본 . (저장소 폴더). 서버에 저장소가 없으면 GitHub 주소(…/Total_MES_Solutions.git#main)
+#         MES_HTTPS_PORT(기본 443) · MES_HTTP_PORT(기본 80) — 80 을 다른 앱이 쓰면 다른 번호로. 인증서는 443 만으로도 받는다(TLS-ALPN)
+#   이 파일은 서버에 다른 파일이 없어도 돈다(Caddy 설정은 명령줄).
 #   비밀값을 비우면 첫 기동 때 난수로 만들어 볼륨에 두고, 시드 비밀번호를 앱 로그에 한 번 찍는다.
 name: rodem-mes
 
@@ -23,7 +26,7 @@ services:
       retries: 20
 
   app:
-    build: .
+    build: ${MES_BUILD_CONTEXT:-.}
     restart: unless-stopped
     depends_on:
       db:
@@ -47,13 +50,12 @@ services:
     image: caddy:2
     restart: unless-stopped
     depends_on: [app]
-    environment:
-      MES_DOMAIN: ${MES_DOMAIN:?MES_DOMAIN 을 지정한다 - 이 서버를 가리키는 도메인}
+    # HTTPS 종단 (D-42 · D-50) — MES_DOMAIN 인증서(Let's Encrypt)를 자동으로 받아 앱으로 넘긴다
+    command: ["caddy", "reverse-proxy", "--from", "${MES_DOMAIN:?MES_DOMAIN 을 지정한다 - 이 서버를 가리키는 도메인}", "--to", "app:8030"]
     ports:
-      - "80:80"
-      - "443:443"
+      - "${MES_HTTP_PORT:-80}:80"
+      - "${MES_HTTPS_PORT:-443}:443"
     volumes:
-      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     networks:
