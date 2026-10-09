@@ -51,6 +51,8 @@ PASS, FAIL, UNVERIFIED = "PASS", "FAIL", "미검증"
 BROWSER_WITH = ["--with", "playwright", "--with", "zxing-cpp", "--with", "pillow"]
 ROWS: list[tuple[str, str, str, str]] = []
 NOPE = "NOPE-QA3-0000"
+PRINT_SLUG = {"작업지시서": "work_order", "LOT 라벨": "lot_label", "출하 라벨": "ship_label", "성적서": "certificate"}
+E2E_PREFIX = os.environ.get("QA3_E2E_PREFIX", "r6_")   # 회전별 캡처 접두 — 앞 회전 캡처(01~23)는 지우지 않는다
 COOKIES: dict[str, dict] = {}          # DB 끊김 검사용 세션 쿠키 — 메모리에만 (파일 · 출력에 남기지 않는다)
 
 
@@ -77,8 +79,8 @@ def scratch() -> Path:
 class Server:
     """uvicorn 을 포트 하나에 띄운다 (코어 단독 · 현재 MES_PG_DSN). 로그는 스크래치에만."""
 
-    def __init__(self, port: int, extra_env: dict | None = None, name: str = "core"):
-        self.port, self.name = port, name
+    def __init__(self, port: int, extra_env: dict | None = None, name: str = "core", host: str = "127.0.0.1"):
+        self.port, self.name, self.host = port, name, host
         self.env = dict(os.environ)
         self.env["MES_PACK"] = self.env.get("MES_PACK", "")
         self.env.update(extra_env or {})
@@ -90,7 +92,7 @@ class Server:
         with socket.socket() as s:
             if s.connect_ex(("127.0.0.1", self.port)) == 0:
                 raise RuntimeError(f"포트 {self.port} 를 이미 누가 쓰고 있다 — QA3 전용 포트를 비우고 다시")
-        self.proc = subprocess.Popen(["uv", "run", "uvicorn", "mescore.app.main:app", "--app-dir", "src", "--port", str(self.port), "--host", "127.0.0.1"],
+        self.proc = subprocess.Popen(["uv", "run", "uvicorn", "mescore.app.main:app", "--app-dir", "src", "--port", str(self.port), "--host", self.host],
                                      cwd=ROOT, env=self.env, stdout=open(self.log, "w"), stderr=subprocess.STDOUT)
         import httpx
         for _ in range(120):
@@ -203,6 +205,14 @@ def _browser_main(mode: str, base: str, inp: str, out: str) -> int:
                 result = _b_e2e(b, base, pw, payload)
             elif mode == "timing":
                 result = _b_timing(b, base, pw, payload)
+            elif mode == "pop_rules":
+                result = _b_pop_rules(b, base, pw, payload)
+            elif mode == "csrf":
+                result = _b_csrf(b, base, pw, payload)
+            elif mode == "https":
+                result = _b_https(b, base, pw, payload)
+            elif mode == "dbdown_shot":
+                result = _b_dbdown_shot(b, base, pw, payload)
         finally:
             b.close()
     Path(out).write_text(json.dumps(result, ensure_ascii=False, default=str), encoding="utf-8")
@@ -221,7 +231,9 @@ class Ui:
 
     def login(self, lid: str, device: str = "web") -> str:
         pg = self.page
-        pg.goto(self.base + "/logout")
+        if self.ctx.cookies(self.base):                          # 로그아웃은 POST 만(GET 405 · DEF-QA3-007) — 화면 버튼과 같은 요청
+            pg.request.post(self.base + "/logout", max_redirects=0)
+            self.ctx.clear_cookies()
         pg.goto(self.base + "/login?device=" + device)
         pg.fill("#login-form input[name=login_id]", lid)
         pg.fill("#login-form input[name=password]", self.pw)
@@ -334,7 +346,8 @@ def _b_channels(b, base: str, pw: str, fx: dict) -> dict:
         mob[sid] = {"status": r.status, "scrollWidth": ui.page.evaluate("document.documentElement.scrollWidth"),
                     "clientWidth": ui.page.evaluate("document.documentElement.clientWidth"),
                     "body_class": ui.page.evaluate("document.body.className")}
-    ui.page.screenshot(path=str(scratch() / "mobile-last.png"))
+        if True:                                  # 모바일 화면마다 캡처 (r6_m390_<화면>.png)
+            ui.page.screenshot(path=str(ROOT / "outputs" / "e2e" / "core" / f"{E2E_PREFIX}m390_{sid}.png"), full_page=True)
     res["mobile"] = mob
     ui.ctx.close()
 
@@ -359,7 +372,7 @@ def _b_channels(b, base: str, pw: str, fx: dict) -> dict:
     failed_at = pg.locator("[data-key=_failed_at]").first.inner_text() if pg.locator("[data-key=_failed_at]").count() else ""
     kept = pg.evaluate("[...document.querySelectorAll('[data-key]')].filter(e => !e.dataset.key.startsWith('_')).slice(0, 12).map(e => e.dataset.key + '=' + e.textContent.trim())")
     p_during = len(polls) - p_before
-    pg.screenshot(path=str(scratch() / "board-stale.png"))
+    pg.screenshot(path=str(ROOT / "outputs" / "e2e" / "core" / f"{E2E_PREFIX}board_503_stale.png"))
     pg.unroute("**/kpi/board*")
     pg.wait_for_timeout((sec + 1.5) * 1000)
     state_after = pg.evaluate("document.documentElement.dataset.state || ''")
@@ -381,7 +394,7 @@ def _b_channels(b, base: str, pw: str, fx: dict) -> dict:
         html = pg.content()
         forms[name] = {"status": r.status, "inline_svg": "<svg" in html, "external_requests": list(ui.external),
                        "ext_refs": re.findall(r'(?:src|href)="(https?://[^"]+)"', html)[:3], "decoded": codes, "want": want}
-        pg.screenshot(path=str(scratch() / f"print-{name}.png"), full_page=True)
+        pg.screenshot(path=str(ROOT / "outputs" / "e2e" / "core" / f"{E2E_PREFIX}print_{PRINT_SLUG.get(name, 'x')}.png"), full_page=True)
     res["print"] = forms
     plot = fx["plot"]
     lot_codes = {}
@@ -423,7 +436,8 @@ def _b_e2e(b, base: str, pw: str, fx: dict) -> dict:
     """G-C22 — 코어 단독 브라우저 한 바퀴. 단계마다 캡처 outputs/e2e/core/NN_*.png. 막히면 그 단계에서 멈추고 FAIL."""
     out = ROOT / "outputs" / "e2e" / "core"
     out.mkdir(parents=True, exist_ok=True)
-    for old in out.glob("*.png"):
+    pre = E2E_PREFIX
+    for old in out.glob(f"{pre}[0-9][0-9]_*.png"):          # 한 바퀴 캡처만 지운다 (채널 · 보안 캡처는 그대로)
         old.unlink()
     ui = Ui(b, base, pw)
     pg = ui.page
@@ -434,8 +448,8 @@ def _b_e2e(b, base: str, pw: str, fx: dict) -> dict:
         pg.screenshot(path=str(out / f"{name}.png"), full_page=True)
 
     def rec(nn, name, ok, note):
-        steps.append({"nn": nn, "name": name, "ok": bool(ok), "note": note, "png": f"outputs/e2e/core/{nn}_{name}.png"})
-        shot(f"{nn}_{name}")
+        steps.append({"nn": nn, "name": name, "ok": bool(ok), "note": note, "png": f"outputs/e2e/core/{pre}{nn}_{name}.png"})
+        shot(f"{pre}{nn}_{name}")
         if not ok:
             raise StopIteration(f"{nn} {name}")
 
@@ -496,7 +510,15 @@ def _b_e2e(b, base: str, pw: str, fx: dict) -> dict:
         wcodes = ui.decode()
         body = pg.locator("body").inner_text()
         st["wo_print_order_shown"] = order_no in body
-        rec("06", "job_print_work_order", wo_no in wcodes, f"{href} 바코드 해독 {wcodes} · 지시서에 수주 번호 {order_no} 표시 {order_no in body}")
+        from mescore.db import conn as _c   # DEF-QA3-002 재판정 — 계획의 수주 상세 · 납기가 지시로 이어졌는가 (읽기만)
+        link = _c.q1("""select w.order_dtl_id as wo_dtl, p.order_dtl_id as plan_dtl, d.status as dtl_status, o.due_date
+                        from job_work_order w join ord_plan p on p.id = w.plan_id left join ord_order_dtl d on d.id = w.order_dtl_id
+                        left join ord_order o on o.id = d.order_id where w.work_order_no = %s""", (wo_no,)) or {}
+        due = str(link.get("due_date") or "")
+        st["wo_link"] = {**{k: str(v) for k, v in link.items()}, "due_shown": bool(due) and due in body}
+        rec("06", "job_print_work_order", wo_no in wcodes,
+            f"{href} 바코드 해독 {wcodes} · 지시서에 수주 번호 {order_no} 표시 {order_no in body} · 납기 {due} 표시 {st['wo_link']['due_shown']} · "
+            f"지시.order_dtl_id {link.get('wo_dtl')} = 계획 {link.get('plan_dtl')} · 수주 상세 상태 {link.get('dtl_status')}")
         # 07 입고 2 (MAT-01) — 현장 · POP
         ui.login("field", "pop")
         mats = []
@@ -585,6 +607,26 @@ def _b_e2e(b, base: str, pw: str, fx: dict) -> dict:
         foc, u, f = start_run()
         r2 = pg.url
         ins = inputs(r2, [(mats[0], 50), (mats[1], 50)])
+        # S-15 고르기 칩 (합병 LOT) — 누르면 칸에 넣고 다시 누르면 뺀다 · 칸이 값의 주인 · 스캔칸 포커스 (전송은 하지 않는다 — 흐름은 14 의 합병 폼)
+        pg.goto(r2)
+        ui.close_popup()
+        chip = pg.locator(f"button[data-pick-into=merge_lot_ids][data-pick-value='{p1}']")
+        s15 = {"chip": chip.count()}
+        if chip.count():
+            chip.first.click()
+            pg.wait_for_timeout(50)
+            s15["on"] = (pg.input_value("#merge_lot_ids"), chip.first.get_attribute("aria-pressed"))
+            pg.screenshot(path=str(out / f"{pre}s15_merge_chip.png"), full_page=True)
+            chip.first.click()
+            pg.wait_for_timeout(50)
+            s15["off"] = (pg.input_value("#merge_lot_ids"), chip.first.get_attribute("aria-pressed"))
+            pg.fill("#merge_lot_ids", p1)
+            pg.wait_for_timeout(50)
+            s15["typed"] = chip.first.get_attribute("aria-pressed")
+            pg.fill("#merge_lot_ids", "")
+            pg.wait_for_timeout(50)
+            s15["cleared"] = chip.first.get_attribute("aria-pressed")
+        st["S-15"] = s15
         f2, p2 = end(r2, 50, "85")
         dev = "이탈" in pg.locator("main").inner_text()
         rec("13", "pop_run2_deviation", ui.ok(f) and all(ui.ok(x[1]) for x in ins) and p2 and dev, f"시작 {f} · 투입 {ins} · 종료 {f2} · 이탈 표시 {dev}")
@@ -679,7 +721,14 @@ def _b_e2e(b, base: str, pw: str, fx: dict) -> dict:
         pg.goto(base + "/trc/forward?no=" + mats[0])
         fw = pg.locator("main").inner_text()
         want = [p1, p2, mg, *sp, ship_lot]
-        rec("22", "trc_forward", all(x in fw for x in want) and "재고" in fw, f"{[(x, x in fw) for x in want]} · 재고 표시 {'재고' in fw}")
+        from mescore.db import conn as _c   # DEF-QA3-006 재판정 — 합병 LOT 노드 수량 = lot.qty (간선 수량 아님)
+        mg_qty = _c.q1("select qty from lot where lot_no = %s", (mg,))["qty"]
+        node_q = pg.evaluate("""(no) => [...document.querySelectorAll('main ul.tree .node')].filter(n => (n.querySelector('.no')||{}).textContent === no)
+                                 .map(n => ({qty: (n.querySelector('.qty')||{}).textContent || '', edge: (n.querySelector('.e-qty')||{}).textContent || ''}))""", mg)
+        st["merge_node"] = {"lot_qty": str(mg_qty), "nodes": node_q}
+        node_ok = bool(node_q) and all(float(n["qty"].split()[0].replace(",", "")) == float(mg_qty) for n in node_q if n["qty"])
+        rec("22", "trc_forward", all(x in fw for x in want) and "재고" in fw,
+            f"{[(x, x in fw) for x in want]} · 재고 표시 {'재고' in fw} · 합병 {mg} 노드 {node_q} · lot.qty {mg_qty} · 일치 {node_ok}")
         # 23 현황판 — 갱신 시각이 바뀐다
         ui.login("admin", "board")
         pg.goto(base + "/kpi/board?device=board")
@@ -693,13 +742,191 @@ def _b_e2e(b, base: str, pw: str, fx: dict) -> dict:
     except Exception as exc:  # noqa: BLE001 — 화면 조작이 막힌 단계를 그대로 적는다 (FAIL)
         nn = f"{len(steps) + 1:02d}"
         try:
-            shot(f"{nn}_blocked")
+            shot(f"{pre}{nn}_blocked")
         except Exception:  # noqa: BLE001
             pass
-        steps.append({"nn": nn, "name": "blocked", "ok": False, "note": f"{type(exc).__name__}: {str(exc).splitlines()[0][:200]}", "png": f"outputs/e2e/core/{nn}_blocked.png"})
+        steps.append({"nn": nn, "name": "blocked", "ok": False, "note": f"{type(exc).__name__}: {str(exc).splitlines()[0][:200]}", "png": f"outputs/e2e/core/{pre}{nn}_blocked.png"})
         st["stopped_at"] = f"{nn} 예외"
     ui.ctx.close()
     return {"steps": steps, "state": st}
+
+
+ACT = "(() => { const a = document.activeElement; return !a ? null : a.hasAttribute('data-scan') ? 'scan' : (a.name || a.id || a.tagName) })()"
+
+
+def _b_pop_rules(b, base: str, pw: str, fx: dict) -> dict:
+    """POP 스캔 규칙 S-01~S-13 을 화면에서 — 사람이 하는 대로(키보드 · 클릭). 캡처 outputs/e2e/core/r6_sNN_*.png."""
+    out = ROOT / "outputs" / "e2e" / "core"
+    res: dict = {}
+    errs: list[str] = []
+    ui = Ui(b, base, pw)
+    pg = ui.page
+    pg.on("console", lambda m: errs.append(f"{pg.url} {m.text}") if m.type == "error" else None)
+
+    def shot(n):
+        pg.screenshot(path=str(out / f"{E2E_PREFIX}{n}.png"), full_page=True)
+
+    def layer_open():
+        return pg.evaluate("(() => { const l = document.getElementById('popup-layer'); return !!l && !l.hidden })()")
+
+    ui.login("field", "pop")
+    # S-01 · S-02 — POP 화면을 돌며 콘솔 오류(data-scan 2개 이상이면 오류) · 열자마자 친 글자가 스캔칸에
+    for _sid, path in fx["pop_paths"]:
+        pg.goto(base + path)
+    pg.goto(base + "/pop/work")
+    pg.keyboard.type("ABC")
+    res["S-01"] = {"console_errors": [e for e in errs if "Failed to load resource" not in e]}   # 브라우저 자원 404(favicon) · 422 응답 줄은 app.js 오류가 아니다
+    res["S-02"] = {"typed": pg.evaluate("document.querySelector('[data-scan]').value"), "active": pg.evaluate(ACT)}
+    shot("s02_pop01_focus")
+    # S-03 — 투입량 칸을 눌러 숫자를 칠 수 있다 · 빈 곳을 누르면 스캔칸으로
+    pg.goto(f"{base}/pop/inputs?result={fx['open_result']}")
+    ui.close_popup()
+    pg.click("input[name=qty]")
+    pg.keyboard.type("7")
+    a1, qv = pg.evaluate(ACT), pg.input_value("input[name=qty]")
+    pg.locator("main h1, main h2").first.click()
+    pg.wait_for_timeout(80)
+    res["S-03"] = {"active_while_typing": a1, "qty_value": qv, "after_blank_click": pg.evaluate(ACT)}
+    # S-04 — 창이 다시 활성화되면 스캔칸
+    pg.evaluate("document.activeElement && document.activeElement.blur()")
+    pg.evaluate("window.dispatchEvent(new Event('focus'))")
+    res["S-04"] = {"after_window_focus": pg.evaluate(ACT)}
+    # S-10 — 투입 스캔 성공 = 배너만(팝업 없음) · 1초 뒤 회색
+    pg.fill("input[name=qty]", "1")
+    pg.focus("[data-scan]")
+    ui.scan(fx["mats"][0]["no"])
+    c0, pop0 = pg.evaluate("(document.getElementById('scan-result')||{}).className || ''"), layer_open()
+    shot("s10_banner_ok")
+    pg.wait_for_timeout(1300)
+    res["S-10"] = {"class_now": c0, "popup": pop0, "class_after_1s": pg.evaluate("(document.getElementById('scan-result')||{}).className || ''"),
+                   "active": pg.evaluate(ACT)}
+    # S-09 (422 · fields) · 422 입력값 유지 — 투입량 3.5 + 없는 LOT 번호 스캔(폼 POST) → 303 + 알림(필드 줄) · 투입량 칸 3.5 그대로
+    pg.fill("input[name=qty]", "3.5")
+    pg.focus("[data-scan]")
+    ui.scan(NOPE)
+    res["S-09"] = {"popup": layer_open(), "fields": pg.locator("#popup-layer ul.fields li").all_inner_texts(),
+                   "title": pg.locator("#popup-title").inner_text() if pg.locator("#popup-title").count() else "",
+                   "qty_kept": pg.input_value("input[name=qty]"), "active": pg.evaluate(ACT)}
+    shot("s09_422_popup_kept")
+    # 422 입력값 유지 — POP-02 종료 폼: 양품 12 · 합칠 LOT 없는 번호 → 422 → 두 칸이 그대로인가
+    pg.goto(f"{base}/pop/result?id={fx['open_result']}")
+    ui.close_popup()
+    pg.fill("#end-form input[name=good_qty]", "12")
+    pg.fill("#merge_lot_ids", NOPE)
+    with pg.expect_navigation():
+        pg.locator('button[form="end-form"]:not([disabled]), #end-form button[type=submit]:not([disabled])').first.click()
+    res["keep_422_pop02"] = {"popup": layer_open(), "fields": pg.locator("#popup-layer ul.fields li").all_inner_texts(),
+                             "good_qty": pg.input_value("#end-form input[name=good_qty]") if pg.locator("#end-form input[name=good_qty]").count() else None,
+                             "merge_lot_ids": pg.input_value("#merge_lot_ids") if pg.locator("#merge_lot_ids").count() else None}
+    shot("s09_422_pop02_end_kept")
+    # S-06 · S-07 · S-08 — 품질 · MAT-02 입고검사 합격 → 알림(팝업) 이 떠도 포커스는 스캔칸 · 글자 키 → 닫고 스캔칸 · Esc · 확인 · 바깥 · 빈 Enter
+    ui.login("qa", "pop")
+    pg.goto(base + "/mat/inspections")
+    ui.scan(fx["fresh_mat"])
+    ui.fill_items("#judge-form", qty="10")
+    pg.check("#judge-form input[name=judgement][value=합격]", force=True)
+    with pg.expect_navigation():
+        pg.locator('button[form="judge-form"]:not([disabled]), #judge-form button[type=submit]:not([disabled])').first.click()
+    s6 = {"popup": layer_open(), "active": pg.evaluate(ACT), "title": pg.locator("#popup-title").inner_text()}
+    shot("s06_popup_scan_focus")
+    pg.keyboard.type("Q")
+    s7 = {"popup_after_letter": layer_open(), "scan_value": pg.evaluate("document.querySelector('[data-scan]').value"), "active": pg.evaluate(ACT)}
+    pg.evaluate("document.querySelector('[data-scan]').value = ''")
+    s8 = {}
+    for how in ("esc", "ok_button", "outside", "empty_enter"):
+        pg.evaluate("window.mesPopup('알림', 'QA3 시험 알림', [], 'ok')")
+        u0 = pg.url
+        if how == "esc":
+            pg.keyboard.press("Escape")
+        elif how == "ok_button":
+            pg.locator("#popup-layer [data-popup-close]").first.click()
+        elif how == "outside":
+            pg.mouse.click(5, 5)
+        else:
+            pg.keyboard.press("Enter")
+        pg.wait_for_timeout(80)
+        s8[how] = {"closed": not layer_open(), "active": pg.evaluate(ACT), "same_url": pg.url == u0}
+    res["S-06"], res["S-07"], res["S-08"] = s6, s7, s8
+    # S-11 — 없는 번호 → 422 재렌더 · 빨간 배너 · 포커스
+    r = pg.goto(base + "/mat/inspections?no=" + NOPE)
+    res["S-11"] = {"status": r.status, "err": pg.locator("#scan-result.err").count(), "active": pg.evaluate(ACT)}
+    shot("s11_nope_422")
+    # S-13 — 시계를 돌리지 않는다(2.5초 동안 본문 글 그대로)
+    pg.goto(base + "/pop/work")
+    t0 = pg.locator("body").inner_text()
+    pg.wait_for_timeout(2500)
+    res["S-13"] = {"unchanged": t0 == pg.locator("body").inner_text()}
+    res["console_errors_all"] = errs
+    ui.ctx.close()
+    return res
+
+
+def _b_csrf(b, base: str, pw: str, payload: dict) -> dict:
+    """다른 사이트(localhost:포트 — 127.0.0.1 과 다른 사이트)의 페이지가 GET 링크 · 이미지 · 숨은 폼 POST · 최상위 POST 로
+    로그아웃 · 계정 생성을 시도 → 세션 그대로 · 계정 0 이어야 한다(SameSite=Lax · POST 전용 로그아웃)."""
+    ui = Ui(b, base, pw)
+    pg = ui.page
+    ui.login("admin")
+    before = pg.goto(base + "/").status
+    res = {"before": before, "visits": {}}
+    for page in payload["pages"]:
+        try:
+            r = pg.goto(payload["evil"] + "/" + page)
+            pg.wait_for_timeout(1500)
+            res["visits"][page] = {"status": r.status if r else None, "landed": pg.url}
+        except Exception as exc:  # noqa: BLE001
+            res["visits"][page] = {"error": str(exc)[:160]}
+    r = pg.goto(base + "/")
+    res["after"] = {"status": r.status, "url": pg.url, "logged_in": "/login" not in pg.url and r.status == 200}
+    ui.ctx.close()
+    return res
+
+
+def _b_https(b, base: str, pw: str, payload: dict) -> dict:
+    """운영 기동(MES_ENV ≠ dev → 세션 쿠키 Secure)을 HTTP 로 열면 브라우저가 쿠키를 저장 · 전송하지 않는다 — 로그인 직후 다시 로그인 화면.
+    base 마다(루프백 · LAN 주소) 로그인 → 도착 URL · 쿠키 · 캡처."""
+    out = ROOT / "outputs" / "e2e" / "core"
+    res = {}
+    for tag, url in payload["bases"].items():
+        ui = Ui(b, url, pw)
+        pg = ui.page
+        try:
+            pg.goto(url + "/login?device=web")
+            pg.fill("#login-form input[name=login_id]", "admin")
+            pg.fill("#login-form input[name=password]", pw)
+            pg.check("#login-form input[name=device][value=web]")
+            resp_codes = []
+            pg.on("response", lambda r: resp_codes.append((r.status, r.url.replace(url, ""))) if r.url.startswith(url) and r.request.resource_type == "document" else None)
+            with pg.expect_navigation():
+                pg.click("#login-form button.btn-primary")
+            pg.wait_for_timeout(500)
+            ck = [{"name": c["name"], "secure": c["secure"], "httpOnly": c["httpOnly"], "sameSite": c["sameSite"]} for c in ui.ctx.cookies()]
+            r2 = pg.goto(url + "/")
+            res[tag] = {"base": url, "chain": resp_codes, "landed": pg.url.replace(url, ""), "main_status": r2.status if r2 else None,
+                        "stored_cookies": ck, "logged_in": r2 is not None and r2.status == 200 and "/login" not in pg.url}
+            pg.screenshot(path=str(out / f"{E2E_PREFIX}https_prod_over_http_{tag}.png"), full_page=True)
+        except Exception as exc:  # noqa: BLE001
+            res[tag] = {"base": url, "error": f"{type(exc).__name__}: {str(exc)[:200]}"}
+        ui.ctx.close()
+    return res
+
+
+def _b_dbdown_shot(b, base: str, pw: str, payload: dict) -> dict:
+    """DB 끊긴 서버의 POP-01 (S-12) · 현황판 503 화면을 눈으로 — 같은 세션 비밀로 서명된 쿠키를 싣고 연다."""
+    out = ROOT / "outputs" / "e2e" / "core"
+    res = {}
+    for dev, path in (("pop", "/pop/work?device=pop"), ("board", "/kpi/board?device=board")):
+        ctx = b.new_context(viewport={"width": 1366, "height": 900}, locale="ko-KR")
+        ck = payload["cookies"].get(dev) or {}
+        ctx.add_cookies([{"name": k, "value": v, "url": base} for k, v in ck.items()])
+        pg = ctx.new_page()
+        r = pg.goto(base + path)
+        pg.wait_for_timeout(300)
+        res[dev] = {"status": r.status, "scan_disabled": pg.evaluate("(() => { const s = document.querySelector('[data-scan]'); return s ? s.disabled : null })()"),
+                    "active": pg.evaluate(ACT), "text": pg.locator("body").inner_text()[:200]}
+        pg.screenshot(path=str(out / f"{E2E_PREFIX}s12_{dev}_503.png"), full_page=True)
+        ctx.close()
+    return res
 
 
 def _b_timing(b, base: str, pw: str, payload: dict) -> dict:
@@ -1001,7 +1228,8 @@ def check_secrets() -> dict:
         if any(v.encode() in data for v in vals):
             hits.append(str(f.relative_to(ROOT)))
     ign = {p: run(["git", "check-ignore", "-q", p])[0] == 0 for p in (".env", "backups/x.dump")}
-    pat = re.compile(r"""(password|passwd|secret|token)\s*[:=]\s*["'][^"'\s{}]{6,}["']""", re.I)
+    # 문자열 하나가 통째 값일 때만(뒤에 `+ 난수` 로 잇는 시험용 표지 접두 — 예: check_screens 의 "QaEcho-" + uuid — 는 비밀 리터럴이 아니다 · 회전 6)
+    pat = re.compile(r"""(password|passwd|secret|token)\s*[:=]\s*["'][^"'\s{}]{6,}["'](?!\s*\+)""", re.I)
     hard = []
     for f in files:
         if f.suffix not in (".py", ".yaml", ".yml", ".html", ".js", ".sql", ".toml", ".cfg", ".ini", ".json") or "outputs" in f.parts:
@@ -1088,11 +1316,242 @@ def check_pack_isolation() -> dict:
     return out
 
 
+def lan_ip() -> str | None:
+    """이 기계의 LAN 주소(루프백 아닌 상대 주소를 만들려고) — 없으면 None."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s_:
+            s_.connect(("10.255.255.255", 1))
+            ip = s_.getsockname()[0]
+        return None if ip.startswith("127.") else ip
+    except OSError:
+        return None
+
+
+def check_hardening(port: int) -> dict:
+    """회전 6 재판정 — 보안 공격 시험(DEF-QA3-001 · 007 · 세션 고정 · CSRF 성) + POP S-01~S-15 화면 + 운영 HTTPS 결정 대기 재현.
+    포트: port(dev 루프백) · port+1(prod · 0.0.0.0) · port+2(dev · 0.0.0.0 — LAN 상대 주소) · port+3(다른 사이트 · 정적 파일)."""
+    import http.server
+    import threading
+
+    import httpx
+
+    from mescore.app.settings import get_settings
+    from mescore.db import conn
+
+    pw = get_settings().seed_password
+    cookie_name = get_settings().session_cookie
+    det: dict = {}
+    J = {"accept": "application/json"}
+    lan = lan_ip()
+
+    def login_as(base, headers=None, data=None):
+        r = httpx.post(base + "/login/as", data=data or {"role": "ADMIN", "device": "web"}, headers={**J, **(headers or {})})
+        return r.status_code, r.headers.get("location"), (r.json().get("role_code") if r.headers.get("content-type", "").startswith("application/json") else None)
+
+    def set_cookie_flags(r):
+        sc = r.headers.get_list("set-cookie") if hasattr(r.headers, "get_list") else [r.headers.get("set-cookie") or ""]
+        sc = [c for c in sc if c.startswith(cookie_name + "=")]
+        low = (sc[-1] if sc else "").lower()
+        return {"set": bool(sc), "httponly": "httponly" in low, "samesite": (re.search(r"samesite=(\w+)", low) or [None, None])[1], "secure": "secure" in low}
+
+    # ── ① dev · 루프백 (port) — /login/as 공격 · 세션 고정 · CSRF 성 · POP S-규칙 ────────────────────────
+    with Server(port, {"MES_ENV": "dev"}, name="h-dev") as srv:
+        base = srv.base
+        a = {}
+        a["plain"] = login_as(base)
+        a["x_forwarded_for"] = login_as(base, {"X-Forwarded-For": "203.0.113.9"})
+        a["x_forwarded_for_loopback"] = login_as(base, {"X-Forwarded-For": "127.0.0.1"})
+        a["forwarded"] = login_as(base, {"Forwarded": "for=203.0.113.9"})
+        a["x_real_ip"] = login_as(base, {"X-Real-IP": "203.0.113.9"})
+        a["host_evil"] = login_as(base, {"Host": "evil.example"})
+        a["host_lan"] = login_as(base, {"Host": f"{lan or '192.0.2.1'}:{port}"})
+        a["next_backslash"] = login_as(base, data={"role": "ADMIN", "device": "web", "next": "/\\evil.example"})
+        a["next_tab"] = login_as(base, data={"role": "ADMIN", "device": "web", "next": "/\t/evil.example"})
+        a["next_double"] = login_as(base, data={"role": "ADMIN", "device": "web", "next": "//evil.example"})
+        hb = {**J}
+        hb["accept"] = "text/html"
+        for k, extra in (("next_backslash_html", "/\\evil.example"), ("next_tab_html", "/\t/evil.example")):
+            r = httpx.post(base + "/login/as", data={"role": "ADMIN", "device": "web", "next": extra}, headers={"accept": "text/html"})
+            a[k] = (r.status_code, r.headers.get("location"), None)
+        lp = httpx.get(base + "/login", headers={"accept": "text/html"}).text
+        lp_xff = httpx.get(base + "/login", headers={"accept": "text/html", "X-Forwarded-For": "203.0.113.9"}).text
+        a["login_page_dev_buttons"] = "/login/as" in lp
+        a["login_page_dev_buttons_xff"] = "/login/as" in lp_xff
+        det["dev_loopback"] = a
+        # 쿠키 · 로그아웃
+        r = httpx.post(base + "/login", data={"login_id": "admin", "password": pw}, headers=J)
+        flags_dev = set_cookie_flags(r)
+        get_logout = httpx.get(base + "/logout", cookies=r.cookies).status_code
+        still = httpx.get(base + "/", cookies=r.cookies, headers={"accept": "text/html"}).status_code
+        det["dev_cookie"] = {"flags": flags_dev, "get_logout": get_logout, "after_get_logout_main": still}
+        # 세션 고정 — 공격자가 자기 세션 쿠키(현장)를 피해자 브라우저에 심고 피해자가 관리자로 로그인
+        anon = httpx.get(base + "/login", headers={"accept": "text/html"})
+        att = httpx.Client(base_url=base, timeout=30)
+        att.post("/login", data={"login_id": "field", "password": pw}, headers=J)
+        ca = att.cookies.get(cookie_name)
+        vic = httpx.Client(base_url=base, timeout=30)
+        vr = vic.post("/login", data={"login_id": "admin", "password": pw}, headers={**J, "cookie": f"{cookie_name}={ca}"})
+        cv = vr.cookies.get(cookie_name)
+        replay = httpx.get(base + "/sys/users", cookies={cookie_name: ca}, headers=J)
+        vic_ok = httpx.get(base + "/sys/users", cookies={cookie_name: cv}, headers=J).status_code if cv else None
+        # 바꿔치기 — 쿠키 값의 세션 id 를 다른 계정 것으로 (서명 없이) 고치면
+        forged = httpx.get(base + "/sys/users", cookies={cookie_name: (ca or "x")[:-4] + "AAAA"}, headers=J).status_code
+        det["fixation"] = {"anon_set_cookie": bool(anon.headers.get("set-cookie")), "cookie_rotated": bool(cv) and cv != ca,
+                           "planted_cookie_after_victim_login": replay.status_code, "victim_new_cookie": vic_ok, "tampered_cookie": forged}
+        att.close()
+        vic.close()
+        # CSRF 성 — 다른 사이트(localhost:port+3)의 페이지
+        evil_dir = Path(tempfile.mkdtemp(prefix="qa3-evil-"))
+        tgt = base
+        lid = "csrf_" + secrets.token_hex(3)
+        role_id = conn.q1("select id from sys_role where role_code = 'ADMIN'")["id"]
+        form_user = (f'<form id=u method=post action="{tgt}/sys/users" target=f2><input name=login_id value="{lid}"><input name=user_name value="CSRF"><input name=role_id value="{role_id}"><input name=password value="{secrets.token_urlsafe(12)}"></form>')
+        (evil_dir / "img.html").write_text(f'<!doctype html><img src="{tgt}/logout"><img src="{tgt}/login/as">', encoding="utf-8")
+        (evil_dir / "hidden_post.html").write_text(f'<!doctype html><iframe name=f1></iframe><iframe name=f2></iframe><form id=l method=post action="{tgt}/logout" target=f1></form>{form_user}<script>l.submit();u.submit()</script>', encoding="utf-8")
+        (evil_dir / "top_get.html").write_text(f'<!doctype html><script>location.href = "{tgt}/logout"</script>', encoding="utf-8")
+        (evil_dir / "top_post.html").write_text(f'<!doctype html><form id=l method=post action="{tgt}/logout"></form><script>l.submit()</script>', encoding="utf-8")
+        (evil_dir / "top_post_user.html").write_text(f'<!doctype html>{form_user.replace(" target=f2", "")}<script>u.submit()</script>', encoding="utf-8")
+
+        class _Q(http.server.SimpleHTTPRequestHandler):
+            def __init__(self, *aa, **kw):
+                super().__init__(*aa, directory=str(evil_dir), **kw)
+
+            def log_message(self, *aa):
+                pass
+
+        evil = http.server.ThreadingHTTPServer(("127.0.0.1", port + 3), _Q)
+        threading.Thread(target=evil.serve_forever, daemon=True).start()
+        try:
+            cres, clog = browser_job("csrf", base, {"evil": f"http://localhost:{port + 3}",
+                                                     "pages": ["img.html", "hidden_post.html", "top_get.html", "top_post.html", "top_post_user.html"]})
+        finally:
+            evil.shutdown()
+            shutil.rmtree(evil_dir, ignore_errors=True)
+        made = conn.q1("select count(*) as n from sys_user where login_id = %s", (lid,))["n"]
+        det["csrf"] = {"browser": cres, "log": None if cres else clog[-300:], "user_created": made}
+        # POP S-01~S-15 (S-15 는 E2E 13 단계 · S-14 는 템플릿 grep)
+        fx = build_fixture(base, pw)
+        from mescore.app import nav, packs
+
+        def path_of(sid):
+            sc = nav.by_id(sid)
+            return sc.probe or sc.path
+        fx["pop_paths"] = [(sid, path_of(sid)) for sid in packs.current().channels.get("pop", [])]
+        prod = http_client(base, "prod", pw)
+        fr = prod.post("/mat/receipts", data={"item_id": conn.q1("select id from bas_item where item_code = 'RAW-EX-01'")["id"], "qty": 10,
+                                               "partner_id": conn.q1("select id from bas_partner where partner_code = 'SUP-EX-01'")["id"]}).json()
+        prod.close()
+        fx["fresh_mat"] = fr["lot_no"]
+        pres, plog = browser_job("pop_rules", base, fx)
+        det["pop_rules"] = pres if pres else {"error": plog[-400:]}
+        demo = [str(f.relative_to(ROOT)) for f in (ROOT / "src" / "mescore" / "app" / "templates").rglob("*.html") if "data-demo" in f.read_text(encoding="utf-8")]
+        det["pop_rules_S14"] = demo
+        cks = {}
+        for dev in ("pop", "board"):
+            c_ = http_client(base, "admin", pw, device=dev)
+            cks[dev] = dict(c_.cookies)
+            c_.close()
+
+    # ── ② prod (MES_ENV 빈 값 → 기본 prod) · 0.0.0.0 (port+1) — /login/as 404 · Secure 쿠키 · HTTP 로그인 불가 재현 ──────
+    with Server(port + 1, {"MES_ENV": ""}, name="h-prod", host="0.0.0.0") as srv:
+        base = srv.base
+        p = {"env": "", "plain": login_as(base), "x_forwarded_for_loopback": login_as(base, {"X-Forwarded-For": "127.0.0.1"}),
+             "host_localhost": login_as(base, {"Host": "localhost"}), "get_login_as": httpx.get(base + "/login/as").status_code,
+             "login_page_dev_buttons": "/login/as" in httpx.get(base + "/login", headers={"accept": "text/html"}).text}
+        if lan:
+            p["lan_plain"] = login_as(f"http://{lan}:{port + 1}")
+        r = httpx.post(base + "/login", data={"login_id": "admin", "password": pw}, headers=J)
+        p["login_status"] = r.status_code
+        p["cookie"] = set_cookie_flags(r)
+        p["get_logout"] = httpx.get(base + "/logout").status_code
+        cl = httpx.Client(base_url=base, timeout=30)                 # 브라우저처럼 쿠키 저장소가 Secure 를 지키는 클라이언트
+        cl.post("/login", data={"login_id": "admin", "password": pw}, headers=J)
+        p["httpx_jar_next_request"] = cl.get("/sys/users", headers=J).status_code
+        cl.close()
+        bases = {"loopback": base}
+        if lan:
+            bases["lan"] = f"http://{lan}:{port + 1}"
+        hres, hlog = browser_job("https", base, {"bases": bases})
+        p["browser"] = hres if hres else {"error": hlog[-300:]}
+        det["prod"] = p
+        try:
+            with open(srv.log, encoding="utf-8") as fh:
+                det["prod_log_tail"] = [ln for ln in fh.read().splitlines() if "/login" in ln][-8:]
+        except OSError:
+            pass
+
+    # ── ③ dev · 0.0.0.0 (port+2) — LAN 상대 주소에서 /login/as ─────────────────────────────
+    if lan:
+        with Server(port + 2, {"MES_ENV": "dev"}, name="h-devlan", host="0.0.0.0") as srv:
+            lb = f"http://{lan}:{port + 2}"
+            det["dev_lan"] = {"lan": "LAN 주소(값 생략)", "plain": login_as(lb), "x_forwarded_for_loopback": login_as(lb, {"X-Forwarded-For": "127.0.0.1"}),
+                              "host_loopback": login_as(lb, {"Host": f"127.0.0.1:{port + 2}"}),
+                              "login_page_dev_buttons": "/login/as" in httpx.get(lb + "/login", headers={"accept": "text/html"}).text,
+                              "loopback_same_server": login_as(srv.base)}
+    # ── ④ DB 끊긴 서버 (port+2) — S-12 POP · 현황판 503 화면 캡처 ─────────────────────────────
+    with Server(port + 2, {"MES_ENV": "dev", "MES_PG_DSN": "postgresql:///mes_qa3_no_such_db"}, name="h-dbdown") as srv:
+        sres, slog = browser_job("dbdown_shot", srv.base, {"cookies": cks})
+        det["dbdown_shot"] = sres if sres else {"error": slog[-300:]}
+
+    # ── 판정 행 ──
+    a, fxn, p = det["dev_loopback"], det["fixation"], det["prod"]
+    lan_d = det.get("dev_lan", {})
+    ok1 = (p["plain"][0] == 404 and p["x_forwarded_for_loopback"][0] == 404 and p["host_localhost"][0] == 404 and not p["login_page_dev_buttons"]
+           and (not lan or p.get("lan_plain", (0,))[0] == 404)
+           and a["x_forwarded_for"][0] == 404 and a["x_forwarded_for_loopback"][0] == 404 and a["forwarded"][0] == 404
+           and (not lan or (lan_d["plain"][0] == 404 and lan_d["x_forwarded_for_loopback"][0] == 404 and lan_d["host_loopback"][0] == 404)))
+    row("G-C19", "DEF-QA3-001 /login/as — prod 기동 404 · dev 는 루프백만 · 전달 헤더 · Host 조작 거부", ok1,
+        f"prod(MES_ENV 빈 값): 루프백 {p['plain'][0]} · XFF=127.0.0.1 {p['x_forwarded_for_loopback'][0]} · Host=localhost {p['host_localhost'][0]} · LAN {p.get('lan_plain', ('-',))[0]} · 로그인 화면 개발 버튼 {p['login_page_dev_buttons']} | "
+        f"dev 루프백: 평 {a['plain'][0]} · XFF {a['x_forwarded_for'][0]} · XFF=127.0.0.1 {a['x_forwarded_for_loopback'][0]} · Forwarded {a['forwarded'][0]} · X-Real-IP {a['x_real_ip'][0]} · Host=evil {a['host_evil'][0]} | "
+        f"dev LAN: 평 {lan_d.get('plain', ('-',))[0]} · XFF=127.0.0.1 {lan_d.get('x_forwarded_for_loopback', ('-',))[0]} · Host=127.0.0.1 {lan_d.get('host_loopback', ('-',))[0]}")
+    cs = det["csrf"]["browser"] or {}
+    after = (cs.get("after") or {})
+    ok7 = (p["get_logout"] == 405 and det["dev_cookie"]["get_logout"] == 405 and det["dev_cookie"]["after_get_logout_main"] == 200
+           and p["cookie"]["httponly"] and p["cookie"]["samesite"] == "lax" and p["cookie"]["secure"]
+           and det["dev_cookie"]["flags"]["httponly"] and det["dev_cookie"]["flags"]["samesite"] == "lax" and after.get("logged_in") and det["csrf"]["user_created"] == 0)
+    row("G-C18", "DEF-QA3-007 로그아웃 POST 전용 · 쿠키 HttpOnly · SameSite=Lax · prod Secure · 다른 사이트 GET/POST", ok7,
+        f"GET /logout prod {p['get_logout']} · dev {det['dev_cookie']['get_logout']}(뒤 메인 {det['dev_cookie']['after_get_logout_main']}) · prod 쿠키 {p['cookie']} · dev 쿠키 {det['dev_cookie']['flags']} · "
+        f"다른 사이트 5 페이지 방문 뒤 세션 유지 {after.get('logged_in')} · CSRF 계정 생성 {det['csrf']['user_created']}")
+    okf = fxn["cookie_rotated"] and fxn["planted_cookie_after_victim_login"] in (401, 403) and fxn["victim_new_cookie"] == 200 and fxn["tampered_cookie"] == 401
+    row("G-C18", "세션 고정 — 심어 둔 쿠키로 로그인해도 새 쿠키 · 심은 쿠키는 관리자 아님 · 위조 쿠키 401", okf,
+        f"로그인 전 Set-Cookie {fxn['anon_set_cookie']} · 로그인 뒤 쿠키 바뀜 {fxn['cookie_rotated']} · 공격자 쿠키로 /sys/users {fxn['planted_cookie_after_victim_login']} · 피해자 새 쿠키 {fxn['victim_new_cookie']} · 위조 쿠키 {fxn['tampered_cookie']}")
+    nb = {k: a[k][:2] for k in ("next_backslash", "next_tab", "next_double", "next_backslash_html", "next_tab_html")}
+    row("G-C19", "dev /login/as next= 바깥 주소 (참고 · dev+루프백만)", None, f"{nb}")
+    pr = det["pop_rules"]
+    if "error" in pr:
+        row("G-C13", "POP S-01~S-13 화면", False, pr["error"][:300])
+    else:
+        chk = {
+            "S-01": not pr["S-01"]["console_errors"],
+            "S-02": pr["S-02"]["typed"] == "ABC" and pr["S-02"]["active"] == "scan",
+            "S-03": pr["S-03"]["active_while_typing"] == "qty" and "7" in pr["S-03"]["qty_value"] and pr["S-03"]["after_blank_click"] == "scan",
+            "S-04": pr["S-04"]["after_window_focus"] == "scan",
+            "S-06": pr["S-06"]["popup"] and pr["S-06"]["active"] == "scan",
+            "S-07": not pr["S-07"]["popup_after_letter"] and pr["S-07"]["scan_value"] == "Q" and pr["S-07"]["active"] == "scan" and pr["S-08"]["empty_enter"]["closed"] and pr["S-08"]["empty_enter"]["same_url"],
+            "S-08": all(v["closed"] and v["active"] == "scan" for v in pr["S-08"].values()),
+            "S-09": pr["S-09"]["popup"] and bool(pr["S-09"]["fields"]) and pr["S-09"]["qty_kept"] == "3.5",
+            "S-10": "ok" in pr["S-10"]["class_now"] and not pr["S-10"]["popup"] and "ok" not in pr["S-10"]["class_after_1s"],
+            "S-11": pr["S-11"]["status"] == 422 and pr["S-11"]["err"] > 0 and pr["S-11"]["active"] == "scan",
+            "S-12": (det["dbdown_shot"].get("pop") or {}).get("scan_disabled") is True,
+            "S-13": pr["S-13"]["unchanged"],
+            "S-14": not det["pop_rules_S14"],
+        }
+        det["pop_rules_judged"] = chk
+        row("G-C13", "POP 스캔 규칙 S-01~S-14 화면 (S-05 · S-15 는 위 · E2E)", all(chk.values()),
+            " · ".join(f"{k} {'OK' if v else 'X'}" for k, v in chk.items()))
+    br = p.get("browser") or {}
+    row("G-C19", "운영 HTTPS 결정 대기 — prod 를 HTTP 로 열면 (사람 결정 · 결함 아님)", None,
+        " · ".join(f"{k}: 도착 {v.get('landed')} · 메인 {v.get('main_status')} · 로그인 유지 {v.get('logged_in')} · 저장 쿠키 {[c['name'] for c in v.get('stored_cookies', [])]}" for k, v in br.items() if isinstance(v, dict))
+        + f" · httpx 쿠키 저장소 다음 요청 {p['httpx_jar_next_request']}")
+    return det
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=int(os.environ.get("MES_QA3_PORT", "8053")))
     ap.add_argument("--e2e", action="store_true")
     ap.add_argument("--pack-isolation", action="store_true")
+    ap.add_argument("--hardening", action="store_true", help="회전 6 — 보안 공격 시험 · POP S-규칙 화면 · 운영 HTTPS 재현 (포트 port~port+3)")
     ap.add_argument("--only", default="", help="쉼표: live,dbdown,migrate,secrets,backup")
     ap.add_argument("--json", default="", help="상세를 이 파일에 JSON 으로")
     ap.add_argument("--_browser", nargs=4, metavar=("MODE", "BASE", "IN", "OUT"))
@@ -1134,6 +1593,11 @@ def main() -> int:
             _ = get_settings
         except Exception as exc:  # noqa: BLE001
             row("G-C22", "브라우저 한 바퀴", False, f"{type(exc).__name__}: {str(exc)[:240]}")
+    if a.hardening:
+        try:
+            detail["hardening"] = check_hardening(a.port)
+        except Exception as exc:  # noqa: BLE001
+            row("G-C19", "보안 공격 시험 중단", False, f"{type(exc).__name__}: {str(exc)[:240]}")
     if a.pack_isolation:
         try:
             detail["pack"] = check_pack_isolation()
