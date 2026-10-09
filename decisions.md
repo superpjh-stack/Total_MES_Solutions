@@ -354,3 +354,7 @@
 
 ## D-607 채널 틀은 `base.html` 하나 — POP · 모바일 · Web · 상태: 가설
 - 디자이너1 회전 4(디자이너2 요청 1). `base.html` 이 채널 틀 셋을 그린다(ch-pop: 헤더 + 상단 탭 · ch-mobile: `.m-frame` + 하단 탭 4 · 그 밖: Web 3단) — `{% block pop_body %}` · `{% block mobile_body %}`. `{% block body %}` 를 통째로 바꾼 화면(TRC · KPI · 메인 · 대시보드)도 틀 안에 들어간다. `pop/_layout.html` 의 모바일 틀은 base 로 합쳤다. 디자이너2 · 3 은 다음 회전에 `mobile_body` 로 본문을 나눈다.
+
+## D-40 G-P01 R10 — README 에 적힌 템플릿 덮어쓰기는 PASS · 상태: 가설
+- `pack-contract.md` §4 R10 은 "코어 템플릿을 덮어쓴 파일 목록을 README.md 에 적는다" 다. 지금까지 `check_pack` 은 전부 적혀 있어도 WARN 을 냈고, `goal.md` §2.8 은 WARN 을 통과로 보지 않아 규칙을 지킨 팩(foodservice 1 · printfilm 3)이 종료 조건에 걸렸다.
+- 오케스트레이터(회전 5 판정)가 판정을 고쳤다: 전부 README 에 있으면 PASS(목록은 실측 칸에 남는다) · 하나라도 없으면 FAIL. 덮어쓰기 자체는 `spec.md` §3.4 의 허용된 탈출구라 실패가 아니다.

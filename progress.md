@@ -321,3 +321,14 @@ PASS 27 · FAIL 9 · WARN 0 · BLOCKED 0 · 미검증 6 / 전체 42
 - **QA3(다음 회전)**: `MES_ENV` 가 비면 prod → 쿠키 `Secure`. **운영을 HTTP 로 띄우면 브라우저가 세션 쿠키를 보내지 않아 로그인이 안 된다**(localhost 는 예외) — 운영 HTTPS 여부는 사람 결정(미확정). 검사 서버를 루프백 밖 주소로 띄우면 `/login/as` 는 404.
 - **아키텍트 다음 회전 후보**(개발1 요청): `seed_core` 에 `bom*` 로더(헤더 + 구성품 · attrs · 훅) · `seeds[]` 행에 팩 `after_save_*` 훅 실행 옵션.
 - **D-501 은 사람 결정 대기 — 손대지 않았다.**
+
+## 2026-10-09 회전 5 — 오케스트레이터 (웨이브 D 결함 수정 판정)
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| **게이트 (종료 판정)** | **PASS 42 · FAIL 0 · WARN 0 · BLOCKED 0 · 미검증 0 / 42** — 코어 G-C01~C24 전부 · 팩 3 × G-P01~P06 전부 | `make gate-full` → `outputs/gate-r5-final.txt` |
+| QA1 검사기 | 기능 136/136 · 권한 48칸 · 역할×기능 522 호출 위반 0 · 채널 155 위반 0 · 화면 금지어/날것 중립어 0 | `uv run python src/mescore/tools/check_screens.py` |
+| 고친 중대 결함 | 비밀번호 없는 관리자 로그인(기본 prod · dev+루프백만) · `make db-schema` DSN 무시 · 반제품 이중 투입 · 추적→지시 링크 · 계획→지시 수주/납기 · 이관 테스트 · 숨긴 메뉴 테스트 · `check_terms --pack` 거짓 PASS · G-P05 3팩 노출(printfilm 180 · foodservice 61 · kimchi 68 → 0) | 각 담당 커밋 · QA 재현 테스트 |
+| 오케스트레이터 직접 | `home/main.html` 채널명 `t()` 2곳 · `check_pack` R10 판정(README 기재 시 PASS · D-40) · core-hash 재기록 | `make check-terms` · `check_pack.py` |
+| 남은 사람 결정 | D-501 설비 알람(52→54 · 51→52 · 132→135 vs 표시만) · 운영 HTTPS 여부(세션 쿠키 `Secure` — HTTP 운영 시 로그인 불가) · kimchi S1 P1 양품 1000 vs 850 | `decisions.md` |
+| 다음 | 회전 6: QA 3 재판정(종료 조건 ②③) | — |

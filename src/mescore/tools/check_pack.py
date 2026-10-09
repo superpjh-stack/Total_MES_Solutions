@@ -114,8 +114,9 @@ def main() -> int:
         over = packs.overridden_templates()
         readme = (pdir / "README.md").read_text(encoding="utf-8") if (pdir / "README.md").exists() else ""
         unlisted = [t for t in over if t not in readme]
-        add("R10 코어 템플릿 덮어쓰기 목록 (README.md 에 적는다)", "WARN" if over and not unlisted else ("FAIL" if unlisted else "PASS"),
-            f"덮어쓴 템플릿 {over or 0}" + (f" · README 에 없음 {unlisted}" if unlisted else ""))
+        # D-40: R10 은 "README 에 적는다" 가 규칙이다 — 덮어쓴 템플릿이 전부 README 에 있으면 PASS(목록은 실측에 남긴다), 빠진 것이 있으면 FAIL
+        add("R10 코어 템플릿 덮어쓰기 목록 (README.md 에 적는다)", "FAIL" if unlisted else "PASS",
+            f"덮어쓴 템플릿 {over or 0}" + (f" · README 에 없음 {unlisted}" if unlisted else (" · README 기재 일치" if over else "")))
 
     # R9 (CR-11 · D-36) — 팩을 올린 채 tests/test_arch_*.py 전건. 코어 단독(MES_PACK=) tests/ 전건은 gate 의 G-C21 이 같은 실행에서 판정한다
     if "--no-r9" not in sys.argv:

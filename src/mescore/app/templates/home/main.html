@@ -50,7 +50,7 @@
         <div>{{ t('화면') }}<b>{{ c.menu.screens|length }}</b></div>
         <div{% if c.today_source %} title="{{ c.today_source }}"{% endif %}>{{ t(c.today_label or '오늘') }}<b{% if c.today is none %} class="is-empty"{% endif %}>{{ c.today if c.today is not none else NOT_COLLECTED }}</b></div>
       </div>
-      <div class="roles">{{ t('입력') }} <b>{{ c.write_roles|join(' · ') if c.write_roles else '—' }}</b>{% if c.menu.channels and c.menu.channels|reject('equalto', 'web')|list %} <span class="chan">· {{ c.menu.channels|reject('equalto', 'web')|join(' · ') }}</span>{% endif %}{% if c.menu.is_pack %} · <b>{{ t('팩') }}</b>{% endif %} · {{ t('기능') }} {{ c.fn_count }}</div>
+      <div class="roles">{{ t('입력') }} <b>{{ c.write_roles|join(' · ') if c.write_roles else '—' }}</b>{% if c.menu.channels and c.menu.channels|reject('equalto', 'web')|list %} <span class="chan">· {{ c.menu.channels|reject('equalto', 'web')|map('t')|join(' · ') }}</span>{% endif %}{% if c.menu.is_pack %} · <b>{{ t('팩') }}</b>{% endif %} · {{ t('기능') }} {{ c.fn_count }}</div>
       <div class="screens">
         {% for s in c.screens %}{% if c.allowed %}<a href="{{ s.screen.path }}" title="{{ s.functions|map('t')|join(' · ') }}">{{ t(s.screen.name) }}</a>{% else %}<span>{{ t(s.screen.name) }}</span>{% endif %}{% else %}<span class="is-empty">{{ t('화면 없음') }}</span>{% endfor %}
       </div>
@@ -64,7 +64,7 @@
 <section class="panel ia-top">
   <div class="intro">
     <h2>{{ t('메인') }} <small>{{ t('일하는 순서대로 — 왼쪽 위부터') }}</small></h2>
-    <span class="who">{{ t('역할') }} <b>{{ user.role_name }}</b> · {{ t('입력 가능') }} {{ ns.w }} · {{ t('조회') }} {{ ns.r }} · {{ t('권한 없음') }} {{ ns.n }} · {{ channel }}</span>
+    <span class="who">{{ t('역할') }} <b>{{ user.role_name }}</b> · {{ t('입력 가능') }} {{ ns.w }} · {{ t('조회') }} {{ ns.r }} · {{ t('권한 없음') }} {{ ns.n }} · {{ t(channel) }}</span>
   </div>
   <p class="sys">{{ system_name }} — {{ t('코어') }} {{ core_version }}{% if pack.name %} + {{ t('팩') }} <b>{{ pack.display_name }}</b> ({{ pack.name }}){% else %} ({{ t('코어 단독') }}){% endif %} · {{ t('모듈') }} {{ n_menus }} · {{ t('화면') }} {{ n_screens }} · {{ t('기능') }} {{ n_functions }} + {{ t('이관 배치') }} {{ n_batch }}
     · {{ t('계보') }} {% for r in lineage.relations %}{{ t(r.name) }}{% if not loop.last %} · {% endif %}{% endfor %}
