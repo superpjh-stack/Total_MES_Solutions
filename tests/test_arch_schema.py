@@ -155,3 +155,25 @@ def test_deep_chain_is_recursive(cur):
         _edge(cur, a, b, "생산")
     cur.execute(UP, (ids[-1],))
     assert len(cur.fetchall()) == 24
+
+
+def test_product_lot_partial_input_stays_in_stock(cur):
+    """PRODUCT LOT 을 다른 지시에 「투입」 만 하면 잔량으로 판정 — 한 LOT 을 두 통에 나눠 담기 (회전 4 · 개발3 17). 분할 · 합병 · 생산은 통째 소진."""
+    item = _one(cur, "insert into bas_item (item_code, item_name, item_type, created_by) values ('T-PART', '제품 (예시)', '제품', 't') returning id")["id"]
+    src, a, b, c = (_lot(cur, n, "PRODUCT", item) for n in ("T-PT0", "T-PTA", "T-PTB", "T-PTC"))
+
+    def state(lot_id):
+        cur.execute("select s.state, k.remain_qty from v_lot_state s join v_lot_stock k on k.lot_id = s.lot_id where s.lot_id = %s", (lot_id,))
+        r = cur.fetchone()
+        return r["state"], r["remain_qty"]
+
+    _edge(cur, src, a, "투입", 40)
+    assert state(src) == ("재고", 60)
+    _edge(cur, src, b, "투입", 60)
+    assert state(src) == ("소진", 0)
+    other = _lot(cur, "T-PT1", "PRODUCT", item)
+    _edge(cur, other, c, "투입")                     # 수량 모르는 투입 → 소진
+    assert state(other)[0] == "소진"
+    whole = _lot(cur, "T-PT2", "PRODUCT", item)
+    _edge(cur, whole, a, "합병", 10)                 # 합병은 수량과 무관하게 통째 소진
+    assert state(whole) == ("소진", 90)

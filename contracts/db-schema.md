@@ -93,7 +93,7 @@ DB `mes_core_db` (PostgreSQL 17) · 테이블 **52** (bas 10 · ord 4 · job 2 �
 
 ### 3.4 상태 · 잔량 뷰
 
-- `v_lot_state(lot_id, state)` — SHIPMENT 는 `출하`; PRODUCT 는 자식 쪽에 `출하` 행이 있으면 `출하`, `분할|합병|생산|투입` 의 **부모**로 나오면 `소진`, 아니면 `재고`; MATERIAL 은 잔량 0 이면 `소진`.
+- `v_lot_state(lot_id, state)` — SHIPMENT 는 `출하`; PRODUCT 는 자식 쪽에 `출하` 행이 있으면 `출하`, `분할|합병|생산` 의 **부모**로 나오면 `소진`(LOT 통째), `투입` 의 부모로만 나오면 **잔량**으로 — 잔량 ≤ 0 · 수량 모르는 투입(qty NULL) · LOT 수량 NULL 이면 `소진`, 아니면 `재고`(부분 투입 · 회전 4); MATERIAL 은 잔량 0 이면 `소진`.
 - `v_lot_stock(lot_id, qty, consumed_qty, remain_qty)` — MATERIAL: `lot.qty` − Σ`pop_input.qty`(취소 제외). PRODUCT: `lot.qty` − Σ 자식 계보 `qty`.
 - `v_work_order_progress(work_order_id, started, closed, result_count, good_qty)`.
 
