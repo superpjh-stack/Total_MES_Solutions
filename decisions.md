@@ -204,7 +204,7 @@
 
 기획자 3명의 `packs/<팩>/README.md` 끝 "결정 후보 D-5nn" 절과 디자이너 3명의 `docs/design/README.md` 에서 코어에 닿는 것만 옮겼다. 팩 안에서만 유효한 결정은 각 팩 README 가 원본이다.
 
-## D-501 세 팩 공통 — 설비 단위 임계값 · 이탈 알람이 코어에 없다 · 상태: 가설 (회전 3 아키텍트 판단 — **반영한다**, 회전 4 아키텍트가 코어에 넣는다)
+## D-501 세 팩 공통 — 설비 단위 임계값 · 이탈 알람이 코어에 없다 · 상태: 차단 (사람 승인 대기 — 회전 4 아키텍트가 설계를 확정했다 · 스키마는 바꾸지 않았다)
 - foodservice(냉장 5 ℃ · 냉동 −18 ℃ 온도조절기 이탈) 와 kimchi(냉장 온습도 · 염도 센서 이탈) 가 같은 것을 요구한다. E3 는 **공정** 측정값뿐이라 설비 수집값의 범위 판정 · 알람 발생/해제 이력이 코어 EQP 화면에 못 나온다.
 - 1차 웨이브 B 는 팩 테이블(`x_<팩>_env_alarm`)로 간다. 회전 4 에서 코어에 들어가면 두 팩의 알람 테이블을 지운다.
 - **판단(회전 3 아키텍트)**: 반영한다. 근거 — ① 요구가 업종이 아니라 "수집 설비" 라는 코어 개념(EQP 모듈 · `eqp_collect` · `bas_equipment.collect_yn`)에 붙는다 ② 세 팩 중 둘이 같은 모양을 요구하고 printfilm 도 온습도 설비가 있다 ③ 팩마다 알람 테이블을 두면 EQP-01 가동 현황에 못 올라와 코어 화면이 팩 데이터를 모른다(D-05 attrs 로는 집계 · 이력이 안 된다).
@@ -214,6 +214,14 @@
   - 동작: `collect.receive` 가 정제 뒤 `bas_equipment_param` 범위를 판정한다 — 범위 밖이면 열린 알람이 없을 때 `eqp_alarm` 1행 `발생`, 범위 안으로 돌아오면 열린 알람을 `해제`(`cleared_at`). `eqp_collect` 에 컬럼을 더하지 않는다(이탈 여부는 조회 때 `eqp_alarm` 과 잇는다). 쓰기 경계 — `collect` 가 `eqp_alarm` 에 쓴다(db-schema.md §2 `ifc` 행에 추가), `bas` 가 `bas_equipment_param` 에 쓴다. 화면 — EQP-01 가동 현황이 열린 알람 수 · 최신 알람을 보여 준다(F-EQP-01 조회 범위 · 기능 수 불변). 팩 훅 `on_alarm(cur, alarm, user=None)` 을 §9 에 더해 팩이 이상(`qua_issue`) 을 만들 수 있게 한다.
   - 미정(사람): 알람 **확인(ack)** 기능은 기능 ID 가 늘어난다(132 → 133) — 1차는 두지 않는다. 테이블 52 → 54 는 `spec.md` §2.2 · `goal.md` G-C04 · `CLAUDE.md` 의 수치라 **사람이 정본을 고친 뒤** 회전 4 아키텍트가 `schema.sql` 을 바꾼다(그 전엔 G-C04 가 FAIL 이 된다).
   - 바뀌면 고칠 곳: `db/schema.sql` · `contracts/db-schema.md` §1 · §2 · §4 · `app/collect.py`(범위 판정) · `routers/bas.py`(BAS-05 하위 표) · `routers/eqp.py`(EQP-01 표시) · `pack-contract.md` §5(`on_alarm`) · `packs/{foodservice,kimchi}` 의 `x_<팩>_env_alarm` 제거.
+
+- **회전 4 정리 (아키텍트 · 사람 승인 대기)** — 회전 3 설계 + 개발3 `progress-dev3.md` §5 설계 표(kimchi `x_kimchi_env_alarm` · `alarm.py` 실측 — 합침 · 확인 · 해제가 업무에 쓰인다)를 합쳐 한 벌로 확정했다. **스키마 · 코드는 바꾸지 않았다**(정본 테이블 수 52 는 사람이 고친다 — 바꾸면 G-C04 FAIL).
+  - `bas_equipment_param`(bas): `equipment_id` FK · `tag`(= `eqp_collect.tag`) · `label` · `unit` · `min_value` · `max_value` · `seq` · `use_yn` + 공통 + `attrs`. uq `(equipment_id, tag)` · `min ≤ max` CHECK · 둘 다 NULL = 판정 안 함(`미확정`). 편집은 BAS-05 하위 표(F-BAS-17~20 범위 · 기능 수 불변). 팩 시드는 `seeds[]` `equipment_params*.csv`(D-36 의 이름 규칙에 추가).
+  - `eqp_alarm`(eqp): `alarm_no`(채번 `ALARM`) · `equipment_id` FK · `tag` · `param_id` FK · `first_value` · `last_value` · `min_value` · `max_value`(발생 당시 복사) · `count` · `status`(발생 · 확인 · 해제) · `first_at` · `last_at` · `acked_at/by` · `cleared_at/by` · `action_desc` · `collect_raw_id` FK · `lot_id` FK(선택) · `work_result_id` FK(선택) + 공통 + `attrs`. **부분 uq `(equipment_id, tag) where status <> '해제'`**(열린 알람 하나) · idx `first_at desc`. 쓰는 곳 `collect`(발생 · 합침) · `eqp`(확인 · 해제 — 기능이 생기면).
+  - `collect.receive` 판정(정제 뒤 · 같은 tx · `on_collect` **앞** · 재전송 원문은 판정 안 함): 값마다 `bas_equipment_param` 조회 → 범위 밖 · 열린 알람 없음 = `eqp_alarm` 1행 `발생` + 훅 `on_alarm_raised` · 범위 밖 · 열린 알람 있음 = **합침**(`last_value` · `last_at` · `count + 1`) · 범위 안 = 그대로(자동 해제는 `core.yaml: collect.auto_clear` 기본 false). `ReceiveResult` 에 `alarms_raised` · `alarms_merged`. `eqp_collect` 에 컬럼 추가 없음.
+  - 훅 `on_alarm_raised(cur, alarm, user=None) -> dict | None`(돌려준 `lot_id` · `work_result_id` · `attrs` 만 반영 — 팩의 LOT 연결 규칙 자리) · `on_alarm_cleared(cur, alarm, user)` · `after_commit_alarm_raised(payload)` → `interfaces.md` §9 · `pack-contract.md` §5.
+  - EQP-05 `GET /eqp/alarms`(web · pop · board) — 조회 · `POST /eqp/alarms/{id}/ack` 확인 · `POST /eqp/alarms/{id}/clear` 해제(조치 내용 필수). EQP-01 카드에 열린 알람 수 · 최신 1건 · `stats.board().equipment.alarms_open`.
+  - **사람이 정할 것 (한 줄)**: 테이블 52 → **54**(`spec.md` §2.2 · `goal.md` G-C04 · `CLAUDE.md`)와 화면 51 → 52(EQP-05) · 기능 132 → **135**(조회 · 확인 · 해제) 를 승인할지 — 아니면 EQP-01 에 열린 알람 표시만(화면 · 기능 수 불변) 두고 확인/해제는 팩 화면에 남길지. 승인되면 회전 5 아키텍트가 `schema.sql` · `db-schema.md` · `core.yaml` · `function-list.md` 를 고치고 개발2 가 `collect` · `eqp`, kimchi · foodservice 가 `x_<팩>_env_alarm` 을 지운다.
 
 ## D-502 두 팩 공통 — 화면 단위 권한 예외 · 상태: 코어 변경 요청 (회전 3 아키텍트 판단 — **미룬다**, 회전 5 이후 팩 실측을 보고 다시 본다)
 - foodservice(영양사: 메뉴 · 레시피 · 검식기준만 입력) · kimchi(레시피 BOM 열람 통제). 메뉴 × 역할 칸으로는 표현이 안 된다.
@@ -258,6 +266,14 @@
 - `MES_ENV=dev` 일 때만 로그인 화면에 역할 4 버튼. 운영 빌드에는 없다.
 
 
+
+## D-107 사용자 ↔ 작업자 연결의 기준은 `sys_user.worker_id` · 상태: 가설
+- 개발1 회전 4. F-SYS-01/02 가 `sys_user.worker_id` 를 등록 · 수정 · 해제(빈 값 → NULL)하고 POP-02 기본 작업자는 이것을 읽는다. BAS-07 의 `bas_worker.user_id` 와는 **동기화하지 않는다**(쓰는 테이블 계약 그대로). 시드는 `seed_dev1` 이 `field ↔ WK-EX-02`(양쪽 비었을 때만). 팩 계정은 `seed/users.csv` 의 `worker_code`(D-36 계정 규칙).
+
+## D-108 메인 카드 「오늘 건수」 는 `stats.today_counts()` · 라벨 `home.TODAY_LABELS` · 상태: 가설
+- 개발1 · 개발3 회전 4. 키 = 코어 모듈 코드 12 → int(0 도 숫자). 출처 문장 `stats.TODAY_COUNT_SOURCES`(디자이너3 `home/main.html` 머리 주석 가설 그대로). 팩 모듈 · 함수 없는 버전은 `None` → 화면 `미수집`. 라우터 SQL 0(집계는 stats 뿐).
+
+
 ---
 
 ## 개발2 (웨이브 A R1·R2 · 2026-10-09)
@@ -278,6 +294,20 @@
 ## D-205 측정값 매크로 서명 `mf.measure_fields(params, values, latest)` · 상태: 가설
 - 매크로는 DB 를 읽을 수 없어 `process_id` 대신 라우터가 `measure.params_for(process_id)` 로 넘긴 `params` 를 받는다. 파이썬 쪽은 `app/measure.py`(params_for · parse_form · record · fill_collect · values_of · plan_fields). 검사 항목(`qua_insp_plan`)도 `measure.plan_fields` 로 같은 칸 모양.
 
+
+## D-206 (kimchi) 센서 ↔ 절임통 연결 · 상태: 차단
+- 개발3 kimchi 가 화면에 `미확정 (D-206)` 으로 쓴 번호를 대장에 둔다(개발2 대역이지만 이미 화면에 찍혀 있어 그대로). 염도 센서가 어느 절임통 배치에 붙는지(`SENSOR_TO_TANK`)는 현장 값 — 사람이 정할 때까지 알람의 `lot_id` 는 비운다. D-501 이 승인되면 `on_alarm_raised` 훅 안의 규칙이 된다.
+
+## D-207 팩 분할 · 합병 관계는 N ≥ 1 (코어 `분할` · `합병` 은 N ≥ 2) · 상태: 가설
+- 개발2 회전 4(개발3 15). 팩 base 분할 1 → 1 은 **부분 분할**(잔량은 부모에 남음). 부모 상태는 `v_lot_state` 규칙대로 — 분할 계보가 생기면 부모는 `소진`(통째) 이다. 잔량을 재고로 두려면 「투입」 관계(잔량 판정 · 회전 4 `views.sql`)를 쓰거나 남는 양을 자식 하나로 나눈다. 코어 시나리오 10행 불변.
+
+## D-208 분할 · 합병 자식의 `insp_status` 상속 `lineage.inherit_insp` · 상태: 가설
+- 개발2 회전 4(개발3 16). 전부 합격 → 합격 · 불합격 하나라도 → 불합격 · 미검사 하나라도 → 미검사 · 그 밖(합격 + 조건부) → 조건부 · 부모 하나면 그 값. 팩의 `update lot set insp_status` 우회를 없앤다.
+
+## D-209 `make_product_lot(merge_parent_ids=)` · F-POP-03 폼 `merge_lot_ids` — 「투입 + 합병 → 한 LOT」 · 상태: 가설
+- 개발2 회전 4(개발3 19). 재고 생산 LOT 1개 이상을 새 실적 LOT 에 base 합병 화살표로 잇는다(별도 합병 LOT 없음). 소진 · 원재료 · 분할 관계 · 중복은 422. 코어 G-C06 시나리오(합병 API → 별도 LOT · 10행)는 그대로.
+
+
 ---
 
 ## 개발3 (R1 · R2 · 2026-10-09)
@@ -292,3 +322,22 @@
 ## D-302 품질 집계의 `조건부` 는 합격에 세지 않는다 · 상태: 가설
 - 디자이너3 절 "조건부는 합격에 세지 않는다(미확정 — D-nn)" 의 번호. `stats.quality.pass_rate = 합격 / 전체 × 100`, 조건부는 `cond_count` 로 따로 센다. 성적서 종합 판정은 불합격 1건이면 불합격 · 미수집(검사 없음)이 있으면 `미확정` · 조건부가 있으면 조건부 · 아니면 합격.
 - 바뀌면 고칠 곳: `app/stats.py: quality` · `routers/shp.py: _summary`.
+
+## D-303 메인 · 대시보드 · 출하 현황의 집계 함수 (`stats.today_counts` · `recent_activity` · `shipment_due`) · 상태: 가설
+- 개발3 회전 4. `shipment_due` 의 `due_days = 출하일 − 수주 납기`(양수 = 지남) · `due_state` 지연/당일/앞섬 · 수주 없음 None. `recent_activity` = `sys_access_log` change 최신 순(≤ 5). 템플릿은 날짜 계산을 하지 않는다.
+
+## D-304 목록 `total` = 조건 전체 건수(`count(*) over ()`) · 상한 앞에서 센다 · 상태: 가설
+- 개발3 회전 4(ORD-01 · SHP-01 · SHP-03). 화면은 「전체 N건 · 최근 M건만」. 정렬은 D-37 `http.sort_clause` 로 옮긴다.
+
+## D-305 이관 멱등 판정 = 이관 대상 테이블에서 이관이 만든 · 갱신한 행 수 diff 0 · 상태: 가설
+- 개발3 회전 4. 같은 DB 를 여러 사람이 쓰므로 전체 행 수 diff 는 흔들린다 — 두 번째 `inserted == 0` + `created_by/updated_by = migrate` · `attrs.migrated_from` 행만 센다. gate G-C15 도 대상 테이블로 좁혀 둔 것(회전 3)과 같다.
+
+---
+
+## 디자이너 (회전 4 · 2026-10-09 — `docs/design/README.md` 「이식 요청」 에서 결정이 필요한 것)
+
+## D-606 현황판 야간(다크) 전환 조건 · 상태: 차단
+- 디자이너3 요청 3. 템플릿은 **가설로 `?theme=dark` → `html[data-theme="dark"]`**(그 밖은 `light` 고정 · `prefers-color-scheme` 무시)를 찍는다 — 이것이 지금 동작이다. 정할 것: 시각 고정(예: 18시~6시) · 설정값(`MES_BOARD_THEME`) · 쿼리만 중 하나. 현장 현황판 위치(조도)를 아는 사람이 정한다. 그때까지 쿼리만.
+
+## D-607 채널 틀은 `base.html` 하나 — POP · 모바일 · Web · 상태: 가설
+- 디자이너1 회전 4(디자이너2 요청 1). `base.html` 이 채널 틀 셋을 그린다(ch-pop: 헤더 + 상단 탭 · ch-mobile: `.m-frame` + 하단 탭 4 · 그 밖: Web 3단) — `{% block pop_body %}` · `{% block mobile_body %}`. `{% block body %}` 를 통째로 바꾼 화면(TRC · KPI · 메인 · 대시보드)도 틀 안에 들어간다. `pop/_layout.html` 의 모바일 틀은 base 로 합쳤다. 디자이너2 · 3 은 다음 회전에 `mobile_body` 로 본문을 나눈다.
