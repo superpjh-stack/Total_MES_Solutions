@@ -328,3 +328,24 @@ def test_shipment_approved_after_commit_enqueues_erp_by_default():
         assert conn.q1("select count(*) as n from ifc_outbox where payload->>'shipment_no' = %s", (marker,))["n"] == 1
     finally:
         conn.x("delete from ifc_outbox where payload->>'shipment_no' = %s", (marker,))
+
+
+def test_logout_is_post_only_and_cookie_flags(monkeypatch):
+    """DEF-QA3-007 — `GET /logout` 405(세션 유지) · `POST /logout` 만 로그아웃. 쿠키 HttpOnly · SameSite=Lax · dev 가 아니면 Secure."""
+    c = _client("admin")
+    assert c.get("/logout", follow_redirects=False).status_code == 405
+    assert c.get("/").status_code == 200
+    from mescore.app import main as m
+    from mescore.app import settings as st
+
+    for env, secure in (("dev", False), ("prod", True)):
+        monkeypatch.setenv("MES_ENV", env)
+        st.reset_cache()
+        try:
+            a = m.create_app()
+            r = TestClient(a, base_url="https://testserver").post("/login", data={"login_id": "admin", "password": get_settings().seed_password})
+            ck = r.headers.get("set-cookie", "").lower()
+            assert "httponly" in ck and "samesite=lax" in ck and (("secure" in ck.replace("samesite", "")) == secure), (env, ck)
+        finally:
+            monkeypatch.undo()
+            st.reset_cache()

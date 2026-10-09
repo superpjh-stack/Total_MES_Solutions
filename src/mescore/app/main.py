@@ -92,7 +92,8 @@ def create_app() -> FastAPI:
         return response
 
     app.add_middleware(SessionMiddleware, secret_key=s.session_secret or secrets.token_urlsafe(32),
-                       session_cookie=s.session_cookie, same_site="lax", https_only=False, max_age=auth.SESSION_MAX_AGE_SECONDS)
+                       session_cookie=s.session_cookie, same_site="lax", https_only=not s.is_dev,   # HttpOnly 는 starlette 기본 · dev 가 아니면 Secure (DEF-QA3-007)
+                       max_age=auth.SESSION_MAX_AGE_SECONDS)
     app.add_middleware(http.FormEcho)      # 422 뒤 입력값 유지 — urlencoded POST 본문 복사(소비하지 않는다)
 
     if STATIC_DIR.exists():
@@ -166,8 +167,7 @@ def create_app() -> FastAPI:
             return resp
         return RedirectResponse(target, status_code=303)
 
-    @common.post("/logout")
-    @common.get("/logout", include_in_schema=False)
+    @common.post("/logout")                 # POST 만 — GET 은 405(다른 사이트 링크 · 이미지로 로그아웃시키지 못하게 · DEF-QA3-007)
     def logout(request: Request):
         auth.close_session(request)
         return RedirectResponse("/login", status_code=303)
