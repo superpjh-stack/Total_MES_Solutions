@@ -2,6 +2,8 @@
 
 허용 테이블 = 지금 역할이 그 모듈 메뉴를 읽을 수 있는 테이블(rbac.can_read_menu). 비밀번호 해시 · 세션은 어느 역할에도 주지 않는다.
 LOT · 계보 · LOT 뷰는 추적 · 자재 · 생산실적 · 출하 중 하나라도 읽을 수 있으면 허용한다.
+품목(`bas_item`)은 코드 → 이름 조회표라서, 품목을 화면에 보여 주는 업무 모듈(작업지시 · 생산실적 · 자재 · 품질 · 출하 · 추적 · 수주)을
+하나라도 읽으면 허용한다 — 현장 역할의 POP 화면도 이미 품목 코드 · 이름을 보여 준다(D-49). 코어 권한표는 바꾸지 않는다.
 """
 
 from __future__ import annotations
@@ -16,7 +18,8 @@ from mescore.db import conn
 NEVER = {"sys_session", "sys_user", "sys_number_seq"}           # 비밀번호 해시 · 세션 토큰 · 내부 카운터
 SHARED = {"lot": ("trc", "mat", "pop", "shp"), "lot_genealogy": ("trc", "mat", "pop", "shp"),
           "v_lot_state": ("trc", "mat", "pop", "shp"), "v_lot_stock": ("trc", "mat", "pop", "shp"),
-          "v_work_order_progress": ("job", "pop")}
+          "v_work_order_progress": ("job", "pop"),
+          "bas_item": ("bas", "job", "pop", "mat", "qua", "shp", "trc", "ord")}
 PREFIX_MODULE = {p: p for p in ("bas", "ord", "job", "mat", "pop", "qua", "eqp", "shp", "kpi", "sys", "ifc")}
 
 

@@ -77,7 +77,8 @@ def test_run_is_read_only_and_capped():
 
 def test_role_cannot_query_modules_it_cannot_read():
     field = set(schema.allowed(_user_via_client("field")))
-    assert "bas_item" not in field and "pop_work_result" in field            # 현장: 기준정보 없음 · 생산실적 입력
+    assert "pop_work_result" in field and "bas_item" in field                 # 현장: 생산실적 입력 · 품목은 이름 조회표로 공유(D-49)
+    assert not {"bas_partner", "bas_process_param", "bas_bom", "sys_role"} & field   # 그 밖의 기준정보 · 시스템은 여전히 없음
     assert not set(schema.NEVER) & set(schema.allowed(_user_via_client("admin")))
 
 
@@ -166,10 +167,14 @@ def test_metric_numbers_match_direct_sql(fake):
     assert [t["title"].split(" · ")[0] for t in res.tables] == ["생산량", "출하량"]
 
 
-def test_metric_respects_role():
+def test_field_role_sees_stock_and_production_but_not_shipment():
     field = _user_via_client("field")
-    res = ask("로뎀, 오늘의 재고량?", field)
-    assert res.status == 200 and "볼 수 없는" in res.answer and not res.tables
+    for q, title in (("로뎀, 오늘의 재고량?", "재고량"), ("로뎀, 오늘의 생산량?", "생산량")):
+        res = ask(q, field)
+        assert res.status == 200 and res.route == "metric" and "볼 수 없는" not in res.answer
+        assert res.tables and res.tables[0]["title"].startswith(title)
+    res = ask("로뎀, 오늘의 출하량?", field)                                      # 거래처(bas_partner)는 공유하지 않는다
+    assert "볼 수 없는" in res.answer and not res.tables
 
 
 def test_without_llm_docs_answer_from_rag_and_free_sql_is_501():
