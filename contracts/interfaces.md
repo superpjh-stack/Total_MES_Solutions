@@ -82,6 +82,9 @@ templating.placeholder(request, screen_id)   # 미구현 화면 — HTTP 200 + "
 audit.log_change(request, user, fn_id, target: str, detail: dict|None = None)   # 쓰기 직후 — kind=change
 audit.log_view(request, user, screen_id)   # templating.render 가 부른다 — kind=view
 audit.write_log(kind=login_ok|login_fail|view|change|error, login_id=, user_id=, screen_id=, fn_id=, target=, detail=, ip=, device=)
+# 저장 원문 · 표시 치환 (회전 4 · 개발1 ④ · 개발3 14 · 개발2 SYS-04): log_change 는 detail.name 에 function-list.md 의 **중립어 기능명 원문**을 저장한다
+#   (팩을 바꾸거나 terms 를 고쳐도 로그는 그대로 — 감사 기록은 바꾸지 않는다). 업종어로 바꾸는 것은 **보여 줄 때** — 화면(SYS-04 `sys/logs.html`)은
+#   `detail.name|t` · `target|t` 로 찍고(개발1 82f525f), JSON 은 원문 그대로 준다. 저장 때 t() 를 걸지 않는다 · 화면에서 t() 를 빼지 않는다.
 
 # app.util.http — §8. 추가: http.after_commit(request, event, payload) → 응답 뒤 packs.hook("after_commit_<event>")(payload) (D-20)
 ```
@@ -131,18 +134,20 @@ numbering.rule(kind) -> dict | None                 # sys_number_rule 행. 없�
 
 ```python
 # 쓰기 — 전부 conn.tx() 의 커서를 받는다. 검증 실패는 422
-lineage.link(cur, parent_id, child_id, relation, *, by, qty=None) -> int            # 화살표 한 줄. genealogy_id. 자기 참조 · 순환 · 모르는 relation 422
+lineage.link(cur, parent_id, child_id, relation, *, by, qty=None, at=None) -> int   # 화살표 한 줄. genealogy_id. 자기 참조 · 순환 · 모르는 relation 422. at = linked_at(이관 원본 시각 · 없으면 now())
 lineage.assert_usable(cur, lot_ids) -> None                                         # PRODUCT 는 재고, MATERIAL 은 합격(또는 조건부)이어야 한다
-lineage.split(cur, *, parent_id, count, by, qtys=None, relation=SPLIT, kind=None, process_id=None, equipment_id=None, attrs=None, user=None) -> list[dict]   # 1 → N (N ≥ 2 · D-503)
+lineage.split(cur, *, parent_id, count, by, qtys=None, relation=SPLIT, kind=None, process_id=None, equipment_id=None, attrs=None, user=None) -> list[dict]   # 1 → N (코어 분할 N ≥ 2 · 팩 분할 계열 N ≥ 1 · D-503)
 lineage.merge(cur, *, parent_ids, by, qty=None, relation=MERGE, kind=None, process_id=None, equipment_id=None, attrs=None, user=None) -> dict                 # N → 1 (코어 합병 N ≥ 2 · 팩 합병 계열 N ≥ 1 · D-503)
 lineage.ship(cur, *, shipment_id, lot_id, by, user=None) -> int                      # F-SHP-05 (개발3 이 부른다). 출하 LOT 이 없으면 만든다(LOT_SHIPMENT 채번). 이미 출하 · 소진 · 불합격 422
 lineage.unship(cur, *, shipment_id, lot_id, by, user=None) -> int                    # F-SHP-06 — 출하 화살표 삭제. 등록 상태의 출하만
 lineage.consume_material(cur, *, work_result_id, material_lot_id, qty, by, unit=None) -> int    # F-POP-06 투입 스캔 → pop_input (계보는 종료 때) + 원재료면 mat_stock* 소비
 lineage.cancel_consume(cur, *, input_id, by) -> int                                  # F-POP-07 — 종료 전만 · 재고 되돌림
 lineage.make_material_lot(cur, *, item_id, qty, unit, by, partner_id=None, lot_no=None, made_at=None, attrs=None, insp_status="미검사", user=None) -> dict   # F-MAT-01 · 이관(lot_no 지정)
-lineage.make_product_lot(cur, *, work_result_id, by, kind="PRODUCT", qty=None, unit=None, attrs=None, parent_id=None, user=None) -> dict   # parent_id 가 있으면 `생산` 1:1
+lineage.make_product_lot(cur, *, work_result_id, by, kind="PRODUCT", qty=None, unit=None, attrs=None, parent_id=None, merge_parent_ids=None, merge_relation=MERGE, user=None) -> dict
+#   parent_id 가 있으면 `생산` 1:1 · merge_parent_ids(재고 생산 LOT 1 개 이상)를 주면 새 LOT 에 merge_relation(base 합병)으로 잇는다 — 별도 합병 LOT 없이 "투입 + 합병 → 한 LOT" (F-POP-03 폼 merge_lot_ids)
 lineage.retag(cur, lot_id, kind, *, by=None) -> dict                                 # 팩 kind 로 바꾼다 (pack-contract.md §5). kind_base 는 등록된 base
 lineage.shipment_lot(cur, shipment_id) -> dict | None                                # 출하 헤더의 출하 LOT 행 (읽기)
+lineage.inherit_insp(statuses) -> str                                                # 분할 · 합병 자식 insp_status — 전부 합격 → 합격 · 불합격 하나라도 → 불합격 · 미검사 하나라도 → 미검사 · 그 밖(합격+조건부) → 조건부
 # `user` 는 라우터의 rbac.User — validate_lot · after_save_lot · on_lot_created 훅에 넘긴다(없으면 None). `by` 는 login_id
 
 # 읽기 — 어떤 테이블에도 쓰지 않는다
@@ -161,6 +166,7 @@ lineage.node(lot_id) · nodes(lot_ids) · genealogy_rows(lot_ids) · relation(na
 ```
 - `trace_*` 는 **재귀 조회 하나**(`db-schema.md` §3.3). 깊이 · 분기를 가정하지 않고 경로를 저장하지 않는다. `Trace.edges` 는 중복 없이 출발점에서 가까운 순.
 - 팩 relation 은 `base` 로 동작한다 — `splice`(base 합병)는 `merge(relation="splice")`, `슬리팅`(base 분할)은 `split(relation="슬리팅")`. 추적 · 상태 계산은 base 만 본다.
+- `split` · `merge` 의 자식 LOT `insp_status` 는 부모에서 잇는다(`inherit_insp` — 부모 하나면 그 값). 불합격을 이은 자식은 출하 422. `make_product_lot` 의 새 LOT 은 늘 `미검사`(새 생산).
 - 작업 종료 전에 LOT 을 만들지 않는다. `pop_input` 에 모였다가 `make_product_lot` 이 한 번에 계보로 옮긴다.
 
 ## 5. 출력 — `app.printing` (개발2)
@@ -185,6 +191,7 @@ collect.receive(cur, msg) -> ReceiveResult(raw_id, duplicate, unknown_tags, save
 collect.latest(equip_id) -> dict | None          # EQP-01 가동 현황
 collect.series(equip_id, tag, frm, to) -> list   # EQP-04 수집값 조회
 collect.aggregate(equip_id, tag, frm, to, agg) -> float | None   # on_result_closed 가 측정값 collect 소스를 채울 때 (agg = last|avg|max|min)
+collect.counts(frm=None, to=None) -> {total rejected resent last_at}   # IFC-01 수신 현황. None · '' 경계는 조건에서 뺀다(전체) · 정수
 ```
 - `equip_code` ↔ `bas_equipment` 1:1 검증. 태그 이름은 `bas_process_param.param_key`(source=collect) 와 같게 두면 실적 측정값으로 이어진다.
 - 제어 명령은 없다. 쓰기 방향 엔드포인트를 만들지 않는다.

@@ -5,6 +5,7 @@
     log_change(request, user, fn_id, target, detail) 데이터 변경 — **개발자는 쓰기 성공 직후 이것을 부른다**
 
 종류 `kind`: login_ok · login_fail · view · change · error. 로그 적재 실패를 삼키지 않는다.
+**저장 원문 · 표시 치환**: `detail.name` 은 function-list.md 의 중립어 기능명 원문을 저장한다(t() 를 걸지 않는다). 업종어 치환은 화면(SYS-04 `|t`)에서 — `interfaces.md` §2.
 비밀번호 · 세션 ID 는 어떤 칸에도 적지 않는다.
 """
 
