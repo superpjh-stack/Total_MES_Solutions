@@ -1,4 +1,5 @@
-"""훅 단위 — 코어 폼이 attrs 를 아직 넘기지 않는 자리(ord_order · qua_issue · 코어 버그 progress-dev1.md §3 ①)를 dict 로 직접 검증 + 코어 중립 흐름(R9) 통과."""
+"""훅 단위 — 오류 분기(형식 · 값 목록)를 dict 로 직접 검증 + 코어 중립 흐름(R9) 통과.
+수주 attrs 의 정상 경로(폼 → read_attrs(Request) → after_save_ord_order → ext)는 S1(test_scenario_core.py) 이 API 로 본다."""
 
 from __future__ import annotations
 

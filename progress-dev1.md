@@ -125,3 +125,27 @@ DB `mes_foodservice_db` · 포트 8041 · 명령은 전부 `MES_PACK=foodservice
 
 ### 미확정으로 둔 값
 측정값 범위(`process_params.csv` min/max NULL · D-506) · 표준 소요시간 · 배치 기준수량(`process_ext` NULL) · 관능점수 척도(D-505) · 온습도 임계(`humi_limit` NULL · EQ-TC-01~04/06/07 `storage_kind` NULL → `on_collect` 판정 안 함) · 레시피 표준화율 분모(note `(미확정 D-10)`) · 샘플링 빈도(`insp_plan_ext` 0행) · ISSUE 채번(코어 `Q-` 기본) · `input_type` 폼값(채널로 추정 · README §10.3).
+
+## §5 회전 4 (2026-10-09) — 개발1
+
+중단분(`82f525f` — job 목록 · 현황 `w.id desc` · D-101 · SYS-04 `|t` · foodservice `sys/logs.html` 제거)은 다시 하지 않았다.
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| 메인 카드 "오늘 건수" | `home.cards_for` 의 `today` = 개발3 `stats.today_counts()`(코어 모듈 12 → int · 0 도 숫자) · `today_label`(짧은 라벨 12 — `home.TODAY_LABELS`) · `today_source`(`stats.TODAY_COUNT_SOURCES` 문장). 팩 모듈 · `today_counts` 없는 버전 → `None` → 화면 `미수집`. 라우터 SQL 0 | `tests/test_sys_home.py::test_main_cards_today_come_from_stats` |
+| 로그인 권한 표 요약 | `GET /login` 을 `routers/home.py` 가 등록(D-21 — main 은 라우터에 있는 공통 경로를 자기 것으로 두지 않는다) · ctx = main 과 같은 4키 + `role_summary[{code name channels[{device label}] write_menus[{code name label}] read_count}]` + `n_menus`. DB 권한 표(`rbac.roles/cell`) 그대로 · 비밀번호 · 해시 0 | `test_sys_home.py::test_login_page_has_role_summary_without_secrets` · `check-routes` 56/56 |
+| import_design `--pack` (CR-10) | `--pack` 이 `MES_PACK` 보다 먼저 · `gates.yaml: design_source` 가 `.html` 이면 IA 그림(`ia-menu` h4 × li) 중메뉴 = 산출물 · 매핑표(`mapping_table` → `design_mapping` → `design_expect.mapping` → README.md)의 원본 화면 칸 `BAS-01 품목 관리` 와 이름(괄호 · 공백 무시)으로 ID 를 붙인다 · 분류/판정 칸 `밖` = 범위 밖 · `design_expect.screens` ≠ 원본 수면 FAIL | 아래 3줄 · `tests/test_sys_import_design.py` 5 passed(3팩 PASS + 매핑 한 행 지우면 고아 1 FAIL) |
+| G-P03 kimchi | `G-P03  [kimchi] 추적표  PASS  산출물 64 · 매핑 52 · 범위 밖 12 · 고아 0 · N:1 14 · 1:N 15 · 모르는 화면 ID 0` | `uv run python src/mescore/tools/import_design.py --pack kimchi` |
+| G-P03 foodservice | `G-P03  [foodservice] 추적표  PASS  산출물 49 · 매핑 41 · 범위 밖 8 · 고아 0 · N:1 8 · 1:N 6 · 모르는 화면 ID 0` | `… --pack foodservice` |
+| G-P03 printfilm | `G-P03  [printfilm] 추적표  PASS  산출물 32 · 매핑 31 · 범위 밖 1 · 고아 0 · N:1 2 · 1:N 3 · 모르는 화면 ID 0 · 설계 원본에 없는 매핑 3`(README §1.1 `확장` 3행 = 설계도 IA 밖) | `… --pack printfilm` |
+| foodservice attrs 우회 제거 | 아키텍트 `733074f`(read_attrs(Request)) 뒤 S1 이 `ord_order.attrs == {due_time 11:30, service_type 위탁급식}` · ext 복사 `11:30:00 · 위탁급식` 을 API 로 단언(분기 우회 삭제). `test_hooks_unit.py` 는 오류 분기만 | `MES_PACK=foodservice uv run pytest -q packs/foodservice/tests` 19 passed |
+| foodservice 시드 우회 | **유지** — `seed_core` CR-9(시드 순서 · 로더) 커밋 없음(`git log` 에 `733074f` packs.py 만). 다음 회전 | `git log --oneline -3` |
+| 사용자 ↔ 작업자 (F-SYS-01/02) | `sys_user.worker_id` 등록 · 수정 · 해제(빈 값 → NULL) 동작 · POP-02 는 이미 `sys_user.worker_id` 를 기본 작업자로 읽는다(`pop.py` 156). 시드 계정은 연결이 없었다 → `seed_dev1` 이 `field ↔ WK-EX-02`(양쪽 비었을 때만 · `bas_worker.user_id` 도) · 2회 실행 diff 0 | `test_sys_home.py::test_user_worker_link_for_pop_default` · `seed_dev1` ×2 |
+| pytest 코어 단독 | **270 passed · 2 failed** — `test_arch_smoke::test_core_has_no_forbidden_terms`(`packs.py:530 조리` — 아키텍트 작업 중) · `test_migrate::test_basics_idempotent_and_logged`(단독 재실행 5 passed — 동시 실행 흔들림). 개발1 파일 78 passed | `MES_PACK= uv run pytest -q` · `… tests/test_{numbering,bas_master,job_work_orders,sys_admin,sys_home,sys_import_design}.py` |
+| check-routes · check-trace · check-terms | G-C03 PASS 56/56 · placeholder 0 · RBAC 204 위반 0 (foodservice 도 PASS) · G-C01/02 PASS · G-C23 FAIL 1 = `packs.py:530`(아키텍트) — 개발1 파일 0 | `make check-routes` · `check-trace` · `check-terms` |
+
+### §3 요청 (회전 4)
+- **디자이너1 `login.html`**: ctx `role_summary`(역할 × 채널 × 입력 메뉴 · 위 표) · `n_menus` 가 온다 — README 이식 요청 표 "로그인 | 역할 × 채널 × 입력 메뉴 표" 를 이것으로 그려 달라(지금 `역할 4 · 채널 4` 고정 글자와 개발용 역할 버튼 4 도 `role_summary` 로 바꿀 수 있다). 메뉴 이름은 `t()`.
+- **디자이너3 `home/main.html`**: 카드 ctx 에 `today_label`(예 `검사 대기` · `고장 중`) · `today_source`(출처 문장)를 더했다 — `t('오늘')` 고정 대신 `t(c.today_label)` · `title=c.today_source` 로.
+- **아키텍트 `main._login_page`**: `POST /login` 실패(401) 재렌더는 아직 main 이라 `role_summary` 가 없다 — `from .routers.home import role_summary` 한 줄로 ctx 에 넣거나, `POST /login` 도 home 으로 넘길지 결정. `check_trace` G-P03 은 이제 `import_design.py --pack <팩>` 을 subprocess 로 돌려 마지막 줄을 그대로 쓰면 된다(종료코드 0 PASS · 1 FAIL · 2 미검증). `packs.py:530` 의 `조리` 가 G-C23 에 걸린다. `seed_core` CR-9 가 들어오면 foodservice `seed_pack.py` 우회를 지운다.
+- **개발2**: 시드 `field` 계정에 작업자 `WK-EX-02` 가 연결됐다 — POP-02 `worker_id_default`(디자이너2 요청 5) 는 `sys_user.worker_id` 로 채우면 된다. BAS-07 작업자 화면의 `bas_worker.user_id` 와 `sys_user.worker_id` 는 서로 동기화하지 않는다(쓰는 테이블 계약 그대로) — 기준은 `sys_user.worker_id`.

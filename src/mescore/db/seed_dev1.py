@@ -38,6 +38,8 @@ EQUIPMENT = [("EQ-EX-02", "설비 2", "PRC-EX-01", "Y"), ("EQ-EX-03", "설비 3"
 PARTNERS = [("OUT-EX-01", "외주사 1", "외주", None)]
 # (작업자 코드, 이름, 공정 코드)
 WORKERS = [("WK-EX-02", "작업자 2", "PRC-EX-02")]
+# 시드 계정 ↔ 예시 작업자 연결 (F-SYS-01 작업자 연결 · POP-02 기본 작업자 = sys_user.worker_id). 둘 다 비어 있을 때만 — 화면에서 바꾼 연결은 그대로
+USER_WORKERS = [("field", "WK-EX-02")]
 # (불량 코드, 이름, 공정 코드)
 DEFECTS = [("DF-EX-02", "불량 2", "PRC-EX-02"), ("DF-EX-03", "불량 3", None)]
 # BOM — (상위 품목 코드, 버전, [(구성품 코드, 소요량, 단위, 손실률)])
@@ -77,6 +79,17 @@ def seed_master(cur) -> None:
                     (code, example(name), proc, SEEDED_BY))
 
 
+def seed_user_workers(cur) -> None:
+    for login_id, worker_code in USER_WORKERS:
+        cur.execute("""update sys_user u set worker_id = w.id from bas_worker w
+                        where u.login_id = %s and w.worker_code = %s and u.worker_id is null
+                          and not exists (select 1 from sys_user o where o.worker_id = w.id) returning u.id, w.id as worker_id""",
+                    (login_id, worker_code))
+        row = cur.fetchone()
+        if row:
+            cur.execute("update bas_worker set user_id = %s where id = %s and user_id is null", (row["id"], row["worker_id"]))
+
+
 def seed_boms(cur) -> None:
     """헤더가 이미 있으면 구성품도 건드리지 않는다 (화면에서 고친 BOM 을 되돌리지 않는다)."""
     for item_code, version, lines in BOMS:
@@ -96,6 +109,7 @@ def main() -> int:
     with conn.tx() as cur:
         seed_master(cur)
         seed_boms(cur)
+        seed_user_workers(cur)
     n = {t: conn.q1(f"select count(*) as n from {t}")["n"] for t in ("bas_item", "bas_bom", "bas_bom_dtl", "bas_process", "bas_process_param", "bas_equipment", "bas_partner", "bas_worker", "bas_defect_code")}
     print("seed_dev1 — " + " · ".join(f"{k} {v}" for k, v in n.items()))
     return 0

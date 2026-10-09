@@ -46,10 +46,8 @@ def test_order_to_ship():
     assert re.fullmatch(r"SO-[0-9]{6}-[0-9]{2,}", order["order_no"]), order["order_no"]
     oe = conn.q1("select due_time, service_type from x_foodservice_order_ext where id = %s", (order["id"],))
     order_attrs = conn.q1("select attrs from ord_order where id = %s", (order["id"],))["attrs"]
-    if order_attrs:                                      # 코어 packs.read_attrs(request) 가 고쳐지면 (진행 중 코어 버그 — progress-dev1.md §3 코어 변경 요청 ①) 여기로
-        assert str(oe["due_time"]) == "11:30:00" and oe["service_type"] == "위탁급식"
-    else:                                                # 지금은 ord.py 가 Request 로 읽어 attrs 가 {} — 훅의 ext 복사는 test_hooks_unit.py 가 dict 로 검증한다
-        assert oe is None and order_attrs == {}
+    assert order_attrs == {"due_time": "11:30", "service_type": "위탁급식"}, order_attrs     # 코어 read_attrs(Request) 수정(733074f) 뒤 — 우회 없음
+    assert str(oe["due_time"]) == "11:30:00" and oe["service_type"] == "위탁급식"           # after_save_ord_order 훅이 ext 로 복사
 
     # 1-5 조리 지시 — 메뉴 · PRC-060 · 1200 인분 → 훅 on_work_order_created
     before = conn.q1("select count(*) as n from mat_requirement where source = 'hook'")["n"]

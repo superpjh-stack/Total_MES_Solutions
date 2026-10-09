@@ -2,7 +2,11 @@
 
 메인: 모듈 12 카드를 **일하는 순서**(`core.yaml: order` · 팩 `menus.order` = `nav.MENUS`)로. 현재 역할의 칸(`rbac.cell`)이 `없음` 이면
 카드는 흐리게 + 링크 없음(G-C17 — `check_routes` 가 `href` 로 센다). 팩이 숨긴 모듈은 `nav.MENUS` 에 없다. 어떤 테이블에도 쓰지 않는다.
-"오늘 건수" 는 개발3 `stats` 의 공개 함수가 생기면 붙인다 — 지금은 지어내지 않고 자리만 둔다(`미수집`).
+"오늘 건수" 는 개발3 `stats.today_counts()`(코어 모듈 12 → int · 출처 `stats.TODAY_COUNT_SOURCES`)에서만 온다 — 집계 SQL 은 `stats` 에만.
+카드 ctx `today`(int · 0 도 숫자) · `today_label`(짧은 라벨) · `today_source`(출처 문장). 팩 모듈은 `None` → 화면 `미수집`.
+
+로그인(CMN-01 `GET /login`): 화면은 `main._login_page` 와 같은 ctx + `role_summary`(역할 × 채널 × 입력 메뉴 — DB 권한 표 요약 · 비밀 없음).
+`main.py` 는 라우터가 등록한 공통 경로를 자기 것으로 두지 않는다(D-21) — `POST /login` 실패 재렌더는 여전히 `main._login_page`.
 
 개발용 로그인(D-605): `MES_ENV=dev` 일 때만 `POST /login/as`(role) 가 시드 계정(`seed_core.USERS`)으로 로그인한다. 운영(`MES_ENV` ≠ dev)은 404.
 비밀번호는 환경변수 `MES_SEED_PASSWORD` 만 — 코드 · 화면에 값이 없다(G-C19). `main.py` 는 라우터에 없는 공통 경로만 자기 것으로 둔다(D-21).
@@ -13,15 +17,34 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from .. import auth, contracts, nav, packs, rbac, templating
+from .. import auth, contracts, nav, packs, rbac, stats, templating
 from ..settings import get_settings
 from ..util import http
 
 router = APIRouter()
 
 
+# 카드에 붙이는 짧은 라벨 (뜻 = stats.TODAY_COUNT_SOURCES · 디자이너3 home.html 머리 주석). 값은 stats.today_counts() 에서만
+TODAY_LABELS: dict[str, str] = {
+    "bas": "오늘 변경", "ord": "오늘 납기", "job": "오늘 지시", "mat": "오늘 입고", "pop": "오늘 실적", "qua": "검사 대기",
+    "eqp": "고장 중", "shp": "출하 대기", "trc": "오늘 연결", "kpi": "측정값 이탈", "sys": "오늘 로그인", "ifc": "오늘 수신 거부",
+}
+
+
+def today_counts() -> dict[str, dict]:
+    """모듈 코드 → {"value": int, "label": str, "source": str}. 값은 개발3 `stats.today_counts()` 그대로 — 여기서 SQL 을 쓰지 않는다.
+    팩 모듈(코어 12 밖)은 키가 없다 → 카드 `today` None → 화면 `미수집`."""
+    fn = getattr(stats, "today_counts", None)    # 개발3 회전 4 공표 — 없는 버전이면 전부 미수집
+    if not callable(fn):
+        return {}
+    sources = getattr(stats, "TODAY_COUNT_SOURCES", {})
+    return {code: {"value": v, "label": TODAY_LABELS.get(code, "오늘"), "source": sources.get(code, "")}
+            for code, v in fn().items()}
+
+
 def cards_for(user: rbac.User) -> list[dict]:
     pack = packs.current()
+    counts = today_counts()
     names = {r["code"]: r["name"] for r in pack.roles}
     out = []
     for i, m in enumerate(nav.MENUS, start=1):
@@ -30,7 +53,8 @@ def cards_for(user: rbac.User) -> list[dict]:
         out.append({
             "menu": m, "seq": i, "level": cell.label, "allowed": cell.can_read,
             "screens": [{"screen": sc, "functions": [f.name for f in contracts.functions_of(sc.screen_id)]} for sc in m.screens],
-            "fn_count": len(contracts.functions_of_module(m.code)), "write_roles": write_roles, "today": None,
+            "fn_count": len(contracts.functions_of_module(m.code)), "write_roles": write_roles,
+            "today": (counts.get(m.code) or {}).get("value"), "today_label": (counts.get(m.code) or {}).get("label") or "오늘", "today_source": (counts.get(m.code) or {}).get("source") or "",
         })
     return out
 
@@ -44,6 +68,43 @@ def main_page(request: Request, user: rbac.User = Depends(rbac.require_login)) -
         "n_functions": sum(1 for f in contracts.all_functions() if not f.is_batch), "n_batch": len(contracts.batch_functions()),
         "lineage": packs.current().lineage, "numbering": packs.current().numbering, "pack": packs.current(),
     }, screen_id="CMN-02")
+
+
+def role_summary() -> list[dict]:
+    """로그인 화면용 권한 표 요약 — 역할마다 {code name channels[{device label}] write_menus[{code name label}] read_count}.
+    채널 = 그 역할이 열 수 있는(조회 이상) 메뉴의 채널 합. 숨긴 모듈 제외(`nav.MENUS`). DB 권한 표(`rbac`) 그대로 · 비밀 없음."""
+    out = []
+    for r in rbac.roles():
+        chans: set[str] = set()
+        writes, n_read = [], 0
+        for m in nav.MENUS:
+            c = rbac.cell(r.code, m.code)
+            if not c.can_read:
+                continue
+            n_read += 1
+            chans.update(m.channels)
+            if c.level == rbac.LEVEL_WRITE:
+                writes.append({"code": m.code, "name": m.name, "label": c.label})
+        out.append({"code": r.code, "name": r.name,
+                    "channels": [{"device": dev, "label": ch} for dev, ch in nav.DEVICE_CHANNEL.items() if ch in chans],
+                    "write_menus": writes, "read_count": n_read})
+    return out
+
+
+def _safe_next(nxt: str | None) -> str | None:
+    if nxt and nxt.startswith("/") and not nxt.startswith("//") and "\\" not in nxt:
+        return nxt
+    return None
+
+
+@router.get("/login", include_in_schema=False)
+def login_form(request: Request, next: str | None = None, device: str | None = None):  # noqa: A002 — 쿼리 이름 그대로
+    """CMN-01 로그인 화면 — `main._login_page` 와 같은 ctx + `role_summary`."""
+    return templating.render(request, "login.html", {
+        "message": "로그인이 필요합니다" if next else "", "login_id": "", "next": _safe_next(next) or "",
+        "login_device": device if device in nav.DEVICE_CHANNEL else "web",
+        "role_summary": role_summary(), "n_menus": len(nav.MENUS),
+    }, screen_id="CMN-01")
 
 
 @router.post("/login/as", include_in_schema=False)
