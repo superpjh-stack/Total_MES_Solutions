@@ -382,3 +382,8 @@
 - **회전 8 결정(확정)**: `v_lot_state` PRODUCT — 출하 → `출하` · **합병 · 생산 부모, 또는 수량 없는(qty NULL) 분할 화살표가 하나라도 있는 부모** → `소진`(통째) · 그 밖(투입 · 수량을 모두 준 분할 · 열린 투입 · 아무것도 없음)은 잔량(`v_lot_stock` = `lineage.remaining`)으로 — 잔량 ≤ 0 · 수량 모르는 투입 · LOT 수량 NULL 인데 투입/분할이 있으면 `소진`, 아니면 `재고`. 20 → 5+5 는 부모 잔량 10 `재고`.
 - 코어 시나리오: 합병 100 → 분할 **30·30·40**(합 = 합병 수량 · `db-schema.md` §3.3) — 합병 LOT 잔량 0 → `소진` · 10행 · 역/정방향 · 분할 ③ 재고 그대로. 기대값을 낮춘 것이 아니라 시나리오가 합병 LOT 을 다 나누도록 맞춘 것(수량 없는 1:3 이면 통째 소진 규칙으로 같은 결과).
 - 고친 곳(회전 8): `db/views.sql` · `db-schema.md` §3.4 · `interfaces.md` §4 · D-207 · D-503 · `tests/test_arch_schema.py`(시나리오 30·30·40 · 새 `test_product_lot_partial_split_keeps_remainder`) · `tests/test_lineage_scenario.py`(30·30·40 · 잔량 초과 25+20 · 팩 N=1 부분 분할 부모 재고) · `tests/test_pop_scenario.py`(30,30,40) · `tools/check_data.py`(뷰 재구현 · 부분 분할 행 기대 PASS) · `tools/check_security.py`(E2E 분할 30,30,40) · kimchi `gates.yaml` S4 · `routers/age.py`(`split(count=1)`) · `tests/test_scenario_aging.py` · `README.md` D-515. 7 DB 에 `create or replace` 재적용.
+
+## D-44 수량 없는 분할 부모의 잔량 표시 (DEF-QA2-011 · 경미) · 상태: 가설
+- 수량 없이 분할한 부모는 `v_lot_state = 소진` 인데 `v_lot_stock.remain_qty` 는 LOT 수량 그대로다(분할 화살표 qty NULL). 쓰기 경로는 상태를 먼저 보므로 다시 쓰이지 않는다 — 데이터 무결성 문제가 아니라 표시 문제다(POP-03 배너 · 추적 노드에 「소진 · 잔량 10」).
+- 고치려면 `views.sql` `v_lot_stock` · `lineage.remaining` · QA2 `check_data.my_lot_view` 세 곳이 같은 문장을 바꿔야 한다(「통째 소비 부모(합병 · 생산 · 수량 없는 분할)의 잔량은 0」). 종료 판정 직전(회전 8)이라 미루고 다음 작업 회전의 첫 항목으로 둔다(아키텍트 · 개발2 · QA2 동시).
+- QA2 참고 WARN: 합병 `qty` 상한 없음(부모 화살표 합 15 에 1000 허용) — 계약 문장대로라 결함 아님. 물량 보존을 강제할지 설계 확인 대상으로 같이 둔다.

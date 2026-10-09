@@ -2,6 +2,25 @@
 
 검증된 것만 적는다. 여기 없는 숫자는 화면에 지어내지 않는다. 형식: `| 항목 | 실측 | 검증 방법 |`.
 
+
+## ★ 최종 보고 (2026-10-09 · 회전 8 종료 — goal.md §4.4 종료 조건 충족)
+
+**종료 조건**: ① `make gate-full` **42/42 PASS**(회전 7 · 8 연속, `outputs/gate-r8-exit.txt`) ② QA 리포트 3종 **치명 0 · 중대 0**(QA1 경미 0 · QA2 경미 1 · QA3 경미 0) ③ 회전 8 에 게이트 실측 변화 없음.
+
+| 영역 | 결과 |
+|---|---|
+| 코어 | 모듈 12 · 화면 51 + 공통 5 · 기능 132 + 이관 4 · 테이블 52 · 공용 모듈 9 · 검사 도구 7 — G-C01~C24 전부 PASS · pytest 323 |
+| 계보 · 측정값 | 코어 시나리오 `lot_genealogy` 10행 · 재귀 역/정방향 · 깊이 20 분기 100 0.05초 · 잔량 단일 함수 + LOT 잠금(동시 실행 음수 0) · 측정값 선언만으로 폼 · 기록 · 집계 |
+| 참조 팩 3 | printfilm(계보 10행 · splice/슬리팅) · foodservice(식수 소요량 144/120/24 · 배치 측정값 collect) · kimchi(계보 9행 · 금속검출 출하 차단 · 센서 알람) — 코어 수정 0 · G-P01~P06 전부 PASS |
+| 프런트 | 관리자 Web · POP · 모바일 · 현황판 4채널 한 틀(`base.html`) · 출력물 4종 바코드 왕복 · 브라우저 한 바퀴 23단계(`outputs/e2e/core/r8_*`) · 새 팩 착수 약 20초 |
+| 보안 | 비밀번호 없는 로그인 dev+루프백만 · `POST /logout` · 쿠키 HttpOnly/Lax/Secure · 세션 고정 · CSRF 시험 통과 |
+
+**사람이 정할 것**
+1. **D-501 설비 알람** — 코어 반영(테이블 52→54 · 화면 51→52 · 기능 132→135, `spec.md` · `goal.md` 수치 수정) vs EQP-01 표시만(수치 불변). 설계는 `decisions.md` D-501 · `progress-dev3.md` §5.
+2. **운영 HTTPS** — prod 세션 쿠키가 `Secure` 라 LAN 에서 HTTP 로 열면 로그인이 안 된다(QA3 재현). TLS 종단(리버스 프록시) 또는 명시 설정으로 HTTP 허용 중 택일.
+
+**남은 경미 · 다음 작업 첫 항목**: D-44(수량 없는 분할 부모의 잔량 표시 — 뷰 · `lineage.remaining` · QA2 검사기 동시 수정) · 합병 qty 상한 설계 확인 · seed_core `bom*` 로더 · `seeds[]` 행에 팩 `after_save_*` 훅.
+
 ## 지금 해야 할 것
 
 1. **웨이브 A R1 (개발 3 병렬)** — 개발1 `app/numbering.py`(채번 형식을 `progress-dev1.md` §1 에 먼저 공표) · 개발2 `app/lineage.py` + `tests/test_lineage_scenario.py`(G-C06 10행) + `ui.measure_fields` · 개발3 `app/stats.py` · `app/erp.py` · `src/mescore/migrate/` · `app/collect.py` 수신. 각자 `app/routers/<모듈>.py` 에 `router = APIRouter()` 를 두면 placeholder 가 빠진다(`main.py` · `packs.py` · `core.yaml` 은 만지지 않는다).
