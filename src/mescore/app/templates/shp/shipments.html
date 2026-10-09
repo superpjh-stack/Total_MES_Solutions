@@ -38,17 +38,23 @@
 </table>
 {% if total is defined and total > rows|length %}<p class="muted">{{ t('전체') }} {{ total }}{{ t('건') }} · {{ t('최근') }} {{ rows|length }}{{ t('건만 보입니다') }}</p>{% endif %}
 
+{#- 422 뒤 되채움(DEF-QA3-008): 수정 · 등록 폼의 이름이 같다(partner_code · ship_date · order_no · note) — 수정 폼의 숨은 칸 shipment_edit 으로 가른다.
+    두 폼 모두 ui(with context 없음)에 값을 골라 넘긴다. -#}
+{% set fv = (flash.get('values') or {}) if (flash is defined and flash and flash.kind != 'ok' and flash.get is defined) else {} %}
+{% set f_edit = 'shipment_edit' in fv %}
+{% set f_new = fv and not f_edit and 'partner_code' in fv %}
 {% if opened %}
 <section class="panel">
   <h2>{{ t('출하') }} <code>{{ opened.shipment_no }}</code> {{ cards.badge(opened.status) }}</h2>
   {% set po = [] %}{% for p in partners %}{% set _ = po.append((p.partner_code, p.partner_code ~ ' ' ~ p.partner_name)) %}{% endfor %}
   {% set oo = [] %}{% for o in orders %}{% set _ = oo.append((o.order_no, o.order_no ~ ' ' ~ (o.due_date|dt))) %}{% endfor %}
   <form method="post" action="{{ nav.path_of('SHP-01') }}/{{ opened.id }}" id="shipment-edit">
+    <input type="hidden" name="shipment_edit" value="1">
     <div class="form-grid">
-      {{ ui.select('거래처', 'partner_code', po, opened.partner_code) }}
-      {{ ui.field('출하일', 'ship_date', opened.ship_date|dt, type='date') }}
-      {{ ui.select('수주', 'order_no', oo, opened.order_no or '') }}
-      {{ ui.field('비고', 'note', opened.note or '') }}
+      {{ ui.select('거래처', 'partner_code', po, fv.get('partner_code') if f_edit else opened.partner_code) }}
+      {{ ui.field('출하일', 'ship_date', fv.get('ship_date') if f_edit else opened.ship_date|dt, type='date') }}
+      {{ ui.select('수주', 'order_no', oo, fv.get('order_no', '') if f_edit else (opened.order_no or '')) }}
+      {{ ui.field('비고', 'note', fv.get('note', '') if f_edit else (opened.note or '')) }}
     </div>
     {% if opened.status != '등록' %}<p class="muted">{{ t('승인되거나 취소된 출하는 수정할 수 없습니다') }}</p>{% endif %}
   </form>
@@ -65,11 +71,12 @@
   {% set oo2 = [] %}{% for o in orders %}{% set _ = oo2.append((o.order_no, o.order_no ~ ' ' ~ (o.due_date|dt))) %}{% endfor %}
   <form method="post" action="{{ nav.path_of('SHP-01') }}" id="shipment-new">
     <div class="form-grid">
-      {{ ui.select('거래처', 'partner_code', po2, required=true) }}
-      {{ ui.field('출하일', 'ship_date', today|dt, type='date', required=true) }}
-      {{ ui.select('수주', 'order_no', oo2) }}
-      {{ ui.field('비고', 'note') }}
-      {{ ui.attrs_fields(attr_specs) }}
+      {{ ui.select('거래처', 'partner_code', po2, fv.get('partner_code', '') if f_new else '', required=true) }}
+      {{ ui.field('출하일', 'ship_date', fv.get('ship_date') if (f_new and fv.get('ship_date')) else today|dt, type='date', required=true) }}
+      {{ ui.select('수주', 'order_no', oo2, fv.get('order_no', '') if f_new else '') }}
+      {{ ui.field('비고', 'note', fv.get('note', '') if f_new else '') }}
+      {% set avals = {} %}{% if f_new %}{% for a in attr_specs if ('attr_' ~ a.key) in fv %}{% set _ = avals.update({a.key: fv['attr_' ~ a.key]}) %}{% endfor %}{% endif %}
+      {{ ui.attrs_fields(attr_specs, avals) }}
     </div>
   </form>
 </section>

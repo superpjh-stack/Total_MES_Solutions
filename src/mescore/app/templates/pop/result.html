@@ -9,6 +9,16 @@
 {% set who_equip = (result.equip_code ~ ' ' ~ (result.equip_name or '')) if result and result.equip_code else '' %}
 
 {% block pop_body %}
+{#- 422 뒤 되채움(DEF-QA3-008) — flash.values 를 폼마다 나눠 읽는다. 한 화면에 폼이 여럿이고 이름(note · qty)이 겹치므로
+    「그 폼만 보내는 칸」으로 어느 폼이 돌아왔는지 가른다: 시작 work_order_id · 종료 good_qty · 분할 count · 합병 lot_ids · 폐기 qty(나머지).
+    ui 는 with context 없이 가져온다 — ui.field 가 flash.values 를 이름만 보고 모든 폼에 뿌리지 않게, 값은 여기서 골라 넘긴다. 스캔칸은 되채우지 않는다(S-05). -#}
+{% set fv = (flash.get('values') or {}) if (flash is defined and flash and flash.kind != 'ok' and flash.get is defined) else {} %}
+{% set f_start = 'work_order_id' in fv %}
+{% set f_end = 'good_qty' in fv %}
+{% set f_split = 'count' in fv %}
+{% set f_merge = 'lot_ids' in fv %}
+{% set f_scrap = 'qty' in fv and not f_split and not f_merge %}
+{% set f_stop = not f_start and not f_end and not f_split and not f_merge and not f_scrap and ('note' in fv or 'reason_code' in fv) %}
 {% call ui.scan_box(nav.path_of('POP-01'), name='no', label='다른 지시로 바꾸려면 지시 번호 스캔', method='get', placeholder='WO-', button='확인') %}{% endcall %}
 {{ pui.banner() }}
 
@@ -31,17 +41,17 @@
     {% set eq_opts = [] %}
     {% for v, label in equipment_options %}{% set _ = eq_opts.append((v, label, '')) %}{% endfor %}
     {% set _ = eq_opts.append(('', t('설비 없음'), '')) %}
-    {{ pui.choice('equipment_id', eq_opts, work_order.equipment_id if work_order.equipment_id is not none else '') }}
+    {{ pui.choice('equipment_id', eq_opts, fv.get('equipment_id') if (f_start and fv.get('equipment_id')) else (work_order.equipment_id if work_order.equipment_id is not none else '')) }}
   </section>
   <section class="panel">
     <h2>{{ t('작업자') }} <small>{{ t('하나 고른다 · 비우면 로그인 작업자') }}</small></h2>
     {% set wk_opts = [] %}
     {% for v, label in worker_options %}{% set _ = wk_opts.append((v, label, '')) %}{% endfor %}
-    {{ pui.choice('worker_id', wk_opts, worker_id_default if worker_id_default is not none else '') }}
+    {{ pui.choice('worker_id', wk_opts, fv.get('worker_id') if (f_start and fv.get('worker_id')) else (worker_id_default if worker_id_default is not none else '')) }}
   </section>
   <section class="panel">
     <h2>{{ t('비고') }} <small>{{ t('선택') }}</small></h2>
-    <div class="field"><input type="text" name="note" maxlength="200" aria-label="{{ t('비고') }}"></div>
+    <div class="field"><input type="text" name="note" maxlength="200" aria-label="{{ t('비고') }}" value="{{ fv.get('note', '') if f_start else '' }}"></div>
   </section>
   {{ ui.write_button('작업 시작', user.can('F-POP-02'), form='start-form') }}
 </form>
@@ -81,13 +91,18 @@
   <section class="panel">
     <h2>{{ t('수량') }}</h2>
     <div class="qty-row">
-      <div class="field"><label for="good_qty">{{ t('양품') }} <span class="unit">{{ result.unit|txt('') }}</span> {{ pui.badge('필수') }}</label><input id="good_qty" type="number" name="good_qty" inputmode="decimal" step="any" min="0" required placeholder="0"></div>
-      <div class="field"><label for="defect_qty">{{ t('불량') }} <span class="unit">{{ result.unit|txt('') }}</span></label><input id="defect_qty" type="number" name="defect_qty" inputmode="decimal" step="any" min="0" value="0"></div>
+      <div class="field"><label for="good_qty">{{ t('양품') }} <span class="unit">{{ result.unit|txt('') }}</span> {{ pui.badge('필수') }}</label><input id="good_qty" type="number" name="good_qty" inputmode="decimal" step="any" min="0" required placeholder="0" value="{{ fv.get('good_qty', '') if f_end else '' }}"></div>
+      <div class="field"><label for="defect_qty">{{ t('불량') }} <span class="unit">{{ result.unit|txt('') }}</span></label><input id="defect_qty" type="number" name="defect_qty" inputmode="decimal" step="any" min="0" value="{{ fv.get('defect_qty', '0') if f_end else '0' }}"></div>
     </div>
   </section>
   <section class="panel">
     <h2>{{ t('측정값') }} <small>{{ result.process_name }} · {{ t('공정 측정값 정의에서 자동') }}</small></h2>
-    {{ mf.measure_fields(params, values, latest) }}
+    {#- 측정값: 개발2 _measure.html 은 values{param_key: 행} 만 읽는다 — 422 뒤에는 보냈던 m_<key> 값을 행 모양으로 덮어 넘긴다(매크로는 그대로). -#}
+    {% set mvals = dict(values or {}) %}
+    {% if f_end %}{% for p in params if not p.recorded_only and not p.is_collect and p.field in fv %}{% set raw = fv[p.field] %}
+      {% set _ = mvals.update({p.param_key: {'value_num': (raw if raw != '' else none), 'value_text': raw, 'deviated': false}}) %}
+    {% endfor %}{% endif %}
+    {{ mf.measure_fields(params, mvals, latest) }}
     {% set rec_only = params|selectattr('recorded_only')|list %}
     {% if rec_only %}
     <div class="rec-only" role="group" aria-label="{{ t('지난 기록') }}">
@@ -100,11 +115,11 @@
       </dl>
     </div>
     {% endif %}
-    {% if attr_specs %}<div class="form-grid" style="margin-top:12px">{{ ui.attrs_fields(attr_specs) }}</div>{% endif %}
+    {% if attr_specs %}<div class="form-grid" style="margin-top:12px">{% set avals = {} %}{% if f_end %}{% for a in attr_specs if ('attr_' ~ a.key) in fv %}{% set _ = avals.update({a.key: fv['attr_' ~ a.key]}) %}{% endfor %}{% endif %}{{ ui.attrs_fields(attr_specs, avals) }}</div>{% endif %}
   </section>
   <section class="panel merge-pick">
     <h2>{{ t('생산 LOT') }} <small>{{ t('종료하면 하나 생긴다 — 수량 = 양품') }}</small></h2>
-    {{ ui.field('함께 합칠 재고 LOT (선택)', 'merge_lot_ids', '', id='merge_lot_ids', cls='wide', hint=t('번호 · 쉼표로 여럿'), autocomplete='off') }}
+    {{ ui.field('함께 합칠 재고 LOT (선택)', 'merge_lot_ids', fv.get('merge_lot_ids', '') if f_end else '', id='merge_lot_ids', cls='wide', hint=t('번호 · 쉼표로 여럿'), autocomplete='off') }}
     {% if stock_lots %}
     <div class="pick-chips" role="group" aria-label="{{ t('이 지시의 재고 생산 LOT') }}">
       {% for n in stock_lots %}<button type="button" class="chip" data-pick-into="merge_lot_ids" data-pick-value="{{ n.no }}" aria-pressed="false"><code>{{ n.no }}</code> <small>{{ n.qty|num(3) }} {{ n.unit|txt('') }}</small></button>{% endfor %}
@@ -136,15 +151,15 @@
     {% if result.open_stop_count %}
     {% set open_stop = stops|selectattr('ended_at', 'none')|list|last %}
     <div class="notice">{{ t('정지 중') }} — {{ open_stop.reason_code if open_stop else '' }} · {{ open_stop.started_at|dt('%H:%M') if open_stop else '' }} {{ t('부터') }}</div>
-    <div class="field"><label for="stop_note">{{ t('비고') }} <small>{{ t('선택') }}</small></label><input id="stop_note" type="text" name="note" maxlength="100"></div>
+    <div class="field"><label for="stop_note">{{ t('비고') }} <small>{{ t('선택') }}</small></label><input id="stop_note" type="text" name="note" maxlength="100" value="{{ fv.get('note', '') if f_stop else '' }}"></div>
     {{ ui.write_button('정지 끝 (재개)', user.can('F-POP-04'), form='stop-form', kind='warn btn-big') }}
     {% elif result.ended_at %}
     <p class="empty">{{ t('종료된 실적에는 정지를 기록할 수 없습니다') }}</p>
     {% else %}
     {% set sr_opts = [] %}
     {% for v, label in stop_reasons %}{% set _ = sr_opts.append((v, label, '')) %}{% endfor %}
-    {{ pui.choice('reason_code', sr_opts, required=true) }}
-    <div class="field" style="margin-top:10px"><label for="stop_note">{{ t('비고') }} <small>{{ t('선택') }}</small></label><input id="stop_note" type="text" name="note" maxlength="100"></div>
+    {{ pui.choice('reason_code', sr_opts, fv.get('reason_code', '') if f_stop else '', required=true) }}
+    <div class="field" style="margin-top:10px"><label for="stop_note">{{ t('비고') }} <small>{{ t('선택') }}</small></label><input id="stop_note" type="text" name="note" maxlength="100" value="{{ fv.get('note', '') if f_stop else '' }}"></div>
     <div style="margin-top:10px">{{ ui.write_button('정지 시작', user.can('F-POP-04'), form='stop-form', kind='warn btn-big') }}</div>
     {% endif %}
   </form>
@@ -160,10 +175,10 @@
 <section class="panel">
   <h2>{{ t('폐기') }} <small>{{ t('불량 수량과 별개 · 종료 후에도 가능') }}</small></h2>
   <form method="post" action="{{ nav.path_of('POP-02') }}/{{ result.id }}/scrap" id="scrap-form">
-    <div class="field inline" style="margin-bottom:10px"><label for="scrap_qty">{{ t('폐기 수량') }} <span class="unit">{{ result.unit|txt('') }}</span> {{ pui.badge('필수') }}</label><input id="scrap_qty" type="number" name="qty" inputmode="decimal" step="any" min="0" required placeholder="0"></div>
+    <div class="field inline" style="margin-bottom:10px"><label for="scrap_qty">{{ t('폐기 수량') }} <span class="unit">{{ result.unit|txt('') }}</span> {{ pui.badge('필수') }}</label><input id="scrap_qty" type="number" name="qty" inputmode="decimal" step="any" min="0" required placeholder="0" value="{{ fv.get('qty', '') if f_scrap else '' }}"></div>
     {% set dc_opts = [] %}
     {% for v, label in defect_options %}{% set _ = dc_opts.append((v, label, '')) %}{% endfor %}
-    {{ pui.choice('defect_code_id', dc_opts) }}
+    {{ pui.choice('defect_code_id', dc_opts, fv.get('defect_code_id', '') if f_scrap else '') }}
     <div style="margin-top:10px">{{ ui.write_button('폐기 기록', user.can('F-POP-05'), form='scrap-form', kind='danger btn-big') }}</div>
   </form>
   {% if scraps %}
@@ -181,15 +196,15 @@
   <div class="form-grid">
     <form method="post" action="{{ nav.path_of('POP-02') }}/{{ result.id }}/split" id="split-form" class="field">
       <span class="lbl">{{ t('분할') }}</span>
-      {{ ui.select('생산 LOT', 'lot_id', stock_lot_options, product_lot.id if product_lot else '') }}
-      {{ ui.field('분할 수', 'count', '2', type='number', required=true) }}
-      {{ ui.field('분할 수량 (쉼표)', 'qtys') }}
+      {{ ui.select('생산 LOT', 'lot_id', stock_lot_options, fv.get('lot_id') if (f_split and fv.get('lot_id')) else (product_lot.id if product_lot else '')) }}
+      {{ ui.field('분할 수', 'count', fv.get('count', '2') if f_split else '2', type='number', required=true) }}
+      {{ ui.field('분할 수량 (쉼표)', 'qtys', fv.get('qtys', '') if f_split else '') }}
       {{ ui.write_button('분할', user.can('F-POP-03'), form='split-form') }}
     </form>
     <form method="post" action="{{ nav.path_of('POP-02') }}/{{ result.id }}/merge" id="merge-form" class="field">
       <span class="lbl">{{ t('합병') }}</span>
-      {{ ui.field('합병할 LOT 번호 (쉼표)', 'lot_ids', '', required=true) }}
-      {{ ui.field('수량', 'qty', '', type='number', step='any') }}
+      {{ ui.field('합병할 LOT 번호 (쉼표)', 'lot_ids', fv.get('lot_ids', '') if f_merge else '', required=true) }}
+      {{ ui.field('수량', 'qty', fv.get('qty', '') if f_merge else '', type='number', step='any') }}
       {{ ui.write_button('합병', user.can('F-POP-03'), form='merge-form') }}
     </form>
   </div>

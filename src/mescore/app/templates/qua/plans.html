@@ -1,6 +1,7 @@
 {# QUA-01 검사 계획 — F-QUA-01 등록(항목 N줄) · F-QUA-02 수정 · F-QUA-03 조회 #}
 {% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
+{% import "home/_macros.html" as uf with context %}{# uf = 쓰기 폼 칸 — 422 뒤 flash.values 로 되채운다(DEF-QA3-008). 조회 칸 · 행마다 반복되는 폼은 ui(되채우지 않음 — 조회 조건 · 다른 행을 덮지 않게) #}
 {% block search %}
 {{ ui.select('검사 유형', 'insp_type', type_options, insp_type) }}
 {{ ui.select('품목', 'item_id', item_options, item_id) }}
@@ -22,14 +23,17 @@
 <section class="panel">
   <h2>{{ t('검사 계획') }} {{ t('등록') }} <small>F-QUA-01 · {{ t('항목') }} 3{{ t('줄') }}</small></h2>
   <form method="post" action="{{ nav.path_of('QUA-01') }}" id="plan-form" class="form-grid">
-    {{ ui.select('검사 유형', 'insp_type', type_options, '', required=true) }}
-    {{ ui.select('품목', 'item_id', item_options) }}
-    {{ ui.select('공정', 'process_id', process_options) }}
+    {{ uf.select('검사 유형', 'insp_type', type_options, '', required=true) }}
+    {{ uf.select('품목', 'item_id', item_options) }}
+    {{ uf.select('공정', 'process_id', process_options) }}
+    {#- 항목 3줄은 같은 이름이 3번 — flash.values 의 값은 [1줄, 2줄, 3줄] 목록. 줄 번호로 골라 ui(되채우지 않는 쪽)에 넘긴다 (DEF-QA3-008). -#}
+    {% set fv = (flash.get('values') or {}) if (flash is defined and flash and flash.kind != 'ok' and flash.get is defined and 'item_key' in (flash.get('values') or {})) else {} %}
     {% for i in range(3) %}
+    {% set rv = {} %}{% for k in ['item_key', 'label', 'unit', 'value_type', 'standard', 'min_value', 'max_value'] if k in fv %}{% set lst = fv[k] if fv[k] is not string else [fv[k]] %}{% if i < lst|length %}{% set _ = rv.update({k: lst[i]}) %}{% endif %}{% endfor %}
     <fieldset class="row"><legend>{{ t('항목') }} {{ i + 1 }}</legend>
-      {{ ui.field('항목 키', 'item_key') }}{{ ui.field('항목', 'label') }}{{ ui.field('단위', 'unit') }}
-      <label>{{ t('형식') }}<select name="value_type">{% for v in value_types %}<option value="{{ v }}">{{ v }}</option>{% endfor %}</select></label>
-      {{ ui.field('기준', 'standard') }}{{ ui.field('하한', 'min_value', '', type='number', step='any') }}{{ ui.field('상한', 'max_value', '', type='number', step='any') }}
+      {{ ui.field('항목 키', 'item_key', rv.get('item_key', '')) }}{{ ui.field('항목', 'label', rv.get('label', '')) }}{{ ui.field('단위', 'unit', rv.get('unit', '')) }}
+      <label>{{ t('형식') }}<select name="value_type">{% for v in value_types %}<option value="{{ v }}"{% if rv.get('value_type') == v|string %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+      {{ ui.field('기준', 'standard', rv.get('standard', '')) }}{{ ui.field('하한', 'min_value', rv.get('min_value', ''), type='number', step='any') }}{{ ui.field('상한', 'max_value', rv.get('max_value', ''), type='number', step='any') }}
     </fieldset>
     {% endfor %}
   </form>

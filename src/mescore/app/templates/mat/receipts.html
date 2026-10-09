@@ -3,6 +3,7 @@
    Web: 조회 조건 · 표 · 등록 폼 3블록. #}
 {% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
+{% import "home/_macros.html" as uf with context %}{# uf = 쓰기 폼 칸 — 422 뒤 flash.values 로 되채운다(DEF-QA3-008). 조회 칸 · 행마다 반복되는 폼은 ui(되채우지 않음 — 조회 조건 · 다른 행을 덮지 않게) #}
 {% import "pop/_ui.html" as pui %}
 
 {% block pop_body %}
@@ -12,13 +13,15 @@
   <section class="panel">
     <h2>{{ t('입고') }} 1{{ t('건') }} <small>{{ t('등록하면 원재료 LOT 이 미검사로 생긴다') }}</small></h2>
     <div class="form-grid">
-      {{ ui.select('품목', 'item_id', item_options, item_id_default or '', required=true) }}
-      {{ ui.select('거래처', 'partner_id', partner_options) }}
-      {{ ui.field('수량', 'qty', '', type='number', required=true, step='any') }}
-      {{ ui.field('단위', 'unit') }}
-      {{ ui.field('입고일', 'receipt_date', today, type='date') }}
-      {{ ui.field('비고', 'note') }}
-      {{ ui.attrs_fields(attr_specs) }}
+      {{ uf.select('품목', 'item_id', item_options, item_id_default or '', required=true) }}
+      {{ uf.select('거래처', 'partner_id', partner_options) }}
+      {{ uf.field('수량', 'qty', '', type='number', required=true, step='any') }}
+      {{ uf.field('단위', 'unit') }}
+      {{ uf.field('입고일', 'receipt_date', today, type='date') }}
+      {{ uf.field('비고', 'note') }}
+      {#- 팩 속성 칸(attr_<key>)은 매크로가 flash 를 읽지 않는다 — 422 뒤 값을 골라 넘긴다 (DEF-QA3-008) -#}
+{% set fv = (flash.get('values') or {}) if (flash is defined and flash and flash.kind != 'ok' and flash.get is defined) else {} %}{% set avals = {} %}{% for a in attr_specs if ('attr_' ~ a.key) in fv %}{% set _ = avals.update({a.key: fv['attr_' ~ a.key]}) %}{% endfor %}
+{{ uf.attrs_fields(attr_specs, avals) }}
     </div>
     <div style="margin-top:12px">{{ ui.write_button('입고 등록 → 원재료 LOT 발번', user.can('F-MAT-01'), form='receipt-form', kind='primary btn-big') }}</div>
     <ul class="notes"><li>{{ t('성공 → 알림 + 원재료 LOT 번호. 라벨은 원재료 LOT 화면에서 출력한다.') }}</li></ul>
@@ -62,13 +65,15 @@
 <section class="panel">
   <h2>{{ t('입고 등록') }} <small>F-MAT-01</small></h2>
   <form method="post" action="{{ nav.path_of('MAT-01') }}" id="receipt-form" class="form-grid">
-    {{ ui.select('품목', 'item_id', item_options, item_id_default or '', required=true) }}
-    {{ ui.select('거래처', 'partner_id', partner_options) }}
-    {{ ui.field('수량', 'qty', '', type='number', required=true, step='any') }}
-    {{ ui.field('단위', 'unit') }}
-    {{ ui.field('입고일', 'receipt_date', today, type='date') }}
-    {{ ui.field('비고', 'note') }}
-    {{ ui.attrs_fields(attr_specs) }}
+    {{ uf.select('품목', 'item_id', item_options, item_id_default or '', required=true) }}
+    {{ uf.select('거래처', 'partner_id', partner_options) }}
+    {{ uf.field('수량', 'qty', '', type='number', required=true, step='any') }}
+    {{ uf.field('단위', 'unit') }}
+    {{ uf.field('입고일', 'receipt_date', today, type='date') }}
+    {{ uf.field('비고', 'note') }}
+    {#- 팩 속성 칸(attr_<key>)은 매크로가 flash 를 읽지 않는다 — 422 뒤 값을 골라 넘긴다 (DEF-QA3-008) -#}
+{% set fv = (flash.get('values') or {}) if (flash is defined and flash and flash.kind != 'ok' and flash.get is defined) else {} %}{% set avals = {} %}{% for a in attr_specs if ('attr_' ~ a.key) in fv %}{% set _ = avals.update({a.key: fv['attr_' ~ a.key]}) %}{% endfor %}
+{{ uf.attrs_fields(attr_specs, avals) }}
   </form>
 </section>
 {% endblock %}

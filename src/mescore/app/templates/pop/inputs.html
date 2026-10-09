@@ -1,16 +1,19 @@
 {# POP-03 투입 스캔 — F-POP-06 스캔(한 번 = 한 건 · S-05) · F-POP-07 취소. ?no= 미리 보기 — 없는 번호는 이 화면 422 재렌더(S-11) · data-scan 하나.
    폼 POST 의 422(불합격 · 미검사 · 소진 · 없는 번호 · 투입량)는 303 + 알림(S-09) · 성공은 배너만(S-10 · data-flash-banner).
-   디자인: docs/design/pop/pop_inputs.html (디자이너2). ctx: result · rows · lot · open_results · last_qty · last_unit · scan_no · scan_error #}
+   디자인: docs/design/pop/pop_inputs.html (디자이너2). ctx: result · rows · lot · open_results · last_qty · last_unit · scan_no · scan_error · (flash.values.qty — 422 뒤 투입량 우선) #}
 {% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "pop/_ui.html" as pui %}
 {% set who_equip = (result.equip_code ~ ' ' ~ (result.equip_name or '')) if result and result.equip_code else '' %}
 
 {% block pop_body %}
+{#- 422 뒤 되채움(DEF-QA3-008): flash.values 가 직전 저장값(last_qty)보다 앞선다 — 방금 사용자가 친 투입량이 가장 새 값. 스캔칸(barcode)은 되채우지 않는다(S-05). -#}
+{% set fv = (flash.get('values') or {}) if (flash is defined and flash and flash.kind != 'ok' and flash.get is defined) else {} %}
+{% set qty_v = fv['qty'] if (fv.get('qty') is string and fv['qty'] != '') else last_qty %}
 {% if result and not result.ended_at %}
 {% call ui.scan_box(nav.path_of('POP-03'), name='barcode', label='원재료 LOT 바코드 스캔 → 투입량 → Enter', hidden={'work_result_id': result.id}, placeholder=scan_no or 'LM-', button='확인') %}
   <label>{{ t('투입량') }} <small>{{ last_unit|txt('') }}</small>
-    <input type="number" name="qty" inputmode="decimal" step="any" min="0" value="{{ last_qty if last_qty is not none else '' }}"></label>
+    <input type="number" name="qty" inputmode="decimal" step="any" min="0" value="{{ qty_v if qty_v is not none else '' }}"></label>
 {% endcall %}
 {% elif result %}
 <section class="panel"><h2>{{ t('종료된 실적입니다') }} <small>{{ t('투입은 종료 전만') }}</small></h2></section>

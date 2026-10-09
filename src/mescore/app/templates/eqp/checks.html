@@ -1,6 +1,7 @@
 {# EQP-02 점검 — F-EQP-03 등록 · F-EQP-04 조회 #}
 {% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
+{% import "home/_macros.html" as uf with context %}{# uf = 쓰기 폼 칸 — 422 뒤 flash.values 로 되채운다(DEF-QA3-008). 조회 칸 · 행마다 반복되는 폼은 ui(되채우지 않음 — 조회 조건 · 다른 행을 덮지 않게) #}
 {% import "pop/_ui.html" as pui %}
 {% block search %}
 {{ pui.sort_keep(sort) }}
@@ -23,12 +24,12 @@
 <section class="panel">
   <h2>{{ t('점검') }} {{ t('등록') }} <small>F-EQP-03</small></h2>
   <form method="post" action="{{ nav.path_of('EQP-02') }}" id="check-form" class="form-grid">
-    {{ ui.select('설비', 'equipment_id', equipment_options, '', required=true) }}
-    {{ ui.field('점검 항목', 'item', '', required=true) }}
-    {{ ui.field('결과', 'result') }}
-    {{ ui.field('점검 일시', 'checked_at', '', type='datetime-local') }}
-    {{ ui.field('점검자', 'checker', user.user_name) }}
-    {{ ui.field('비고', 'note') }}
+    {{ uf.select('설비', 'equipment_id', equipment_options, '', required=true) }}
+    {{ uf.field('점검 항목', 'item', '', required=true) }}
+    {{ uf.field('결과', 'result') }}
+    {{ uf.field('점검 일시', 'checked_at', '', type='datetime-local') }}
+    {{ uf.field('점검자', 'checker', user.user_name) }}
+    {{ uf.field('비고', 'note') }}
   </form>
 </section>
 {% endblock %}

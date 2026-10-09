@@ -1,6 +1,7 @@
 {# SHP-04 성적서 — 발행본 목록 + 발행(F-SHP-09 승인된 출하 → 최신 검사 값 스냅샷) · 출력(F-SHP-10 스냅샷만). 재발행은 새 번호. #}
 {% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
+{% import "home/_macros.html" as uf with context %}{# uf = 쓰기 폼 칸 — 422 뒤 flash.values 로 되채운다(DEF-QA3-008). 조회 칸 · 행마다 반복되는 폼은 ui(되채우지 않음 — 조회 조건 · 다른 행을 덮지 않게) #}
 {% import "trc/_cards.html" as cards %}
 {% block head %}{% if device not in ["pop", "mobile"] %}{{ cards.styles() }}{% endif %}{% endblock %}
 
@@ -30,8 +31,8 @@
   {% set dto = [] %}{% for d in doc_types %}{% set _ = dto.append((d, t(d))) %}{% endfor %}
   <form method="post" action="{{ nav.path_of('SHP-04') }}" id="doc-new">
     <div class="form-grid">
-      {{ ui.select('출하', 'shipment_id', so, required=true) }}
-      {{ ui.select('종류', 'doc_type', dto, '성적서', required=true) }}
+      {{ uf.select('출하', 'shipment_id', so, required=true) }}
+      {{ uf.select('종류', 'doc_type', dto, '성적서', required=true) }}
     </div>
   </form>
 </section>

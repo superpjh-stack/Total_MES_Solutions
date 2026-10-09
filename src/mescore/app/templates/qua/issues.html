@@ -1,6 +1,7 @@
 {# QUA-04 이상 · 시정 — F-QUA-08 등록 · F-QUA-09 조치 · F-QUA-10 종결 · F-QUA-11 조회 #}
 {% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
+{% import "home/_macros.html" as uf with context %}{# uf = 쓰기 폼 칸 — 422 뒤 flash.values 로 되채운다(DEF-QA3-008). 조회 칸 · 행마다 반복되는 폼은 ui(되채우지 않음 — 조회 조건 · 다른 행을 덮지 않게) #}
 {% import "pop/_ui.html" as pui %}
 {% block search %}
 {{ pui.sort_keep(sort) }}
@@ -26,11 +27,11 @@
 <section class="panel">
   <h2>{{ t('이상') }} {{ t('등록') }} <small>F-QUA-08</small></h2>
   <form method="post" action="{{ nav.path_of('QUA-04') }}" id="issue-form" class="form-grid">
-    {{ ui.field('발생 시각', 'occurred_at', '', type='datetime-local') }}
-    {{ ui.select('공정', 'process_id', process_options) }}
-    {{ ui.field('LOT', 'lot_no') }}
-    {{ ui.field('내용', 'content', '', required=true) }}
-    {{ ui.field('원인', 'cause') }}
+    {{ uf.field('발생 시각', 'occurred_at', '', type='datetime-local') }}
+    {{ uf.select('공정', 'process_id', process_options) }}
+    {{ uf.field('LOT', 'lot_no') }}
+    {{ uf.field('내용', 'content', '', required=true) }}
+    {{ uf.field('원인', 'cause') }}
   </form>
 </section>
 {% endblock %}

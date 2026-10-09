@@ -7,6 +7,13 @@
 {% import "pop/_ui.html" as pui %}
 
 {% macro lot_forms() %}
+{#- 422 뒤 되채움(DEF-QA3-008): 항목 저장 폼(lot_id 가 이 LOT) → 검사 유형 · 비고 · 항목 i_<key>. 판정 폼(judgement · 검사 # 는 URL 에만)은
+    대기 판정이 하나일 때만 되채운다 — 여럿이면 어느 폼인지 값만으로 가를 수 없다. ui 는 with context 없이 — 값은 여기서 골라 넘긴다. -#}
+{% set fv0 = (flash.get('values') or {}) if (flash is defined and flash and flash.kind != 'ok' and flash.get is defined) else {} %}
+{% set fi = fv0 if (fv0.get('lot_id')|string == lot.id|string) else {} %}
+{% set fj = fv0 if ('lot_id' not in fv0 and pending|length == 1) else {} %}
+{% set ivals = {} %}
+{% for p in fields if not p.is_collect and p.field in fi %}{% set raw = fi[p.field] %}{% set _ = ivals.update({p.param_key: {'value_num': (raw if raw != '' else none), 'value_text': raw, 'deviated': false}}) %}{% endfor %}
 <section class="panel">
   <h2>{{ t('LOT') }} <small><code>{{ lot.no }}</code> · {{ lot.kind_label }} · {{ pui.badge(lot.insp_status) }} · {{ pui.badge(lot.state) }}</small></h2>
   <dl class="kv">
@@ -24,8 +31,8 @@
   <input type="hidden" name="lot_id" value="{{ lot.id }}"><input type="hidden" name="process_id" value="{{ insp_process_id or '' }}">
   <section class="panel">
     <h2>{{ t('검사 항목') }} <small>{{ t('검사 계획 항목에서 자동 · 기준 이탈은 저장 + 표시') }}</small></h2>
-    <div class="form-grid" style="margin-bottom:10px">{{ ui.select('검사 유형', 'insp_type', type_options, insp_type, required=true) }}{{ ui.field('비고', 'note') }}</div>
-    {{ mf.measure_fields(fields) }}
+    <div class="form-grid" style="margin-bottom:10px">{{ ui.select('검사 유형', 'insp_type', type_options, fi.get('insp_type') or insp_type, required=true) }}{{ ui.field('비고', 'note', fi.get('note', '')) }}</div>
+    {{ mf.measure_fields(fields, ivals) }}
     <div style="margin-top:10px">{{ ui.write_button('항목 저장 (판정은 아직)', user.can('F-QUA-04'), form='insp-form', kind='primary btn-big') }}</div>
   </section>
 </form>
@@ -35,9 +42,9 @@
     <h2>{{ t('판정') }} <small>{{ t('검사') }} #{{ p.id }} · {{ p.insp_type }} · {{ p.inspected_at|dt }} · {{ pui.badge('대기') }}</small></h2>
     {% set j_opts = [] %}
     {% for v, label in judgement_options %}{% set _ = j_opts.append((v, label, {'합격': 'ok', '조건부': 'warn', '불합격': 'err'}.get(v, ''))) %}{% endfor %}
-    {{ pui.choice('judgement', j_opts, required=true, cols='c3 big') }}
+    {{ pui.choice('judgement', j_opts, fj.get('judgement', ''), required=true, cols='c3 big') }}
     <fieldset style="margin-top:10px"><legend>{{ t('불합격이면 — 불량코드 · 수량') }}</legend>
-      <div class="form-grid">{{ ui.select('불량코드', 'defect_code_id', defect_options) }}{{ ui.field('불량 수량', 'defect_qty', '', type='number', step='any') }}{{ ui.field('비고', 'note') }}</div>
+      <div class="form-grid">{{ ui.select('불량코드', 'defect_code_id', defect_options, fj.get('defect_code_id', '')) }}{{ ui.field('불량 수량', 'defect_qty', fj.get('defect_qty', ''), type='number', step='any') }}{{ ui.field('비고', 'note', fj.get('note', '')) }}</div>
     </fieldset>
     <div style="margin-top:10px">{{ ui.write_button('판정 저장', user.can('F-QUA-05'), form='judge-' ~ p.id, kind='primary btn-big') }}</div>
     <ul class="notes"><li>{{ t('판정 뒤 수정은 새 검사로. 「조건부」도 투입 · 출하 가능.') }}</li></ul>

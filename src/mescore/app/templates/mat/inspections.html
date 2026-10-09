@@ -7,6 +7,11 @@
 {% import "pop/_ui.html" as pui %}
 
 {% macro lot_form() %}
+{#- 422 뒤 되채움(DEF-QA3-008): 이 LOT 의 판정 폼이 돌아왔을 때만(lot_id 같음) 검사 항목 i_<key> · 판정 · 비고. 스캔칸은 되채우지 않는다(S-05). -#}
+{% set fv0 = (flash.get('values') or {}) if (flash is defined and flash and flash.kind != 'ok' and flash.get is defined) else {} %}
+{% set fv = fv0 if (fv0.get('lot_id')|string == lot.id|string) else {} %}
+{% set ivals = {} %}
+{% for p in fields if not p.is_collect and p.field in fv %}{% set raw = fv[p.field] %}{% set _ = ivals.update({p.param_key: {'value_num': (raw if raw != '' else none), 'value_text': raw, 'deviated': false}}) %}{% endfor %}
 <form method="post" action="{{ nav.path_of('MAT-02') }}" id="judge-form">
   <input type="hidden" name="lot_id" value="{{ lot.id }}">
   <section class="panel">
@@ -20,14 +25,14 @@
   </section>
   <section class="panel">
     <h2>{{ t('검사 항목') }} <small>{{ t('검사 계획(입고)에서 자동 — 측정값 폼과 같은 모양') }}</small></h2>
-    {{ mf.measure_fields(fields) }}
+    {{ mf.measure_fields(fields, ivals) }}
   </section>
   <section class="panel">
     <h2>{{ t('판정') }} <small>{{ t('하나를 누르고 저장 — 판정 뒤 수정은 새 검사로') }}</small></h2>
     {% set j_opts = [] %}
     {% for v, label in judgement_options %}{% set _ = j_opts.append((v, label, {'합격': 'ok', '조건부': 'warn', '불합격': 'err'}.get(v, ''))) %}{% endfor %}
-    {{ pui.choice('judgement', j_opts, required=true, cols='c3 big') }}
-    <div class="field" style="margin-top:10px"><label for="insp_note">{{ t('비고') }} <small>{{ t('선택') }}</small></label><input id="insp_note" type="text" name="note" maxlength="200"></div>
+    {{ pui.choice('judgement', j_opts, fv.get('judgement', ''), required=true, cols='c3 big') }}
+    <div class="field" style="margin-top:10px"><label for="insp_note">{{ t('비고') }} <small>{{ t('선택') }}</small></label><input id="insp_note" type="text" name="note" maxlength="200" value="{{ fv.get('note', '') }}"></div>
     <div style="margin-top:10px">{{ ui.write_button('판정 저장', user.can('F-MAT-04'), form='judge-form', kind='primary btn-big') }}</div>
   </section>
 </form>
