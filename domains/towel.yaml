@@ -1,0 +1,86 @@
+# 도메인별 MES 프로세스 — 타월 인쇄 공장 (팩 없음 · 설계 제안 — 근거 사업 송월타월 Data Gateway 의 공정 흐름 · 수집 구조를 일반화)
+# 회사 고정값(주소 · 설비 모델 · 레지스터)은 가져오지 않았다. 단계 screen 이 X- 로 시작하는 것은 팩을 만들 때 추가할 화면의 제안 이름이다(아직 없다).
+code: towel
+seq: 6
+name: 타월 인쇄 공장
+industry: 타월 · 수건 인쇄 (나염 · 승화전사 · DTF 전사 · 자수 외주) — 고객 문구 · 색상 · 규격 지정 다품종 소량 주문생산
+pack: null
+status: 팩 없음 — 설계 제안 (근거 사업의 공정 흐름 · 설비 수집 구조 기반 · 코어 + 설정으로 시작)
+summary: 고객이 문구 · 로고 · 색상 · 규격을 정해 주문하면 무지 타월과 잉크 · 필름 · 파우더 같은 부자재를 받아 나염 · 승화전사 · DTF 로 인쇄하고, 자수는 외주로 보낸 뒤 내 · 외포장해 적재 · 발송한다. 주문 하나가 작고 종류가 많아 주문 단위 LOT 과 인쇄 방식별 조건 · 출력 실적이 중심이고, DTF 프린터는 출력매수 · 가동시간 · 잉크 투입량 · 인쇄실 온습도를 자동 수집한다.
+flow: [소비자 발주 (문구 · 색상 · 규격), 디자인 시안 확정, 원부자재 입고 (무지 타월 · 잉크 · 필름 · 파우더), 인쇄 (나염 · 승화전사 · DTF), 자수 (외주), 검사, 내 · 외포장 · 이송, 적재 · 발송]
+lot_model: 무지 타월 LOT(원단 · 색상 · 규격) + 부자재 LOT(잉크 · 필름 · 파우더) → 인쇄 LOT(주문 단위 · 인쇄 방식) → 자수 LOT(외주 1:1) → 포장 LOT(합병 가능) → 출하 LOT
+controls:
+  - 주문별 디자인 시안 · 문구 · 색상 확정본 (인쇄 전 승인)
+  - 인쇄 방식별 조건 — 나염 건조 온도 · 승화전사 온도 · 압력 · 시간 · DTF 경화 온도
+  - DTF 출력매수 · 가동시간 · 잉크 투입량 (설비 자동 수집)
+  - 인쇄실 온습도 (필름 · 파우더 흡습 방지)
+  - 인쇄 품질 — 색상 · 번짐 · 위치 · 세탁 견뢰도
+  - 외주 자수 반출 · 반입 수량
+kpi: [주문 납기 준수율 %, 인쇄 불량률 %, DTF 가동률 %, 장당 잉크 사용량, 외주 리드타임]
+equipment: [나염기, 승화전사기 · 열프레스, DTF 프린터 · 파우더 건조기, 인쇄실 온습도 센서, 포장기]
+extensions:
+  - { point: E1 설정, what: "용어 — 품목→타월 규격, 원재료 LOT→원단 LOT, 생산 LOT→인쇄 LOT, 작업지시→인쇄 지시 · 역할(인쇄 · 포장 · 외주 담당)" }
+  - { point: E2 속성, what: "수주 상세의 문구 · 로고 파일 · 색상 · 인쇄 방식 · 인쇄 위치 / 원단 LOT 의 색상 · 중량(g) (확장 테이블)" }
+  - { point: E3 측정값, what: "인쇄 방식별 공정 측정값 (나염 건조 온도 · 전사 온도 · 압력 · 시간 · DTF 경화 온도) / 검사 계획 = 색상 · 번짐 · 위치 · 견뢰도" }
+  - { point: E4 팩 화면, what: "디자인 시안 승인 · 외주 자수 반출/반입 (제안)" }
+  - { point: E5 훅, what: "시안 미승인 주문의 인쇄 착수 차단 · DTF 가동 구간 → 인쇄 실적 자동 생성(on_collect · 가설) · 온습도 이탈 알림" }
+  - { point: E6 계보, what: "원단 · 부자재 투입 → 인쇄 LOT · 외주 자수(생산 1:1) · 포장(합병)" }
+  - { point: E7 수집, what: "DTF 프린터 가동상태 · 출력매수 · 가동시간 · 잉크 · 파우더 건조기 온도 · 인쇄실 온습도 (Data Gateway → /ifc/collect)" }
+processes:
+  - code: T01
+    name: 고객 문구 · 디자인 타월 주문 생산
+    when: 고객이 문구 · 로고 · 색상 · 규격을 정해 소량 주문했을 때
+    goal: 출하 박스 하나에서 주문 · 시안 · 인쇄 조건 · 원단 LOT 까지 이어진다
+    steps:
+      - { screen: BAS-01, role: ADMIN, action: "타월 규격 등록 — 크기 · 중량(g) · 색상 · 원단", output: 타월 규격 }
+      - { screen: ORD-01, role: PROD, action: "고객 · 규격 · 수량 · 납기 · 문구 · 인쇄 방식으로 수주", output: 수주 }
+      - { screen: X-DSN-01, role: PROD, action: "디자인 시안 등록 · 고객 승인 (제안 화면)", output: 승인 시안 }
+      - { screen: JOB-01, role: PROD, action: "인쇄 방식별 인쇄 지시 (나염 · 승화전사 · DTF)", output: 작업지시 }
+      - { screen: MAT-01, role: FIELD, action: "무지 타월 · 잉크 · 필름 입고", output: 원단 · 부자재 LOT }
+      - { screen: POP-03, role: FIELD, action: "원단 · 부자재 LOT 투입 스캔", output: 투입 기록 }
+      - { screen: POP-02, role: FIELD, action: "인쇄 실적 — 양품 · 불량 · 인쇄 조건", output: 인쇄 LOT }
+      - { screen: QUA-02, role: QA, action: "인쇄 검사 — 색상 · 번짐 · 위치", output: 판정 }
+      - { screen: POP-02, role: FIELD, action: "내 · 외포장 실적 (여러 인쇄 LOT 을 박스로 합병)", output: 포장 LOT }
+      - { screen: SHP-02, role: FIELD, action: "포장 LOT 스캔 → 발송 승인", output: 출하 LOT }
+  - code: T02
+    name: DTF 인쇄 자동 실적 (설비 수집)
+    when: DTF 프린터의 출력매수 · 가동시간을 수기 입력 없이 실적으로 남길 때
+    goal: 가동 구간마다 출력매수 · 잉크 사용량이 자동으로 쌓이고 작업자는 양품 · 불량만 확인한다
+    steps:
+      - { screen: BAS-05, role: ADMIN, action: "DTF 프린터 · 건조기 · 온습도 센서를 수집 설비로 등록", output: 수집 설비 }
+      - { screen: BAS-04, role: ADMIN, action: "DTF 공정 측정값 선언 (출력매수 · 잉크 ml · 경화 온도)", output: 측정값 정의 }
+      - { screen: EQP-04, role: PROD, action: "수집값 확인 — 가동상태 · 누적 출력매수 · 잉크 · 온습도", output: 수집값 }
+      - { screen: POP-02, role: FIELD, action: "가동 구간 실적 확인 — 양품 · 불량 입력 후 종료", output: 인쇄 실적 }
+      - { screen: EQP-01, role: PROD, action: "설비 가동 현황 (가동 · 비가동 · 이상)", output: 가동 구간 }
+      - { screen: KPI-02, role: ADMIN, action: "DTF 가동률 · 장당 잉크 사용량", output: 지표 }
+    checks: [가동 구간 → 실적 자동 생성은 spec §2 의 가설(E7 collect + E5 on_collect) — 팩 훅으로 검증할 것]
+  - code: T03
+    name: 나염 · 승화전사 인쇄 조건 관리
+    when: 수기 입력하던 나염 · 승화전사 인쇄 조건과 품질을 기록할 때
+    goal: 인쇄 LOT 마다 온도 · 압력 · 시간이 남고 조건 이탈과 불량 유형이 집계된다
+    steps:
+      - { screen: BAS-04, role: ADMIN, action: "나염 건조 온도 · 승화전사 온도 · 압력 · 시간 범위 선언", output: 측정값 정의 }
+      - { screen: QUA-01, role: QA, action: "인쇄 검사 계획 — 색상 · 번짐 · 위치 · 세탁 견뢰도", output: 검사 계획 }
+      - { screen: POP-02, role: FIELD, action: "인쇄 실적 + 조건 입력 (범위 밖은 이탈 표시)", output: 인쇄 LOT }
+      - { screen: QUA-02, role: QA, action: "인쇄 검사 판정 · 불량 유형", output: 판정 }
+      - { screen: QUA-03, role: QA, action: "인쇄 방식 · 불량 유형별 집계", output: 불량 현황 }
+  - code: T04
+    name: 자수 외주
+    when: 자수 주문을 외주처로 보내고 받을 때
+    goal: 반출 · 반입 수량과 외주처가 주문 LOT 에 이어진다
+    steps:
+      - { screen: X-OUT-01, role: PROD, action: "외주 반출 — 인쇄 LOT 스캔 · 외주처 · 수량 (제안 화면)", output: 반출 기록 }
+      - { screen: X-OUT-01, role: PROD, action: "외주 반입 — 수량 · 불량 확인 (생산 1:1 계보)", output: 자수 LOT }
+      - { screen: QUA-02, role: QA, action: "반입 검사 — 자수 위치 · 실밥 · 색상", output: 판정 }
+      - { screen: TRC-02, role: QA, action: "출하 박스 → 외주 자수 · 인쇄 · 원단 역추적", output: 계보 }
+    checks: [코어에 외주 모듈이 없다 — 금속 가공 M04 와 같은 제안. 두 도메인이 필요로 하니 코어 변경 요청 후보]
+  - code: T05
+    name: 인쇄실 환경 · 설비 이상 관리
+    when: 인쇄실 온습도와 DTF 이상 정지를 관리할 때
+    goal: 온습도 이탈 · 이상 정지가 기록되고 조치까지 이어진다
+    steps:
+      - { screen: EQP-04, role: PROD, action: "인쇄실 온습도 · 건조기 온도 추이 확인", output: 수집값 }
+      - { screen: EQP-03, role: FIELD, action: "DTF 이상 정지 — 고장 등록 · 조치", output: 고장 구간 }
+      - { screen: QUA-04, role: QA, action: "온습도 이탈 기간 인쇄분 — 이상 등록 · 영향 확인", output: 시정 기록 }
+      - { screen: KPI-01, role: PROD, action: "현황판 — 설비 상태 · 오늘 출력 · 납기 임박 주문", output: 현황 }
+    checks: [설비 임계값 · 이탈 알람은 코어에 없다 — D-501 (사람 결정 대기)]
