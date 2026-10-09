@@ -37,6 +37,11 @@ numbering.counter(kind, *, at=None) -> int          # 지금 범위(오늘)의 �
 - 카운터 행 잠금은 `insert … on conflict do update … returning` 한 문장 — 동시 호출은 행 잠금에서 줄을 선다. 한 트랜잭션의 잠금 순서는 `실적/LOT 행 → 지시 행 → 채번 카운터`(interfaces.md §1).
 - 팩은 `pack.yaml: numbering` 으로 접두어 · 형식 · 자릿수 · 종류(예 `BATCH`)를 더한다. 시드가 행을 넣는다 — 코드 변경 없음.
 
+### §1.1 공표 — 화면 문구 치환 규칙 (회전 5)
+- **메인 카드 `today_label`**: 라우터(`home.cards_for`)는 **중립어 원문**(`home.TODAY_LABELS` — 예 `검사 대기` · `고장 중`)을 그대로 넘기고, **템플릿이 한 번 `t()`** 한다(`home/main.html` 의 `t(c.today_label or '오늘')`). JSON 의 `today_label` 은 원문 키(번역 전)다. `today_source` 는 개발3 `stats` 가 이미 `t()` 를 건 문장 — 템플릿은 다시 걸지 않는다.
+- **권한 표기**(`cards[].level` · `role_summary[].write_menus[].label`): 라우터가 `t()` 를 건 값(`입력 (+입고검사)` → foodservice `입력 (+입고검식)`). 템플릿은 `startswith('입력')` 만 본다(`입력` 은 terms 키가 아니다).
+- **JOB-02 `?wo=` · JOB-03 `?id=`**: id 또는 지시 번호(D-604 확정 · `job.wo_of_key`). 경로 `{id}` 는 숫자만. 드릴다운 `results[].measures[{param_key label unit value value_num value_text source deviated measured_at recorded recorded_only}]` — 개발2 `measure.params_with_recorded` · `values_of` · `display_value`(값 없음 `미수집`). `label` 은 `t()` 를 건 값.
+
 | 항목 | 실측 | 검증 방법 |
 |---|---|---|
 | 채번 | 동시 8스레드 × 5 = 40 발번 중복 0 · 되돌림 뒤 `peek` 복귀 · 날짜 바뀌면 001 · 자릿수 초과 비절단 · 규칙 없음 RuntimeError · 금지 글자 RuntimeError | `uv run pytest -q tests/test_numbering.py` 9 passed |

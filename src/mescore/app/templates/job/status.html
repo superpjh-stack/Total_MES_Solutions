@@ -1,6 +1,6 @@
 {# JOB-02 지시 현황 (F-JOB-06 · 개발1 · 디자이너1 이식 · 모바일 대상 — 디자이너2 mobile/job_status_m.html 접힘 규칙) — 오늘 · 이번 주 지시별 계획 대비 실적 · 상태.
    타일(요약) + 표. 폭 480 아래에서는 표가 카드로(cardify · 가로 넘침 0). `?wo=` 는 실적 드릴다운 (D-604).
-   라우터 ctx: rows[{… good_qty defect_qty plan_qty achieve_pct progress}] · summary{상태: n, 전체: n} · range · frm · to · detail · results · path · print_path. #}
+   라우터 ctx: rows[{… good_qty defect_qty plan_qty achieve_pct progress}] · summary{상태: n, 전체: n} · range · frm · to · detail · results[{… measures[{param_key label unit value deviated source recorded recorded_only}]}](D-604) · path · print_path. #}
 {% extends "base.html" %}
 {% import "home/_macros.html" as ui with context %}
 
@@ -42,14 +42,15 @@
   <h2 id="h-detail">{{ t('실적') }} <small><code>{{ detail.work_order_no }}</code> · {{ detail.item_name }} · {{ detail.process_name }}</small>
     <span class="right"><a class="btn btn-sm" href="{{ print_path }}?id={{ detail.id }}">{{ t('작업지시서') }}</a> <a class="btn btn-sm" href="{{ path }}?range={{ range }}">{{ t('닫기') }}</a></span></h2>
   <table class="grid compact cardify">
-    <thead><tr><th>{{ t('시작') }}</th><th>{{ t('종료') }}</th><th class="num">{{ t('양품') }}</th><th class="num">{{ t('불량') }}</th><th>{{ t('설비') }}</th><th>{{ t('작업자') }}</th><th>{{ t('생산 LOT') }}</th></tr></thead>
+    <thead><tr><th>{{ t('시작') }}</th><th>{{ t('종료') }}</th><th class="num">{{ t('양품') }}</th><th class="num">{{ t('불량') }}</th><th>{{ t('설비') }}</th><th>{{ t('작업자') }}</th><th>{{ t('생산 LOT') }}</th><th>{{ t('측정값') }}</th></tr></thead>
     <tbody>
     {% for x in results %}
       <tr><td data-l="{{ t('시작') }}">{{ x.started_at|dt }}</td><td data-l="{{ t('종료') }}">{% if x.ended_at %}{{ x.ended_at|dt }}{% else %}<span class="badge badge-warn">{{ t('진행 중') }}</span>{% endif %}</td>
         <td class="num" data-l="{{ t('양품') }}">{{ x.good_qty|num(3) }}</td><td class="num" data-l="{{ t('불량') }}">{{ x.defect_qty|num(3) }}</td>
-        <td data-l="{{ t('설비') }}">{{ x.equip_name|txt }}</td><td data-l="{{ t('작업자') }}">{{ x.worker_name|txt }}</td><td data-l="{{ t('생산 LOT') }}">{% if x.lot_no %}<code>{{ x.lot_no }}</code>{% else %}-{% endif %}</td></tr>
+        <td data-l="{{ t('설비') }}">{{ x.equip_name|txt }}</td><td data-l="{{ t('작업자') }}">{{ x.worker_name|txt }}</td><td data-l="{{ t('생산 LOT') }}">{% if x.lot_no %}<code>{{ x.lot_no }}</code>{% else %}-{% endif %}</td>
+        <td data-l="{{ t('측정값') }}">{% for m in x.measures %}<span class="measure{% if m.deviated %} badge badge-warn{% endif %}" data-key="{{ m.param_key }}">{{ m.label }} {{ m.value }}{% if m.recorded and m.unit %} {{ m.unit }}{% endif %}{% if m.deviated %} ({{ t('범위 이탈') }}){% endif %}</span>{% if not loop.last %} · {% endif %}{% else %}-{% endfor %}</td></tr>
     {% else %}
-      {{ ui.empty_row(7, hint='실적이 없다') }}
+      {{ ui.empty_row(8, hint='실적이 없다') }}
     {% endfor %}
     </tbody>
   </table>

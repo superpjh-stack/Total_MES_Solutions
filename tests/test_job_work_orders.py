@@ -185,6 +185,15 @@ def test_status_board_today_week_and_drilldown(admin, base):
     j = admin.get(f"/job/status?range=week&wo={wo['id']}").json()                                              # ?wo= 드릴다운 (D-604) — 목록 상한과 무관
     assert j["detail"]["id"] == wo["id"] and j["detail"]["work_order_no"] == wo["work_order_no"]
     assert len(j["results"]) == 1 and float(j["results"][0]["good_qty"]) == 4 and float(j["results"][0]["defect_qty"]) == 1
+    conn.x("insert into pop_measure (work_result_id, param_key, value_num, unit, deviated) values (%s, 'temp', 95, '℃', true), (%s, 'zz_old', 1, null, false)", (res["id"], res["id"]))
+    ms = {m["param_key"]: m for m in admin.get(f"/job/status?wo={wo['work_order_no']}").json()["results"][0]["measures"]}     # D-604 실적별 측정값
+    declared = {r["param_key"] for r in conn.q("select param_key from bas_process_param where process_id = %s and use_yn = 'Y'", (base["process_id"],))}
+    assert declared <= set(ms) and ms["temp"]["value"] == "95" and ms["temp"]["deviated"] is True and ms["temp"]["recorded"] is True
+    assert ms["zz_old"]["recorded_only"] is True                                                               # 선언 없이 기록만 남은 키도 보인다
+    assert all(ms[k]["value"] == "미수집" for k in declared - {"temp"})
+    h = admin.get(f"/job/status?wo={wo['id']}", headers=HTML).text
+    assert "95" in h and "zz_old" in h
+    conn.x("delete from pop_measure where work_result_id = %s", (res["id"],))
     assert j["range"] == "week" and j["frm"] <= date.today().isoformat() <= j["to"]
     assert admin.get("/job/status?range=bad").status_code == 422
     assert admin.get("/job/status?wo=999999999").status_code == 404

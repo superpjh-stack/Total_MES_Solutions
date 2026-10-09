@@ -30,7 +30,7 @@ from fastapi.responses import HTMLResponse
 from starlette.datastructures import FormData
 
 from ...db import conn
-from .. import nav, numbering, packs, rbac, templating
+from .. import measure, nav, numbering, packs, rbac, templating
 from ..packs import t
 from ..util import audit, http
 from .bas import bad, contains, decimal_of, form_data, id_of_path, ref_of, text_of
@@ -81,6 +81,19 @@ def wo_of_key(raw: str) -> dict:
     if row is None:
         raise http.not_found()
     return row
+
+
+def measures_of_result(work_result_id: int, process_id: int | None) -> list[dict]:
+    """실적 한 건의 측정값 — 개발2 `measure.params_with_recorded` · `values_of` 그대로(라우터 SQL 0). 값이 없으면 `미수집`."""
+    values = measure.values_of(work_result_id)
+    out = []
+    for prm in measure.params_with_recorded(process_id, values):
+        v = values.get(prm["param_key"])
+        out.append({"param_key": prm["param_key"], "label": t(prm.get("label") or prm["param_key"]), "unit": (v or {}).get("unit") or prm.get("unit"),
+                    "value": measure.display_value(v), "value_num": (v or {}).get("value_num"), "value_text": (v or {}).get("value_text"),
+                    "source": (v or {}).get("source") or prm.get("source"), "deviated": bool((v or {}).get("deviated")),
+                    "measured_at": (v or {}).get("measured_at"), "recorded": v is not None, "recorded_only": bool(prm.get("recorded_only"))})
+    return out
 
 
 def wo_of_path(raw_id: str) -> dict:
@@ -356,9 +369,11 @@ def status_board(request: Request, range: str = "today", wo: str = "", user: rba
     detail, results = None, []
     if wo.strip():
         detail = wo_of_key(wo)                                                                          # id 또는 지시 번호 (D-604)
-        results = conn.q("""select r.id, r.started_at, r.ended_at, r.good_qty, r.defect_qty, r.unit, e.equip_code, e.equip_name, k.worker_name, l.lot_no
+        results = conn.q("""select r.id, r.process_id, r.started_at, r.ended_at, r.good_qty, r.defect_qty, r.unit, e.equip_code, e.equip_name, k.worker_name, l.lot_no
                               from pop_work_result r left join bas_equipment e on e.id = r.equipment_id left join bas_worker k on k.id = r.worker_id
                               left join lot l on l.id = r.product_lot_id where r.work_order_id = %s order by r.started_at desc""", (detail["id"],))
+        for r in results:                                                                            # D-604 — 실적별 측정값 (선언 + 기록만 남은 키 · 빈 값 미수집)
+            r["measures"] = measures_of_result(r["id"], r["process_id"] or detail["process_id"])
     return templating.render(request, "job/status.html", {
         "rows": rows, "summary": summary, "range": range, "frm": frm, "to": to, "detail": detail, "results": results, "path": STATUS, "print_path": PRINT,
     }, screen_id="JOB-02")
