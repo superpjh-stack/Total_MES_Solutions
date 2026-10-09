@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -137,10 +138,12 @@ def backup() -> int:
 
 
 # ── 복구 검증 ───────────────────────────────────────────────────────────
-def latest_dump() -> Path:
-    dumps = sorted(BACKUP_DIR.glob("*.dump"), key=lambda p: p.stat().st_mtime) if BACKUP_DIR.exists() else []
+def latest_dump(db: str) -> Path:
+    """`MES_PG_DSN` 의 DB 로 뜬 덤프(`<DB>-<일시>.dump`) 중 가장 최근 것 — 다른 DB 의 덤프를 집지 않는다 (DEF-QA1-008)."""
+    pat = re.compile(rf"^{re.escape(db)}-\d")
+    dumps = sorted((p for p in BACKUP_DIR.glob("*.dump") if pat.match(p.name)), key=lambda p: p.stat().st_mtime) if BACKUP_DIR.exists() else []
     if not dumps:
-        raise BackupError("backups/ 에 덤프가 없다 — 먼저 `make backup`")
+        raise BackupError(f"backups/ 에 `{db}` 덤프가 없다 — 먼저 `make backup`(같은 MES_PG_DSN)")
     return dumps[-1]
 
 
@@ -148,7 +151,7 @@ def restore_check(dump_arg: str | None) -> int:
     params = conn_params()
     source_db = params["dbname"]
     pg_restore = need("pg_restore")
-    dump = Path(dump_arg).resolve() if dump_arg else latest_dump()
+    dump = Path(dump_arg).resolve() if dump_arg else latest_dump(source_db)
     manifest = dump.with_suffix(".json")
     if not dump.exists():
         raise BackupError(f"덤프가 없다 — {dump}")

@@ -6,8 +6,13 @@ TOOLS := src/mescore/tools
 PGHOST ?= /tmp
 PORT ?= 8030
 PACK := $(strip $(MES_PACK))
-DB := $(if $(filter-out _%,$(PACK)),mes_$(PACK)_db,mes_core_db)
-PSQL := psql -q -h $(PGHOST) -d $(DB) -v ON_ERROR_STOP=1
+# DB 대상은 MES_PG_DSN(셸 · .env)을 앱과 같은 규칙으로 푼다 — 비면 mes_core_db / mes_<팩>_db (DEF-QA1-008 · tools/db_target.py).
+# 쓰는 목표(setup · db-create · db-schema)에서만 한 번 계산한다(지연 · 메모).
+_dbt = $(shell PGHOST=$(PGHOST) uv run python $(TOOLS)/db_target.py $(1))
+DB = $(or $(_DB),$(eval _DB := $(call _dbt,name))$(_DB))
+DB_DSN = $(or $(_DB_DSN),$(eval _DB_DSN := $(call _dbt,dsn))$(_DB_DSN))
+DB_ADMIN = $(or $(_DB_ADMIN),$(eval _DB_ADMIN := $(call _dbt,admin))$(_DB_ADMIN))
+PSQL = psql -q -d "$(DB_DSN)" -v ON_ERROR_STOP=1
 
 setup:           # uv(Python 3.12) · 로컬 .env(난수 비밀) · DB 생성
 	uv python pin 3.12 && uv sync
@@ -15,15 +20,17 @@ setup:           # uv(Python 3.12) · 로컬 .env(난수 비밀) · DB 생성
 	@$(MAKE) --no-print-directory db-create
 	@echo "DB $(DB) 준비됨 — 다음: make db-reset && make gate"
 
-db-create:
-	@psql -h $(PGHOST) -d postgres -Atc "select 1 from pg_database where datname='$(DB)'" | grep -q 1 || createdb -h $(PGHOST) $(DB)
+db-create:       # MES_PG_DSN 의 DB 가 없으면 만든다 (psql 줄은 DSN 비밀번호가 찍히지 않게 숨긴다)
+	@echo "db-create → $(DB)"
+	@psql -d "$(DB_ADMIN)" -Atc "select 1 from pg_database where datname='$(DB)'" | grep -q 1 || psql -q -d "$(DB_ADMIN)" -c 'create database "$(DB)"'
 
-db-schema: db-create   # 스키마를 지우고 다시 만든다 (데이터가 전부 사라진다 — 한 번에 한 사람만). 팩이면 schema_ext.sql 도
-	$(PSQL) -c 'set client_min_messages = warning; drop schema public cascade; create schema public;'
-	$(PSQL) -f src/mescore/db/schema.sql
-	$(PSQL) -f src/mescore/db/views.sql
+db-schema: db-create   # MES_PG_DSN 의 DB 스키마를 지우고 다시 만든다 (데이터가 전부 사라진다 — 한 번에 한 사람만). 팩이면 schema_ext.sql 도
+	@echo "db-schema → $(DB) (drop schema public cascade)"
+	@$(PSQL) -c 'set client_min_messages = warning; drop schema public cascade; create schema public;'
+	@$(PSQL) -f src/mescore/db/schema.sql
+	@$(PSQL) -f src/mescore/db/views.sql
 	@if [ -n "$(PACK)" ] && [ -f packs/$(PACK)/schema_ext.sql ]; then $(PSQL) -f packs/$(PACK)/schema_ext.sql; fi
-	@psql -h $(PGHOST) -d $(DB) -Atc "select '$(DB): 테이블 '||count(*) filter (where table_type='BASE TABLE')||' · 뷰 '||count(*) filter (where table_type='VIEW') from information_schema.tables where table_schema='public'"
+	@psql -d "$(DB_DSN)" -Atc "select '$(DB): 테이블 '||count(*) filter (where table_type='BASE TABLE')||' · 뷰 '||count(*) filter (where table_type='VIEW') from information_schema.tables where table_schema='public'"
 
 db-seed:         # 코어 → 팩(process_params · inspection_items · seeds) → seed_dev1~3 (있는 것만). 두 번 돌려도 행 수가 같아야 한다 (G-C09)
 	uv run python -m mescore.db.seed_core
@@ -37,11 +44,11 @@ pack-new:        # make pack-new NAME=<팩> — packs/_template 복사 (pack.yam
 	sed -i '' 's/^pack: _template/pack: $(NAME)/' packs/$(NAME)/pack.yaml
 	@echo "packs/$(NAME) 생성 — pack.yaml 의 name · company · terms 부터 채운다. 검증: MES_PACK=$(NAME) make pack-check"
 
-pack-db:         # make pack-db NAME=<팩> — 팩 DB 한 벌: createdb + 코어 스키마(+ schema_ext.sql) + 코어 시드 + 팩 시드(seed_core 가 pack.yaml 의 process_params · inspection_items · seeds 를 품는다). 팩이 PackError 면 팩 시드 단계에서 멈춘다
+pack-db:         # make pack-db NAME=<팩> (MES_PG_DSN 을 비우고 mes_<팩>_db 로) — 팩 DB 한 벌: createdb + 코어 스키마(+ schema_ext.sql) + 코어 시드 + 팩 시드(seed_core 가 pack.yaml 의 process_params · inspection_items · seeds 를 품는다). 팩이 PackError 면 팩 시드 단계에서 멈춘다
 	@test -n "$(NAME)" || { echo "NAME=<팩> 이 필요하다"; exit 1; }
 	@test -f packs/$(NAME)/pack.yaml || { echo "packs/$(NAME)/pack.yaml 이 없다"; exit 1; }
-	@MES_PACK=$(NAME) $(MAKE) --no-print-directory db-create db-schema
-	MES_PACK=$(NAME) uv run python -m mescore.db.seed_core
+	@MES_PACK=$(NAME) MES_PG_DSN=postgresql:///mes_$(NAME)_db $(MAKE) --no-print-directory db-create db-schema
+	MES_PACK=$(NAME) MES_PG_DSN=postgresql:///mes_$(NAME)_db uv run python -m mescore.db.seed_core
 	@echo "mes_$(NAME)_db 준비됨 — 다음: MES_PACK=$(NAME) make check-pack test"
 
 pack-check:      # 병합 규칙 R4~R6 (packs.load) — 위반이면 PackError
@@ -97,8 +104,8 @@ erp-flush:       # ifc_outbox 큐 비우기 — 어댑터가 501(D-02)이면 행
 core-hash:       # R1 기준값 outputs/core.sha256 — 아키텍트가 코어를 고친 뒤에만 다시 찍는다
 	uv run python $(TOOLS)/core_hash.py
 
-backup:          # G-C20 — pg_dump → backups/<DB>-<일시>.dump + 테이블별 행 수(.json). backups/ 는 gitignore
+backup:          # G-C20 — MES_PG_DSN 의 DB 를 pg_dump → backups/<DB>-<일시>.dump + 테이블별 행 수(.json). backups/ 는 gitignore
 	uv run python $(TOOLS)/backup.py backup
 
-restore-check:   # G-C20 — 가장 최근 덤프를 별도의 임시 DB 에 복구해 행 수를 대조하고 임시 DB 를 지운다
+restore-check:   # G-C20 — MES_PG_DSN 의 DB 로 뜬 가장 최근 덤프를 별도의 임시 DB 에 복구해 행 수를 대조하고 임시 DB 를 지운다
 	uv run python $(TOOLS)/backup.py restore-check
