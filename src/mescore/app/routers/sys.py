@@ -520,7 +520,7 @@ def run_backup(request: Request, user: rbac.User = rbac.require_fn("F-SYS-13")):
     try:
         with contextlib.redirect_stdout(out):
             rc = tool.backup()
-        dump = tool.latest_dump()
+        dump = tool.latest_dump(tool.conn_params()["dbname"])                                    # 그 DB 의 덤프만 (아키텍트 DEF-QA1-008)
         manifest = json.loads(dump.with_suffix(".json").read_text(encoding="utf-8"))
         counts = manifest.get("tables", {})
         conn.x("update sys_backup_hist set dump_path = %s, row_counts = %s::jsonb, ended_at = now(), ok = %s, message = %s where id = %s",
@@ -529,6 +529,9 @@ def run_backup(request: Request, user: rbac.User = rbac.require_fn("F-SYS-13")):
         conn.x("update sys_backup_hist set ended_at = now(), ok = false, message = %s where id = %s", (str(exc)[:1000], hist_id))
         audit.log_change(request, user, "F-SYS-13", f"sys_backup_hist:{hist_id}", {"ok": False, "error": str(exc)[:300]})
         raise http.validation_error(t("백업이 실패했습니다") + f" — {exc}", fields=[{"name": "backup", "label": t("백업"), "reason": str(exc)[:300]}]) from None
+    except Exception as exc:                                                                     # 예상 밖 오류도 이력은 끝맺는다(ok NULL 로 남기지 않는다) — 500 은 그대로
+        conn.x("update sys_backup_hist set ended_at = now(), ok = false, message = %s where id = %s", (f"{type(exc).__name__}: {exc}"[:1000], hist_id))
+        raise
     audit.log_change(request, user, "F-SYS-13", f"sys_backup_hist:{hist_id}", {"ok": True, "dump": dump.name, "tables": len(counts), "rows": sum(counts.values())})
     return http.saved(request, t("백업을 만들었습니다") + f" — {dump.name} ({t('테이블')} {len(counts)} · {t('행')} {sum(counts.values()):,})", back=BACKUP,
                       data={"id": hist_id, "dump": dump.name, "tables": len(counts), "rows": sum(counts.values()), "ok": True})

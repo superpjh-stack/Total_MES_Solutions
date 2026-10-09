@@ -33,7 +33,9 @@ def test_format_is_prefix_date_seq():
     r = _rule()
     no = numbering.peek(KIND)
     assert no.startswith(r["prefix"]) and numbering.BARCODE_RE.match(no)
-    assert len(no) == len(r["prefix"]) + len(datetime.now().strftime("%y%m%d")) + 1 + r["seq_digits"]   # 'YYMMDD-' = 7 글자
+    head, seq = no.rsplit("-", 1)
+    assert head == r["prefix"] + datetime.now().strftime("%y%m%d")                                     # 'YYMMDD-'
+    assert seq.isdigit() and len(seq) >= r["seq_digits"] and (len(seq) == r["seq_digits"] or not seq.startswith("0"))   # 자릿수 채움 · 넘치면 늘어난다(번호를 버리지 않는다)
 
 
 def test_next_is_peek_then_increments():
