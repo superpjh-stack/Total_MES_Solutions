@@ -5,10 +5,15 @@
 모든 행은 트랜잭션 안에서 넣고 마지막에 되돌린다(DB 에 아무것도 남기지 않는다). `make db-schema` 가 적용돼 있어야 한다.
 """
 
+import time
+from pathlib import Path
+
 import psycopg
 import pytest
 
 from mescore.db import conn
+
+VIEWS_SQL = Path(__file__).resolve().parents[1] / "src" / "mescore" / "db" / "views.sql"
 
 
 class _Rollback(Exception):
@@ -157,10 +162,19 @@ def test_deep_chain_is_recursive(cur):
     assert len(cur.fetchall()) == 24
 
 
+def _current_views(cur) -> str:
+    """이 트랜잭션 안에서만 `views.sql`(코드의 뷰 정의)을 다시 깐다 — 오래된 뷰가 남은 DB(데이터 누적 · 예전 스키마)에서도
+    **코드의 정의**를 판정한다(DEF-QA3-005). 끝나면 되돌림. 고유 접미사도 준다(누적 데이터의 번호와 겹치지 않게)."""
+    cur.execute(VIEWS_SQL.read_text(encoding="utf-8"))
+    return f"{time.time_ns() % 10**10}"
+
+
 def test_product_lot_partial_input_stays_in_stock(cur):
-    """PRODUCT LOT 을 다른 지시에 「투입」 만 하면 잔량으로 판정 — 한 LOT 을 두 통에 나눠 담기 (회전 4 · 개발3 17). 분할 · 합병 · 생산은 통째 소진."""
-    item = _one(cur, "insert into bas_item (item_code, item_name, item_type, created_by) values ('T-PART', '제품 (예시)', '제품', 't') returning id")["id"]
-    src, a, b, c = (_lot(cur, n, "PRODUCT", item) for n in ("T-PT0", "T-PTA", "T-PTB", "T-PTC"))
+    """PRODUCT LOT 을 다른 지시에 「투입」 만 하면 잔량으로 판정 — 한 LOT 을 두 통에 나눠 담기 (회전 4 · 개발3 17). 분할 · 합병 · 생산은 통째 소진.
+    자기 데이터만 본다 — 고유 번호 · 트랜잭션 안 뷰 재적용 (DEF-QA3-005)."""
+    sfx = _current_views(cur)
+    item = _one(cur, "insert into bas_item (item_code, item_name, item_type, created_by) values (%s, '제품 (예시)', '제품', 't') returning id", (f"T-PART-{sfx}",))["id"]
+    src, a, b, c = (_lot(cur, f"{n}-{sfx}", "PRODUCT", item) for n in ("T-PT0", "T-PTA", "T-PTB", "T-PTC"))
 
     def state(lot_id):
         cur.execute("select s.state, k.remain_qty from v_lot_state s join v_lot_stock k on k.lot_id = s.lot_id where s.lot_id = %s", (lot_id,))
@@ -171,9 +185,35 @@ def test_product_lot_partial_input_stays_in_stock(cur):
     assert state(src) == ("재고", 60)
     _edge(cur, src, b, "투입", 60)
     assert state(src) == ("소진", 0)
-    other = _lot(cur, "T-PT1", "PRODUCT", item)
+    other = _lot(cur, f"T-PT1-{sfx}", "PRODUCT", item)
     _edge(cur, other, c, "투입")                     # 수량 모르는 투입 → 소진
     assert state(other)[0] == "소진"
-    whole = _lot(cur, "T-PT2", "PRODUCT", item)
+    whole = _lot(cur, f"T-PT2-{sfx}", "PRODUCT", item)
     _edge(cur, whole, a, "합병", 10)                 # 합병은 수량과 무관하게 통째 소진
     assert state(whole) == ("소진", 90)
+
+
+def test_product_lot_open_input_counts_in_stock(cur):
+    """DEF-QA2-001 — 종료 전 실적의 투입(pop_input)도 PRODUCT 잔량에서 뺀다. 종료되면 계보로 넘어가 한 번만 센다 · 취소는 빼지 않는다."""
+    sfx = _current_views(cur)
+    item = _one(cur, "insert into bas_item (item_code, item_name, item_type, created_by) values (%s, '제품 (예시)', '제품', 't') returning id", (f"T-OPN-{sfx}",))["id"]
+    proc = _one(cur, "insert into bas_process (process_code, process_name, created_by) values (%s, '공정 (예시)', 't') returning id", (f"T-OPN-{sfx}",))["id"]
+    wo = _one(cur, "insert into job_work_order (work_order_no, item_id, process_id, plan_qty, created_by) values (%s, %s, %s, 10, 't') returning id",
+              (f"T-OPN-{sfx}", item, proc))["id"]
+    lot = _lot(cur, f"T-OPN-P-{sfx}", "PRODUCT", item, qty=20)
+    child = _lot(cur, f"T-OPN-C-{sfx}", "PRODUCT", item)
+
+    def result():
+        return _one(cur, "insert into pop_work_result (work_order_id, process_id, created_by) values (%s, %s, 't') returning id", (wo, proc))["id"]
+
+    def remain():
+        return _one(cur, "select remain_qty, consumed_qty from v_lot_stock where lot_id = %s", (lot,))
+
+    e, f = result(), result()
+    cur.execute("insert into pop_input (work_result_id, material_lot_id, qty, created_by) values (%s, %s, 15, 't')", (e, lot))
+    assert remain()["remain_qty"] == 5                          # 열린 실적 E 의 투입 15
+    cur.execute("insert into pop_input (work_result_id, material_lot_id, qty, canceled_yn, created_by) values (%s, %s, 15, 'Y', 't')", (f, lot))
+    assert remain()["remain_qty"] == 5                          # 취소된 투입은 세지 않는다
+    cur.execute("update pop_work_result set ended_at = now() where id = %s", (e,))
+    _edge(cur, lot, child, "투입", 15)                           # 종료 → 계보 투입 15 (lineage 가 하는 일)
+    assert (remain()["remain_qty"], remain()["consumed_qty"]) == (5, 15)
