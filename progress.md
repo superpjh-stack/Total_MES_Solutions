@@ -332,3 +332,14 @@ PASS 27 · FAIL 9 · WARN 0 · BLOCKED 0 · 미검증 6 / 전체 42
 | 오케스트레이터 직접 | `home/main.html` 채널명 `t()` 2곳 · `check_pack` R10 판정(README 기재 시 PASS · D-40) · core-hash 재기록 | `make check-terms` · `check_pack.py` |
 | 남은 사람 결정 | D-501 설비 알람(52→54 · 51→52 · 132→135 vs 표시만) · 운영 HTTPS 여부(세션 쿠키 `Secure` — HTTP 운영 시 로그인 불가) · kimchi S1 P1 양품 1000 vs 850 | `decisions.md` |
 | 다음 | 회전 6: QA 3 재판정(종료 조건 ②③) | — |
+
+## 2026-10-09 회전 7 — 오케스트레이터 (QA 회전 6 결함 수정 판정 · 아키텍트는 네트워크 오류로 판정 직전 중단 → 오케스트레이터가 마무리)
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| **게이트** | **PASS 42 · FAIL 0 · WARN 0 · BLOCKED 0 · 미검증 0 / 42** | `make gate-full` → `outputs/gate-r7-final.txt` |
+| 고친 결함 | QA2-007(종료 합병 자기 투입 −15) · 008(잔량 0 재고 5경로 · `lineage.remaining` 단일화) · 009(동시 실행 잠금) · QA1-011(kimchi 메뉴 「품질 이슈 관리」) · QA3-008(POP/Web 422 입력값 유지 14곳) · 출하 스캔 잔량 0 차단 · kimchi 기대값 정정(D-514~516) | 각 담당 커밋 · QA2 `stock_attack` FAIL 0 |
+| 첫 판정 FAIL 1 | `test_ifc_api::test_erp_log_shows_queue_as_undecided` — D-39 이후 출하 승인마다 ERP 큐가 늘어(230 > 목록 상한 200) 시드 행이 목록 밖으로 밀림. 제품은 정상(최근 200 + 건수). 테스트를 "보이는 대기 행이 전부 미확정 (D-02)" 로 고침(오케스트레이터) | `uv run pytest -q tests/test_ifc_api.py` 4 passed |
+| 미룬 것 | D-43 부분 분할 뷰 반영(`v_lot_state` — 수량 준 분할은 부모 잔량 유지) — 회전 8 | `decisions.md` D-43 |
+| 사람 결정 | D-501 설비 알람 · 운영 HTTPS(LAN HTTP 로 prod 기동 시 로그인 불가 — QA3 재현) | `decisions.md` |
+| 다음 | 회전 8: 아키텍트 D-43 + 개발3 kimchi S4 정합 · QA 3 재확인(회전 7 수정분) | — |

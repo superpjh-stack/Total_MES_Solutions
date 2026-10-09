@@ -59,8 +59,11 @@ def test_erp_log_shows_queue_as_undecided():
     assert r.status_code == 200
     body = r.json()
     assert body["adapter_undecided"] and body["decision"] == "D-02"
-    seed = next(x for x in body["rows"] if x["created_by"] == "seed:dev3")
-    assert "미확정 (D-02)" in seed["display_status"]
+    # 목록은 최신 200건이다 — D-39 이후 출하 승인마다 큐가 한 행씩 늘어 시드 행은 상한 밖으로 밀릴 수 있다.
+    # 판정은 "보이는 대기 행이 전부 미확정 (D-02) 로 표시되는가" 로 한다(데이터가 쌓여도 같은 뜻).
+    waiting = [x for x in body["rows"] if x["status"] in ("대기", "미확정")]
+    assert waiting, "ERP 큐에 대기 행이 없다 — seed_dev3 또는 출하 승인이 큐를 채워야 한다"
+    assert all("미확정 (D-02)" in x["display_status"] for x in waiting)
     assert c.get("/ifc/erp", params={"status": "x"}).status_code == 422
     assert client("field").get("/ifc/erp").status_code == 403
 
