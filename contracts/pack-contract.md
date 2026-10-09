@@ -47,7 +47,8 @@ packs/<팩>/
 | `write_scope` | E4 때 | `{팩 모듈 또는 hooks: [코어 테이블…]}`. 팩 라우터 · 훅이 쓸 수 있는 코어 테이블. `lot_genealogy` 를 넣어도 직접 SQL 은 금지(`lineage` 만) |
 | `hooks` | E5 | 모듈 경로(기본 `hooks.py`). 파일이 없으면 모든 훅이 no-op |
 | `adapters` | E7 | `{printing, erp, collect}` 모듈 경로 또는 `null`(코어 기본) |
-| `seeds[]` | | CSV 경로 순서. 멱등(키 열로 upsert). 파일 이름이 대상을 정한다 — `codes*`(bas_code) · `items*`(bas_item · `attrs.<키>` 열은 attrs 로) · `processes*` · `equipment*` · `partners*`. 그 밖은 `seed_core` 가 거부한다 |
+| `seeds[]` | | CSV 목록. 멱등(키 열로 upsert · 2회 실행 행 수 diff 0). 항목은 둘 중 하나 — ① **문자열**: 파일 이름 접두가 대상을 정한다 `processes*`(bas_process) · `items*`(bas_item) · `equipment*`(bas_equipment) · `partners*` · `workers*` · `defect_codes*`(bas_defect_code) · `codes*`(bas_code) · `kpi_indicators*`(kpi_indicator) · `users*`(계정) — 테이블에 없는 열은 넣지 않고 경고(stderr) ② **`{file, table, key}`**: `table` = `x_<팩>_*` 또는 위 코어 기준정보 테이블, `key` = 유니크 키 열(문자열 · 목록) — 모르는 열은 **오류**. 공통 규칙: 헤더 = 열 이름 · **`attrs.<키>` 열은 attrs 에 합친다**(모든 파일) · 테이블 열이 아닌 `<x>_code` 헤더는 FK 로 푼다(`process_code` → `process_id`, `ink_code` → `ink_formula_id` — 참조 테이블의 단일 열 유니크 · 없는 값은 오류) · 빈 칸은 넣지 않는다 · `note` 열은 테이블에 없으면 뺀다. **적재 순서**: seeds[] 의 공정 → 품목 → 설비 → `process_params` → `inspection_items` → 나머지 seeds[] 선언 순서(참조하는 파일을 뒤에) → 계정. 그 밖 이름은 `seed_core` 가 거부한다 |
+| 계정 | | `roles[]` 의 역할마다 시드 계정 하나(로그인 ID = 역할 코드 소문자 · 코어 4 역할은 `admin prod qa field`) + `seed/users.csv`(열 `login_id,user_name,role_code[,worker_code]`). **비밀번호 열은 없다** — 전부 `MES_SEED_PASSWORD`(G-C19) |
 | `tests` · `gates` | | 폴더 · `gates.yaml` 경로 |
 
 ## 3. `attrs` 와 확장 테이블 — 어디에 두는가 (D-05)

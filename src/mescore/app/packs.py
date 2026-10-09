@@ -36,6 +36,8 @@ PACK_NAME_RE = re.compile(r"^[a-z_][a-z0-9_]*$")
 MODULE_CODE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 PACK_SCREEN_ID_RE = re.compile(r"^X-[A-Z0-9]+-\d{2}$")
 LEVELS = ("없음", "조회", "입력")
+#: `seeds[]` 의 `{file, table, key}` 가 쓸 수 있는 코어 테이블 — 그 밖은 `x_<팩>_*` 만 (CR-9)
+SEED_CORE_TABLES = ("bas_process", "bas_item", "bas_equipment", "bas_partner", "bas_worker", "bas_defect_code", "bas_code", "kpi_indicator")
 #: 채널 — 코드(`web/pop/mobile/board`)와 라벨(`관리자 Web` …) 둘 다 받는다 (pack-contract.md §2). nav.DEVICE_CHANNEL 과 같은 값(nav 가 이 모듈을 import 하므로 여기 둔다)
 CHANNEL_LABEL: dict[str, str] = {"web": "관리자 Web", "pop": "현장 POP", "mobile": "모바일", "board": "현황판"}
 CHANNEL_CODE: dict[str, str] = {v: k for k, v in CHANNEL_LABEL.items()}
@@ -83,7 +85,7 @@ class Pack:
     write_scope: dict[str, list[str]]
     hooks_path: Path | None
     adapters: dict[str, str | None]
-    seeds: list[str]
+    seeds: list[dict]                      # [{file, table(None = 파일 이름으로), key}] (pack-contract.md §2 · CR-9)
     process_params: str | None
     inspection_items: str | None
     tests_dir: str | None
@@ -458,10 +460,22 @@ def load(name: str | None) -> Pack:
         if val and not (pdir / str(val)).exists():
             errs.append(f"adapters.{key} 파일이 없다: {pdir / str(val)}")
         pack.adapters[key] = str(val) if val else None
-    pack.seeds = [str(s) for s in (p.get("seeds") or [])]
-    for s in pack.seeds:
-        if not (pdir / s).exists():
-            errs.append(f"seeds 파일이 없다: {pdir / s}")
+    pack.seeds = []
+    for e in p.get("seeds") or []:
+        if isinstance(e, dict):                  # {file, table, key} — x_<팩>_* · 허용 코어 기준정보 테이블 (CR-9)
+            f, table, key = e.get("file"), str(e.get("table") or ""), e.get("key")
+            keys = [str(k) for k in ([key] if isinstance(key, str) else (key or []))]
+            if not f or not table or not keys:
+                errs.append(f"seeds {e!r} — {{file, table, key}} 셋 다 필요")
+                continue
+            if not (table.startswith(f"x_{name}_") or table in SEED_CORE_TABLES):
+                errs.append(f"seeds {f}: table {table!r} — x_{name}_* 또는 {', '.join(SEED_CORE_TABLES)} 만")
+            entry = {"file": str(f), "table": table, "key": keys}
+        else:
+            entry = {"file": str(e), "table": None, "key": None}
+        if not (pdir / entry["file"]).exists():
+            errs.append(f"seeds 파일이 없다: {pdir / entry['file']}")
+        pack.seeds.append(entry)
     for key in ("process_params", "inspection_items"):
         val = p.get(key)
         if val and not (pdir / str(val)).exists():
@@ -527,7 +541,7 @@ def translate(text: str, terms: Mapping[str, str], terms_sorted: list[tuple[str,
 
 def t(text: str) -> str:
     """용어 치환 (E1 · D-07). 사전에 키가 그대로 있으면 그 값, 아니면 긴 키부터 한 번 훑어 부분 치환(겹말 방지 — `translate`).
-    `menus.rename` 값은 업종어로 쓴 최종 이름(`조리 실적 (POP)`)도, 치환 전 꼴(`실적 (POP)`)도 같은 결과 — 겹말 방지가 이중 치환을 막는다(개발1 ⑤). 사전이 비면 원문."""
+    `menus.rename` 값은 업종어로 쓴 최종 이름(`실적` → `공정 실적` 일 때 `공정 실적 (POP)`)도, 치환 전 꼴(`실적 (POP)`)도 같은 결과 — 겹말 방지가 이중 치환을 막는다(개발1 ⑤). 사전이 비면 원문."""
     if text is None:
         return ""
     pack = current()

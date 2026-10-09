@@ -187,3 +187,18 @@ def test_read_attrs_reads_form_from_request(temp_pack):
     assert "필수" in c.post("/x", data={"attr_due_time": "11:30"}).json()["error"]
     with pytest.raises(TypeError):
         packs.read_attrs(object(), "ord_order")
+
+
+def test_seed_entries_string_or_table_spec(temp_pack):
+    """seeds[] — 문자열(이름 접두) 또는 {file, table, key}. table 은 x_<팩>_* · 허용 코어 기준정보만 (CR-9)."""
+    name = temp_pack("_t_seed", seeds=["seed/codes.csv", {"file": "seed/plates.csv", "table": "x__t_seed_plate", "key": "plate_code"}])
+    (PACKS / name / "seed").mkdir()
+    for f in ("codes.csv", "plates.csv"):
+        (PACKS / name / "seed" / f).write_text("a\n", encoding="utf-8")
+    p = packs.load(name)
+    assert p.seeds == [{"file": "seed/codes.csv", "table": None, "key": None},
+                       {"file": "seed/plates.csv", "table": "x__t_seed_plate", "key": ["plate_code"]}]
+    bad = temp_pack("_t_seed_bad", seeds=[{"file": "seed/x.csv", "table": "sys_user", "key": "login_id"}, {"file": "seed/y.csv"}])
+    with pytest.raises(packs.PackError) as exc:
+        packs.load(bad)
+    assert "sys_user" in str(exc.value) and "셋 다" in str(exc.value)
