@@ -94,6 +94,28 @@ MES_PACK=towel make pack-check
 - **정형 지표** — 재고량 · 생산량 · 출하량 · 입고량 · 불량률 · 작업지시 현황은 API 키 없이도 답합니다.
 - **안전** — SELECT 한 문장만, 읽기 전용 트랜잭션, 5초 · 200행 상한, 역할별 테이블 제한, 질문과 SQL 은 접근 로그에 남습니다.
 
+## 배포 (Docker)
+
+`docker-compose.yml` 은 PostgreSQL 17 · 앱 · Caddy 세 컨테이너를 띄웁니다. Caddy 가 Let's Encrypt 인증서로 HTTPS 를 맡습니다.
+운영 세션 쿠키가 `Secure` 라서 HTTP 로는 로그인되지 않기 때문입니다(D-42 · D-50).
+
+```bash
+MES_DOMAIN=mes.example.com MES_SAMPLE=1 docker compose up -d --build
+docker compose logs app | grep "첫 기동"      # 시드 계정 비밀번호 (첫 기동 때 한 번만 찍힌다)
+```
+
+| 변수 | 뜻 |
+|---|---|
+| `MES_DOMAIN` | **필수.** 이 서버를 가리키는 도메인. Hostinger VPS 는 기본 호스트 이름(`srvNNNN.hstgr.cloud`)을 써도 된다 |
+| `MES_SAMPLE` | `1` 이면 빈 DB 에 샘플 데이터(예시)를 넣고, 기동할 때마다 오늘 날짜 데이터를 하루 한 번 채운다 |
+| `MES_PACK` | 업종 팩. 비우면 코어 단독 |
+| `ANTHROPIC_API_KEY` | AI Agent 자유 질문용 키 (선택) |
+| `MES_SESSION_SECRET` · `MES_SEED_PASSWORD` | 비우면 첫 기동 때 난수로 만들어 볼륨 `appdata` 에 둔다 |
+
+- 서버의 80 · 443 포트가 비어 있어야 하고, 도메인의 DNS A 레코드가 서버 IP 를 가리켜야 인증서가 나옵니다.
+- DB 는 compose 내부망에만 있고 밖으로 열지 않습니다. 데이터는 볼륨 `pgdata` 에 남습니다.
+- 로컬에서 `docker compose` 를 돌리면 저장소의 `.env` 가 값으로 읽힙니다. 운영 서버에는 `.env` 를 두지 않습니다.
+
 ## 검증
 
 ```bash
@@ -128,5 +150,5 @@ outputs/          게이트 산출물 · 코어 해시
 
 ## 아직 정해지지 않은 것
 
-- **운영 HTTPS (D-42)** — 운영 세션 쿠키가 `Secure` 라서 다른 PC 가 `http://<LAN 주소>` 로 열면 로그인되지 않습니다. 리버스 프록시로 HTTPS 를 둘지 사람 결정을 기다립니다.
+- **사내망 HTTP 운영 (D-42)** — Docker 배포는 Caddy HTTPS 로 해결했습니다(D-50). HTTPS 없이 사내망 HTTP 로만 쓰는 경우의 설정은 아직 정하지 않았습니다.
 - **설비 알람 (D-501)** — 테이블을 52 → 54 로 늘릴지 결정을 기다립니다.

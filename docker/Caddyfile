@@ -1,0 +1,5 @@
+# HTTPS 종단 (D-42 · D-50) — MES_DOMAIN 으로 Let's Encrypt 인증서를 자동으로 받는다. 운영 세션 쿠키가 Secure 라서 HTTP 로는 로그인되지 않는다.
+{$MES_DOMAIN} {
+	encode gzip
+	reverse_proxy app:8030
+}

@@ -1,0 +1,73 @@
+# Rodem MES Solution — 운영 배포 (PostgreSQL 17 + 앱 + Caddy HTTPS). 사용법은 README 「배포」.
+#   필수: MES_DOMAIN (이 서버를 가리키는 도메인 — 예: Hostinger VPS 호스트 이름 srvNNNN.hstgr.cloud)
+#   선택: MES_PACK · MES_SAMPLE=1(샘플 데이터) · ANTHROPIC_API_KEY · MES_SESSION_SECRET · MES_SEED_PASSWORD
+#   비밀값을 비우면 첫 기동 때 난수로 만들어 볼륨에 두고, 시드 비밀번호를 앱 로그에 한 번 찍는다.
+name: rodem-mes
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    command: ["postgres", "-c", "timezone=Asia/Seoul"]
+    environment:
+      POSTGRES_DB: mes
+      POSTGRES_USER: mes
+      POSTGRES_HOST_AUTH_METHOD: trust          # DB 는 이 compose 내부망에만 있다 — 포트를 밖으로 열지 않는다
+      TZ: Asia/Seoul
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [mesnet]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "mes", "-d", "mes"]
+      interval: 5s
+      retries: 20
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MES_PG_DSN: postgresql://mes@db:5432/mes
+      MES_ENV: prod
+      MES_PACK: ${MES_PACK:-}
+      MES_ADDONS: ${MES_ADDONS:-agent}
+      MES_SAMPLE: ${MES_SAMPLE:-0}
+      MES_SESSION_SECRET: ${MES_SESSION_SECRET:-}
+      MES_SEED_PASSWORD: ${MES_SEED_PASSWORD:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      MES_PROXY_IP: 172.30.0.10
+      TZ: Asia/Seoul
+    volumes:
+      - appdata:/data
+    networks: [mesnet]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [app]
+    environment:
+      MES_DOMAIN: ${MES_DOMAIN:?MES_DOMAIN 을 지정한다 - 이 서버를 가리키는 도메인}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      mesnet:
+        ipv4_address: 172.30.0.10
+
+volumes:
+  pgdata:
+  appdata:
+  caddy_data:
+  caddy_config:
+
+networks:
+  mesnet:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24

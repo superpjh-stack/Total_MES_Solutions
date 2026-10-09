@@ -28,7 +28,7 @@ N = 100
 
 
 def login(login_id: str, device: str | None = None) -> TestClient:
-    c = TestClient(app, raise_server_exceptions=True)
+    c = TestClient(app, base_url="https://testserver", raise_server_exceptions=True)   # 운영(prod) 세션 쿠키는 Secure
     data = {"login_id": login_id, "password": get_settings().seed_password}
     if device:
         data["device"] = device
