@@ -641,7 +641,7 @@ def _b_e2e(b, base: str, pw: str, fx: dict) -> dict:
         ui.close_popup()
         pg.select_option("#split-form select[name=lot_id]", label=ui.opt("#split-form select[name=lot_id]", mg))
         pg.fill("#split-form input[name=count]", "3")
-        pg.fill("#split-form input[name=qtys]", "30,30,30")
+        pg.fill("#split-form input[name=qtys]", "30,30,40")   # 합 = 합병 100 — 합병 LOT 소진 (D-43 · 코어 시나리오)
         f = ui.submit("split-form")
         ui.close_popup()
         sp = [c for c in pg.locator("main ul.notes li code").all_inner_texts() if c not in (p1, p2, mg)][-3:]

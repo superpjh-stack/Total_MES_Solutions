@@ -343,3 +343,28 @@ PASS 27 · FAIL 9 · WARN 0 · BLOCKED 0 · 미검증 6 / 전체 42
 | 미룬 것 | D-43 부분 분할 뷰 반영(`v_lot_state` — 수량 준 분할은 부모 잔량 유지) — 회전 8 | `decisions.md` D-43 |
 | 사람 결정 | D-501 설비 알람 · 운영 HTTPS(LAN HTTP 로 prod 기동 시 로그인 불가 — QA3 재현) | `decisions.md` |
 | 다음 | 회전 8: 아키텍트 D-43 + 개발3 kimchi S4 정합 · QA 3 재확인(회전 7 수정분) | — |
+
+## 2026-10-09 회전 8 아키텍트 (D-43 부분 분할 반영 — 혼자 도는 회전 · 담당 경계 넘은 수정 목록)
+
+**바꾼 규칙(D-43 확정)** — `v_lot_state` PRODUCT: 출하 → `출하` · **합병 · 생산 부모, 또는 수량 없는(qty NULL) 분할 화살표가 하나라도 있는 부모** → `소진`(통째) · 그 밖(투입 · **수량을 모두 준 분할** · 열린 투입)은 잔량(`v_lot_stock` = `lineage.remaining`)으로 — 잔량 > 0 `재고` · ≤ 0 `소진`(수량 모르는 투입 · LOT 수량 NULL 인데 투입/분할이 있으면 `소진`). 20 → 5+5 는 부모 잔량 10 `재고`. 코어 · 팩 3 · QA 3 DB(7개)에 `create or replace` 재적용.
+
+| 파일 | 소유자 | 바꾼 것 |
+|---|---|---|
+| `src/mescore/db/views.sql` | 아키텍트 | `v_lot_state` 통째 소진 조건에서 수량 있는 분할을 빼고 잔량 판정으로 · LOT 수량 NULL 조건에 `분할` 추가 |
+| `contracts/db-schema.md` §3.3 · §3.4 | 아키텍트 | §3.4 문장 새 규칙 · §3.3 분할 30·30·40(합병 LOT 잔량 0 → 소진) |
+| `contracts/interfaces.md` §4 | 아키텍트(개발2 절) | 「부분 분할은 부모에 잔량」 줄 — 뷰도 같다(회전 8 확정) |
+| `decisions.md` D-43 · D-207 · D-503 | 아키텍트 | D-43 `확정` + 결정 · 고친 곳 · D-207 「분할 계보면 부모 소진」 문장 대체 · D-503 에 부분 분할 줄 |
+| `tests/test_arch_schema.py` | 아키텍트 | 시나리오 분할 30·30·40 · 합병 잔량 0 · ③ 40 · 새 `test_product_lot_partial_split_keeps_remainder`(5+5 → 재고 10 · 다 나눔 → 소진 · 수량 없는 분할 → 소진) |
+| `tests/test_lineage_scenario.py` | 개발2 | 시나리오 `qtys=[30,30,40]` · 잔량 초과 422 를 `[25,20]`(잔량 40) · 팩 N=1 부분 분할 뒤 부모 `재고` 30 단언 추가 |
+| `tests/test_pop_scenario.py` | 개발2 | API 분할 `30,30,40` |
+| `src/mescore/tools/check_data.py` | QA2 | `SQL_MY_STOCK` · `views()` 재구현을 뷰와 같은 규칙(통째 = 합병 · 생산 · qty NULL 분할 / 그 밖 잔량 · 열린 투입 · qty NULL 열린 투입 포함) · 「부분 분할 — 남는 수량」 행 기대 PASS(잔량 10 · 재고) |
+| `src/mescore/tools/check_security.py` | QA3 | E2E 15 분할 `30,30,40`(코어 시나리오와 같게 — 합병 LOT 소진) |
+| `packs/kimchi/gates.yaml` S4 | 기획자3 | `k1_state: 재고` · `k1_leftover_lot: K1` · `genealogy_delta: 1`(D-515) |
+| `packs/kimchi/routers/age.py` | 개발3 | 부분 숙성 = `split(count=1, qtys=[q])` — 잔량 LOT · retag 제거, 응답 `rest` 는 K1 |
+| `packs/kimchi/tests/test_scenario_aging.py` | 개발3 | K1 재고 · rest = K1 · 계보 +1(출하 뒤 +2) · 숙성 화살표 1(600) |
+| `packs/kimchi/README.md` D-515 · 기대값 표 | 기획자3 | 회전 8 반영 · 확정 |
+
+- 코어 시나리오 10행 · 역/정방향 · 분할 ③ 재고 · 합병 LOT 소진은 그대로(합병 100 을 30·30·40 으로 다 나눔).
+- `make core-hash` 재기록 · `uv run pytest -q` 323 passed(322 + 새 1) · 팩 kimchi 26 · foodservice 19 · printfilm 39 passed · `check-routes` G-C03 PASS · `check-terms` G-C23 PASS.
+- **`make gate-full` → `outputs/gate-r8-final.txt`: PASS 42 · FAIL 0 · WARN 0 · BLOCKED 0 · 미검증 0 / 42.**
+- `check_data.py -v`(mes_qa2_db): 「뷰 3 = 내 SQL」 PASS(불일치 0) · 참고 「부분 분할 — 남는 수량」 **PASS**(잔량 10 · 재고 — 회전 6 WARN ② 해소) · 남은 참고 WARN 1 은 「불합격 LOT → 종료 합병 옵션」(QA2 §7-1 판단 대기 · 이번 범위 밖).

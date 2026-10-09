@@ -104,9 +104,14 @@ select l.id, l.kind_base, l.qty,
        (select coalesce(sum(i.qty), 0) from pop_input i join pop_work_result r on r.id = i.work_result_id
          where i.material_lot_id = l.id and i.canceled_yn = 'N' and r.ended_at is null) as open_input_qty,
        (select count(*) from lot_genealogy g where g.parent_lot_id = l.id and g.relation_base = '출하') as n_ship_out,
-       (select count(*) from lot_genealogy g where g.parent_lot_id = l.id and g.relation_base in ('분할', '합병', '생산')) as n_whole,
-       (select count(*) from lot_genealogy g where g.parent_lot_id = l.id and g.relation_base = '투입') as n_input,
-       (select count(*) from lot_genealogy g where g.parent_lot_id = l.id and g.relation_base = '투입' and g.qty is null) as n_input_noqty
+       (select count(*) from lot_genealogy g where g.parent_lot_id = l.id
+          and (g.relation_base in ('합병', '생산') or (g.relation_base = '분할' and g.qty is null))) as n_whole,
+       (select count(*) from lot_genealogy g where g.parent_lot_id = l.id and g.relation_base in ('투입', '분할')) as n_input,
+       (select count(*) from lot_genealogy g where g.parent_lot_id = l.id and g.relation_base = '투입' and g.qty is null) as n_input_noqty,
+       (select count(*) from pop_input i join pop_work_result r on r.id = i.work_result_id
+         where i.material_lot_id = l.id and i.canceled_yn = 'N' and r.ended_at is null) as n_open,
+       (select count(*) from pop_input i join pop_work_result r on r.id = i.work_result_id
+         where i.material_lot_id = l.id and i.canceled_yn = 'N' and r.ended_at is null and i.qty is null) as n_open_noqty
   from lot l"""
 SQL_MY_WO = """
 select w.id, w.status,
@@ -937,9 +942,12 @@ class Core:
             elif r["kind_base"] == "PRODUCT" and r["n_ship_out"]:
                 st = "출하"
             elif r["kind_base"] == "PRODUCT" and r["n_whole"]:
-                st = "소진"                                                     # 분할 · 합병 · 생산 — LOT 통째
-            elif r["kind_base"] == "PRODUCT" and r["n_input"]:
-                st = "소진" if (r["qty"] is None or remain <= 0 or r["n_input_noqty"]) else "재고"   # 부분 투입은 잔량으로 (§3.4 회전 4)
+                st = "소진"                                                     # 합병 · 생산 · 수량 없는 분할 — LOT 통째
+            elif r["kind_base"] == "PRODUCT":
+                # 그 밖은 잔량으로 — 부분 투입(§3.4 회전 4) · 열린 투입(D-41) · 수량을 모두 준 분할(D-43 회전 8)
+                used = r["n_input"] or r["n_open"]
+                st = "소진" if ((r["qty"] is not None and remain <= 0) or r["n_input_noqty"] or r["n_open_noqty"]
+                               or (r["qty"] is None and used)) else "재고"
             elif r["kind_base"] == "MATERIAL" and r["qty"] is not None and remain <= 0:
                 st = "소진"
             else:
@@ -1150,12 +1158,12 @@ class Core:
              f"불합격 LOT 을 merge_lot_ids 로 → {rm.status_code} · 새 LOT insp_status {launder} — interfaces.md §4 「make_product_lot 의 새 LOT 은 늘 미검사」 대로지만 "
              f"lineage.merge 로 합치면 불합격을 잇고 출하 422 인 것과 달리, 이 길로는 불합격 이력이 자식 판정에서 사라진다(코어 출하 검사는 자기 LOT 만 본다)")
 
-        # A5 — 분할 수량 합 < 잔량: 상태 소진인데 v_lot_stock 잔량 > 0 (분할 = LOT 통째 · §3.4)
+        # A5 — 분할 수량 합 < 잔량: 부분 분할은 부모에 잔량을 남기고 재고(D-43 · §3.4 회전 8). 잔량 10 · 재고가 아니면 WARN
         y = lot("20")
         rp = prod.c.post(f"{P['POP-02']}/{start()}/split", data={"count": "2", "lot_id": str(y["lot_id"]), "qtys": "5,5"})
         sy = stock(y["lot_id"])
-        info("G-C04 부분 분할 — 남는 수량", WARN if rp.status_code == 200 and sy[2] == "소진" and (sy[1] or 0) > 0 else PASS,
-             f"LOT 20 → 분할 5+5 → {rp.status_code} · v_lot_stock 잔량 {sy[1]} · 상태 {sy[2]} — 분할은 LOT 통째(소진)라 남는 10 이 재고에서 사라진다(팩 분할 계열 N≥1 도 같다)")
+        info("G-C04 부분 분할 — 남는 수량", PASS if rp.status_code == 200 and sy[2] == "재고" and close(sy[1] or 0, 10) else WARN,
+             f"LOT 20 → 분할 5+5 → {rp.status_code} · v_lot_stock 잔량 {sy[1]} · 상태 {sy[2]} — 기대 잔량 10 · 재고(D-43 — 수량을 모두 준 분할은 잔량으로 판정)")
 
     # ── G-C10 집계 재계산 ─────────────────────────────────────────────
     def stats_recalc(self) -> None:

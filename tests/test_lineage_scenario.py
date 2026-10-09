@@ -59,7 +59,7 @@ def scenario(cur) -> dict:
     p1 = lineage.make_product_lot(cur, work_result_id=r1["id"], by=BY)
     p2 = lineage.make_product_lot(cur, work_result_id=r2["id"], by=BY)
     mg = lineage.merge(cur, parent_ids=[p1["id"], p2["id"]], by=BY)
-    s = lineage.split(cur, parent_id=mg["id"], count=3, by=BY, qtys=[30, 30, 30])
+    s = lineage.split(cur, parent_id=mg["id"], count=3, by=BY, qtys=[30, 30, 40])   # 합 = 합병 100 — 잔량 0 → 합병 LOT 소진 (D-43)
     ship = new_shipment(cur)
     lineage.ship(cur, shipment_id=ship["id"], lot_id=s[0]["id"], by=BY)
     lineage.ship(cur, shipment_id=ship["id"], lot_id=s[1]["id"], by=BY)
@@ -145,7 +145,7 @@ def test_guards_422(cur):
         lineage.merge(cur, parent_ids=[s3], by=BY)                       # 코어 합병은 2 이상
     assert ex.value.status_code == 422
     with pytest.raises(HTTPException) as ex:
-        lineage.split(cur, parent_id=s3, count=2, by=BY, qtys=[20, 20])  # 잔량 30 초과
+        lineage.split(cur, parent_id=s3, count=2, by=BY, qtys=[25, 20])  # 잔량 40 초과
     assert ex.value.status_code == 422
     # 출하 취소 → 다시 재고 → 다시 출하
     assert lineage.unship(cur, shipment_id=e["ship"]["id"], lot_id=e["s"][0]["id"], by=BY) == 1
@@ -288,6 +288,8 @@ def test_pack_relation_merge_and_split_allow_one(cur, monkeypatch):
         lineage.split(cur, parent_id=one["id"], count=0, by=BY, relation="나눠담기")
     part = lineage.split(cur, parent_id=one["id"], count=1, by=BY, qtys=[10], relation="나눠담기")   # 팩 base 분할 N = 1 (부분)
     assert len(part) == 1 and float(part[0]["qty"]) == 10.0
+    after = lineage.node(one["id"], cur)                                                        # 부분 분할 — 남는 30 은 부모 재고 (D-43)
+    assert (after.state, float(after.remain_qty)) == ("재고", 30.0)
 
 
 @pytest.mark.parametrize("parents, expect", [

@@ -42,7 +42,7 @@ def test_core_scenario_through_api_is_10_rows():
     p2 = _run(c, wo, [(m1["lot_no"], 50), (m2["lot_no"], 50)], 50)
     mg = c.post(f"{POP02}/{p2['result_id']}/merge", data={"lot_ids": f"{p1['lot_no']},{p2['lot_no']}"}).json()
     assert mg["ok"] and mg["qty"] == 100
-    sp = c.post(f"{POP02}/{p2['result_id']}/split", data={"lot_id": mg["id"], "count": 3, "qtys": "30,30,30"}).json()
+    sp = c.post(f"{POP02}/{p2['result_id']}/split", data={"lot_id": mg["id"], "count": 3, "qtys": "30,30,40"}).json()
     assert sp["ok"] and len(sp["lots"]) == 3
     s1, s2, s3 = sp["lots"]
     ship = new_shipment()

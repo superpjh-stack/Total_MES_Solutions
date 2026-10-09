@@ -55,12 +55,12 @@ def _scenario(cur) -> dict:
     m1, m2 = _lot(cur, "T-M1", "MATERIAL", raw), _lot(cur, "T-M2", "MATERIAL", raw)
     p1, p2 = _lot(cur, "T-P1", "PRODUCT", prd, 50), _lot(cur, "T-P2", "PRODUCT", prd, 50)
     mg = _lot(cur, "T-MG", "PRODUCT", prd, 100)
-    s1, s2, s3 = (_lot(cur, f"T-S{i}", "PRODUCT", prd, 30) for i in (1, 2, 3))
+    s1, s2, s3 = (_lot(cur, f"T-S{i}", "PRODUCT", prd, q) for i, q in ((1, 30), (2, 30), (3, 40)))   # 분할 30·30·40 = 합병 100 (D-43)
     x = _lot(cur, "T-X1", "SHIPMENT", None, 60, shipment=ship)
     _edge(cur, m1, p1, "투입", 50); _edge(cur, m1, p2, "투입", 50); _edge(cur, m2, p2, "투입", 50)
     _edge(cur, p1, mg, "합병", 50); _edge(cur, p2, mg, "합병", 50)
-    for s in (s1, s2, s3):
-        _edge(cur, mg, s, "분할", 30)
+    for s, q in ((s1, 30), (s2, 30), (s3, 40)):
+        _edge(cur, mg, s, "분할", q)
     _edge(cur, s1, x, "출하", 30); _edge(cur, s2, x, "출하", 30)
     return {"m": [m1, m2], "p": [p1, p2], "mg": mg, "s": [s1, s2, s3], "x": x, "ship": ship}
 
@@ -118,7 +118,7 @@ def test_forward_trace_and_lot_state_view(cur):
                      "T-M1": "재고", "T-M2": "재고"}
     cur.execute("select lot_no, remain_qty from v_lot_stock where lot_no in ('T-MG', 'T-S3')")
     remain = {r["lot_no"]: r["remain_qty"] for r in cur.fetchall()}
-    assert remain["T-MG"] == 10 and remain["T-S3"] == 30
+    assert remain["T-MG"] == 0 and remain["T-S3"] == 40       # 합병 100 을 30·30·40 으로 다 나눔 → 잔량 0 → 소진 (D-43)
 
 
 def test_self_reference_and_cycle_are_rejected(cur):
@@ -170,7 +170,7 @@ def _current_views(cur) -> str:
 
 
 def test_product_lot_partial_input_stays_in_stock(cur):
-    """PRODUCT LOT 을 다른 지시에 「투입」 만 하면 잔량으로 판정 — 한 LOT 을 두 통에 나눠 담기 (회전 4 · 개발3 17). 분할 · 합병 · 생산은 통째 소진.
+    """PRODUCT LOT 을 다른 지시에 「투입」 만 하면 잔량으로 판정 — 한 LOT 을 두 통에 나눠 담기 (회전 4 · 개발3 17). 합병 · 생산 · 수량 없는 분할은 통째 소진(D-43).
     자기 데이터만 본다 — 고유 번호 · 트랜잭션 안 뷰 재적용 (DEF-QA3-005)."""
     sfx = _current_views(cur)
     item = _one(cur, "insert into bas_item (item_code, item_name, item_type, created_by) values (%s, '제품 (예시)', '제품', 't') returning id", (f"T-PART-{sfx}",))["id"]
@@ -191,6 +191,26 @@ def test_product_lot_partial_input_stays_in_stock(cur):
     whole = _lot(cur, f"T-PT2-{sfx}", "PRODUCT", item)
     _edge(cur, whole, a, "합병", 10)                 # 합병은 수량과 무관하게 통째 소진
     assert state(whole) == ("소진", 90)
+
+
+def test_product_lot_partial_split_keeps_remainder(cur):
+    """D-43(회전 8) — 분할 화살표가 전부 수량을 가지면 투입처럼 잔량으로 판정한다(20 → 5+5 는 잔량 10 `재고`).
+    수량을 다 나누면 잔량 0 → `소진`. 수량 없는 분할 화살표가 하나라도 있으면 LOT 통째 `소진`."""
+    sfx = _current_views(cur)
+    item = _one(cur, "insert into bas_item (item_code, item_name, item_type, created_by) values (%s, '제품 (예시)', '제품', 't') returning id", (f"T-PS-{sfx}",))["id"]
+    part, full, whole = (_lot(cur, f"{n}-{sfx}", "PRODUCT", item, qty=20) for n in ("T-PS-P", "T-PS-F", "T-PS-W"))
+    kids = [_lot(cur, f"T-PS-C{i}-{sfx}", "PRODUCT", item, qty=5) for i in range(5)]
+
+    def state(lot_id):
+        r = _one(cur, "select s.state, k.remain_qty from v_lot_state s join v_lot_stock k on k.lot_id = s.lot_id where s.lot_id = %s", (lot_id,))
+        return r["state"], r["remain_qty"]
+
+    _edge(cur, part, kids[0], "분할", 5); _edge(cur, part, kids[1], "분할", 5)
+    assert state(part) == ("재고", 10)                   # 부분 분할 — 남는 10 은 부모 재고
+    _edge(cur, full, kids[2], "분할", 5); _edge(cur, full, kids[3], "분할", 15)
+    assert state(full) == ("소진", 0)                    # 다 나눔 → 잔량 0 → 소진
+    _edge(cur, whole, kids[4], "분할")                   # 수량 없는 분할 = LOT 통째
+    assert state(whole)[0] == "소진"
 
 
 def test_product_lot_open_input_counts_in_stock(cur):

@@ -1,9 +1,9 @@
 """S4 — 숙성 투입(split 숙성 · AGING) → 예정일 전 출하 거부 → 완료 후 출하 → 역추적 (gates.yaml S4 · 개발3).
 
-K1(1000) → X-AGE-01 숙성 600 → `lineage.split(count=2, qtys=[600, 400], relation=숙성, kind=AGING)` + 잔량 LOT `retag(PRODUCT)`
-(코어 split 이 N ≥ 2 라 잔량도 새 LOT — README 구현 메모 · 코어 변경 요청). 계보 +2(숙성 2) · 출하 +1.
-회전 7 기대값(D-515 · gates.yaml S4): aging_qty 600 · k1_leftover_qty 400 · k1_leftover_state 재고 · k1_state 소진 · k1_leftover_lot 새 LOT ·
-genealogy_delta 2 · backward_materials 2 (이 테스트의 K1 은 양념 M2 · M3 로만 만든다).
+K1(1000) → X-AGE-01 숙성 600 → `lineage.split(count=1, qtys=[600], relation=숙성, kind=AGING)` — 남는 400 은 K1 자신의 잔량(부분 분할 · D-43 회전 8).
+계보 +1(숙성 1) · 출하 +1.
+회전 8 기대값(D-515 「잔량 유지」 · gates.yaml S4): aging_qty 600 · k1_leftover_qty 400 · k1_leftover_state 재고 · k1_state 재고 · k1_leftover_lot K1 ·
+genealogy_delta 1 · backward_materials 2 (이 테스트의 K1 은 양념 M2 · M3 로만 만든다).
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ def test_s4_aging():
     prod, qa, field = client("prod"), client("qa"), client("field", device="mobile")
     k1 = _packed_lot(prod, qa, 1000)
     g_before = conn.q1("select count(*) as n from lot_genealogy")["n"]
-    # 숙성 투입 600 → A1 AGING · 예정 +21 (품목 기준 없음 · D-511) · 잔량 400 은 포장 LOT 재고
+    # 숙성 투입 600 → A1 AGING · 예정 +21 (품목 기준 없음 · D-511) · 잔량 400 은 K1 자신에 재고로 (D-515 · D-43)
     r = field.post("/age/stock", data={"barcode": k1["lot_no"], "qty": 600, "equipment_id": equip_id("CR-02")})
     assert r.status_code == 200, r.text
     a1 = r.json()
@@ -42,11 +42,12 @@ def test_s4_aging():
     a1_row = lot_by_no(a1["lot_no"])
     assert a1_row["kind"] == "AGING" and a1_row["kind_base"] == "PRODUCT" and float(a1_row["qty"]) == 600 and a1_row["state"] == "재고" and a1_row["insp_status"] == "합격"
     rest = lot_by_no(a1["rest"]["lot_no"])
-    assert rest["kind"] == "PRODUCT" and float(rest["remain_qty"]) == 400 and rest["state"] == "재고"
-    assert lot_row(k1["lot_id"])["state"] == "소진"
-    assert conn.q1("select count(*) as n from lot_genealogy")["n"] == g_before + 2
-    rel = conn.q("select relation, relation_base from lot_genealogy where parent_lot_id = %s order by id", (k1["lot_id"],))
-    assert [x["relation"] for x in rel] == ["숙성", "숙성"] and {x["relation_base"] for x in rel} == {"분할"}
+    assert rest["lot_no"] == k1["lot_no"]                                                                         # k1_leftover_lot K1
+    assert rest["kind"] == "PRODUCT" and float(rest["remain_qty"]) == 400 and rest["state"] == "재고"             # k1_leftover_qty · state
+    assert lot_row(k1["lot_id"])["state"] == "재고"                                                               # k1_state 재고
+    assert conn.q1("select count(*) as n from lot_genealogy")["n"] == g_before + 1                                # genealogy_delta 1
+    rel = conn.q("select relation, relation_base, qty from lot_genealogy where parent_lot_id = %s order by id", (k1["lot_id"],))
+    assert [x["relation"] for x in rel] == ["숙성"] and {x["relation_base"] for x in rel} == {"분할"} and float(rel[0]["qty"]) == 600
     ext = conn.q1("select * from x_kimchi_lot_ext where id = %s", (a1["id"],))
     assert ext["shippable_yn"] == "N" and ext["location_equipment_id"] == equip_id("CR-02") and ext["aging_start_date"] == date.today()
     stock = field.get("/age/stock").json()
@@ -67,7 +68,7 @@ def test_s4_aging():
     assert prod.post(f"/age/stock/{a1['id']}/complete", data={"reason": "x"}).status_code == 422                # 두 번 완료 불가
     ok = approve(prod, s["id"])
     assert ok.status_code == 200, ok.text
-    assert conn.q1("select count(*) as n from lot_genealogy")["n"] == g_before + 3
+    assert conn.q1("select count(*) as n from lot_genealogy")["n"] == g_before + 2
     # 역추적 S(A1) — 원재료 2 (양념) + 배추 없음(이 테스트는 절임통 생략) · AGING 노드
     bw = prod.get("/trc/backward", params={"no": shipment_lot_no(s["id"])}).json()
     assert sorted(n["no"] for n in bw["materials"]) == sorted(k1["materials"]) and len(bw["materials"]) == 2     # backward_materials 2

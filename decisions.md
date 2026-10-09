@@ -240,6 +240,7 @@
 
 ## D-503 `lineage.split/merge` 에 `process_id · equipment_id · attrs` 인자 · 상태: 가설
 - printfilm CR-2. `make_product_lot` 은 받는데 둘은 안 받아 후가공 · 슬리팅 롤의 공정 · 설비를 같은 `tx` 에서 따로 `update lot` 해야 했다. **개발2 R1 에서 인자를 넣는다**(`interfaces.md` §4 갱신). 코어 변경이 아니라 R1 구현 범위.
+- 회전 8(D-43): `split(qtys=…)` 로 수량을 **모두** 준 분할(팩 분할 계열 N ≥ 1 포함)은 부모에 남는 양을 잔량으로 두고 `v_lot_state` 도 그 잔량으로 판정한다(> 0 → `재고`). 수량을 하나라도 비우면 LOT 통째 분할 → 부모 `소진`.
 
 ## D-504 팩 ext 행을 같은 트랜잭션에 쓰는 훅 자리 · 상태: 가설
 - foodservice ⑤ · printfilm(on_result_closed 에서 ext). `validate_<table>` 은 저장 전이라 새 행의 `id` 가 없다. **`after_save_<table>(cur, row, user)`** 훅을 추가한다(저장 직후 · 같은 tx · `row["id"]` 있음). `interfaces.md` §9 · `pack-contract.md` §5 에 추가 — 아키텍트 웨이브 D, 개발 R2 라우터는 `packs.hook("after_save_<table>")` 호출 자리를 미리 둔다.
@@ -313,7 +314,7 @@
 - 개발3 kimchi 가 화면에 `미확정 (D-206)` 으로 쓴 번호를 대장에 둔다(개발2 대역이지만 이미 화면에 찍혀 있어 그대로). 염도 센서가 어느 절임통 배치에 붙는지(`SENSOR_TO_TANK`)는 현장 값 — 사람이 정할 때까지 알람의 `lot_id` 는 비운다. D-501 이 승인되면 `on_alarm_raised` 훅 안의 규칙이 된다.
 
 ## D-207 팩 분할 · 합병 관계는 N ≥ 1 (코어 `분할` · `합병` 은 N ≥ 2) · 상태: 가설
-- 개발2 회전 4(개발3 15). 팩 base 분할 1 → 1 은 **부분 분할**(잔량은 부모에 남음). 부모 상태는 `v_lot_state` 규칙대로 — 분할 계보가 생기면 부모는 `소진`(통째) 이다. 잔량을 재고로 두려면 「투입」 관계(잔량 판정 · 회전 4 `views.sql`)를 쓰거나 남는 양을 자식 하나로 나눈다. 코어 시나리오 10행 불변. **회전 7**: `lineage.split` 은 수량을 모두 준 분할의 남는 양을 부모 잔량으로 둔다(개발2) — 뷰 반영은 D-43(회전 8).
+- 개발2 회전 4(개발3 15). 팩 base 분할 1 → 1 은 **부분 분할**(잔량은 부모에 남음). 부모 상태는 `v_lot_state` 규칙대로 — ~~분할 계보가 생기면 부모는 `소진`(통째)~~ **회전 8(D-43 확정)**: 분할 화살표가 전부 수량을 가지면 부모는 잔량으로 판정(잔량 > 0 → `재고` · 0 → `소진`), 수량 없는 분할 화살표가 하나라도 있으면 통째 `소진`. 코어 시나리오 10행 불변. **회전 7**: `lineage.split` 은 수량을 모두 준 분할의 남는 양을 부모 잔량으로 둔다(개발2) — 뷰 반영은 회전 8 에 끝남(D-43).
 
 ## D-208 분할 · 합병 자식의 `insp_status` 상속 `lineage.inherit_insp` · 상태: 가설
 - 개발2 회전 4(개발3 16). 전부 합격 → 합격 · 불합격 하나라도 → 불합격 · 미검사 하나라도 → 미검사 · 그 밖(합격 + 조건부) → 조건부 · 부모 하나면 그 값. 팩의 `update lot set insp_status` 우회를 없앤다.
@@ -372,9 +373,12 @@
 - 사람이 정할 것: HTTPS 로 갈지 · TLS 를 어디서 끊을지(프록시 · 인증서) · HTTP 운영을 허용할지(②를 코드에 넣을지). 결정 전에는 **코드에 넣지 않는다** — 운영 문서(`CLAUDE.md` 환경 절)에 제안만.
 - 바뀌면 고칠 곳(② 채택 시): `app/settings.py` · `app/main.py`(`https_only`) · `.env.example` · `tests/test_arch_smoke.py::test_logout_is_post_only_and_cookie_flags`.
 
-## D-43 부분 분할(수량을 모두 준 분할)의 부모 상태를 잔량으로 — `v_lot_state` 반영은 회전 8 · 상태: 가설(미룸)
+## D-43 부분 분할(수량을 모두 준 분할)의 부모 상태를 잔량으로 — `v_lot_state` 반영 · 상태: 확정(회전 8 아키텍트)
 - 개발2 회전 7(`3fcc668` · interfaces §4): `lineage.split` 이 수량을 모두 준 분할(20 → 5+5)은 남는 10 을 부모 잔량으로 둔다. 짝이 되는 뷰 규칙 — 「분할 화살표가 전부 수량을 가지면 투입처럼 잔량으로(잔량 > 0 → 재고) · 수량 없는 분할 · 합병 · 생산은 통째 소진」 — 을 회전 7 아키텍트가 `views.sql` 에 넣어 돌려 보았다.
 - 결과: 코어 시나리오가 깨진다 — `test_lineage_scenario` 의 합병 100 → 분할 30·30·30 은 합병 LOT 이 잔량 10 `재고` 가 되어 `test_forward_trace_and_states` · `test_guards_422`(소진된 LOT 재분할 422) · `test_pop_scenario::test_core_scenario_through_api_is_10_rows` 4건 FAIL. QA2 `check_data` G-C04 · G-C07 뷰 재구현(「분할 = 통째 소진」)과 kimchi S4 기대값(`k1_state: 소진` · 잔량 400 새 LOT · D-515)도 현행 규칙을 적고 있다. 이번 회전 종료 판정을 깨지 않으려고 **뷰는 현행 유지**(분할 화살표 하나라도 있으면 부모 `소진`).
 - 지금 상태: 쓰기 경로는 잔량을 남기지만 뷰는 부모를 `소진` 으로 본다 — 남는 수량은 재고 화면에서 보이지 않고 다시 쓸 수도 없다(QA2 참고 WARN 「부분 분할 — 남는 수량」 그대로). 거짓 「재고」 는 생기지 않는다(안전한 쪽).
 - 회전 8 할 일: ① `views.sql` 위 규칙 + `db-schema.md` §3.4 문장 + `test_arch_schema` ② 코어 시나리오 분할 수량을 30·30·40(합 = 합병 100)으로 바꾸거나 기대값을 「합병 잔량 10 재고」 로(개발2 · `db-schema.md` §3.3 표와 맞춤) ③ QA2 `check_data` 재구현 ④ kimchi S4 「잔량 유지」(K1 재고 · 1 LOT — 기획자3 · 개발3). D-207 의 「분할 계보가 생기면 부모는 소진」 문장은 그때 바꾼다.
 - 바뀌면 고칠 곳: `db/views.sql` · `contracts/db-schema.md` §3.4 · `contracts/interfaces.md` §4 · `tests/test_lineage_scenario.py` · `tests/test_pop_scenario.py` · `tools/check_data.py` · `packs/kimchi/gates.yaml` S4.
+- **회전 8 결정(확정)**: `v_lot_state` PRODUCT — 출하 → `출하` · **합병 · 생산 부모, 또는 수량 없는(qty NULL) 분할 화살표가 하나라도 있는 부모** → `소진`(통째) · 그 밖(투입 · 수량을 모두 준 분할 · 열린 투입 · 아무것도 없음)은 잔량(`v_lot_stock` = `lineage.remaining`)으로 — 잔량 ≤ 0 · 수량 모르는 투입 · LOT 수량 NULL 인데 투입/분할이 있으면 `소진`, 아니면 `재고`. 20 → 5+5 는 부모 잔량 10 `재고`.
+- 코어 시나리오: 합병 100 → 분할 **30·30·40**(합 = 합병 수량 · `db-schema.md` §3.3) — 합병 LOT 잔량 0 → `소진` · 10행 · 역/정방향 · 분할 ③ 재고 그대로. 기대값을 낮춘 것이 아니라 시나리오가 합병 LOT 을 다 나누도록 맞춘 것(수량 없는 1:3 이면 통째 소진 규칙으로 같은 결과).
+- 고친 곳(회전 8): `db/views.sql` · `db-schema.md` §3.4 · `interfaces.md` §4 · D-207 · D-503 · `tests/test_arch_schema.py`(시나리오 30·30·40 · 새 `test_product_lot_partial_split_keeps_remainder`) · `tests/test_lineage_scenario.py`(30·30·40 · 잔량 초과 25+20 · 팩 N=1 부분 분할 부모 재고) · `tests/test_pop_scenario.py`(30,30,40) · `tools/check_data.py`(뷰 재구현 · 부분 분할 행 기대 PASS) · `tools/check_security.py`(E2E 분할 30,30,40) · kimchi `gates.yaml` S4 · `routers/age.py`(`split(count=1)`) · `tests/test_scenario_aging.py` · `README.md` D-515. 7 DB 에 `create or replace` 재적용.

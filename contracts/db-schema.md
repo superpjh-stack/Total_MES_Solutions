@@ -85,7 +85,7 @@ DB `mes_core_db` (PostgreSQL 17) · 테이블 **52** (bas 10 · ord 4 · job 2 �
 | 9 | 분할 LOT ① | 출하 LOT | 출하 |
 | 10 | 분할 LOT ② | 출하 LOT | 출하 |
 
-투입 3 + 합병 2 + 분할 3 + 출하 2 = **10**. 분할 LOT ③ 은 부모로 나오는 행이 없다 → `v_lot_state = 재고`. `printfilm` 팩은 같은 모양에서 relation 이름만 `splice` · `슬리팅` 이고 kind 가 `ROLL` 이다 — 추적 SQL 은 `relation_base` 만 보므로 **같은 쿼리**가 돈다.
+투입 3 + 합병 2 + 분할 3 + 출하 2 = **10**. 분할 LOT ③ 은 부모로 나오는 행이 없다 → `v_lot_state = 재고`. 분할 수량은 30·30·40(합 = 합병 100)이라 합병 LOT 은 잔량 0 → `소진`(§3.4 · D-43). `printfilm` 팩은 같은 모양에서 relation 이름만 `splice` · `슬리팅` 이고 kind 가 `ROLL` 이다 — 추적 SQL 은 `relation_base` 만 보므로 **같은 쿼리**가 돈다.
 
 - 행이 더 생기지 않는 이유: 출하 LOT 목록을 따로 담는 테이블이 없고(계보 한 줄이 곧 "실렸다"), 투입 스캔은 `pop_input` 에 있다가 LOT 이 만들어질 때 한 번만 옮겨진다.
 - 행이 덜 생기지 않는 이유: 원재료 ① 이 두 생산 LOT 에 들어간 것은 실적 2건의 투입 2건이고, 유니크 키가 `(부모, 자식, relation)` 이라 같은 부모가 다른 자식의 부모가 되는 것은 막지 않는다.
@@ -93,7 +93,7 @@ DB `mes_core_db` (PostgreSQL 17) · 테이블 **52** (bas 10 · ord 4 · job 2 �
 
 ### 3.4 상태 · 잔량 뷰
 
-- `v_lot_state(lot_id, state)` — SHIPMENT 는 `출하`; PRODUCT 는 자식 쪽에 `출하` 행이 있으면 `출하`, `분할|합병|생산` 의 **부모**로 나오면 `소진`(LOT 통째), 그 밖(투입만 · 열린 투입만 · 아무것도 없음)은 **잔량**(`v_lot_stock` — 계보 + 종료 전 실적의 투입)으로 — 잔량 ≤ 0 · 수량 모르는 투입(계보 qty NULL 또는 열린 `pop_input.qty` NULL) · LOT 수량 NULL 인데 투입이 있으면 `소진`, 아니면 `재고`(부분 투입 · 회전 4). **열린 투입으로 잔량 0 이면 종료 전이라도 `소진`**(회전 7 · D-41 · DEF-QA2-008) — 취소하면 다시 `재고`; MATERIAL 은 잔량 0 이면 `소진`.
+- `v_lot_state(lot_id, state)` — SHIPMENT 는 `출하`; PRODUCT 는 자식 쪽에 `출하` 행이 있으면 `출하`, `합병|생산` 의 **부모**이거나 **수량 없는(qty NULL) `분할` 화살표**의 부모이면 `소진`(LOT 통째), 그 밖(투입 · **수량을 모두 준 분할**(부분 분할 — 회전 8 · D-43 확정) · 열린 투입 · 아무것도 없음)은 **잔량**(`v_lot_stock` — 계보 + 종료 전 실적의 투입 · `lineage.remaining` 과 같은 문장)으로 — 잔량 ≤ 0 · 수량 모르는 투입(계보 qty NULL 또는 열린 `pop_input.qty` NULL) · LOT 수량 NULL 인데 투입 · 분할이 있으면 `소진`, 아니면 `재고`(부분 투입 · 회전 4 / 부분 분할 20 → 5+5 는 잔량 10 `재고` · 회전 8). 코어 시나리오의 분할은 30·30·40 = 합병 100 이라 합병 LOT 은 잔량 0 → `소진`(§3.3). **열린 투입으로 잔량 0 이면 종료 전이라도 `소진`**(회전 7 · D-41 · DEF-QA2-008) — 취소하면 다시 `재고`; MATERIAL 은 잔량 0 이면 `소진`.
 - `v_lot_stock(lot_id, qty, consumed_qty, remain_qty)` — MATERIAL: `lot.qty` − Σ`pop_input.qty`(취소 제외). PRODUCT: `lot.qty` − Σ 자식 계보 `qty` − Σ **종료 전 실적**(`pop_work_result.ended_at IS NULL`)의 `pop_input.qty`(취소 제외 — 회전 5 · DEF-QA2-001). 종료되면 그 투입은 계보 `투입` 으로 넘어가 한 번만 센다. `v_lot_state` 는 이 잔량을 그대로 쓴다 — 열린 투입이 잔량을 0 으로 만들면 상태도 `소진`(회전 7 · D-41 · 회전 5 의 「열린 투입은 상태 불변」 문장은 폐기). 쓰기 경로(`lineage.assert_usable` · 잔량 검사)도 같은 상태 · 잔량을 본다.
 - `v_work_order_progress(work_order_id, started, closed, result_count, good_qty)`.
 
