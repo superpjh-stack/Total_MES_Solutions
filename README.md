@@ -117,6 +117,11 @@ docker compose logs app | grep "첫 기동"      # 시드 계정 비밀번호 (�
 - 서버의 443 포트가 비어 있고 밖에서 열려 있어야 하며, 도메인의 DNS A 레코드가 서버 IP 를 가리켜야 인증서가 나옵니다.
 - DB 는 compose 내부망에만 있고 밖으로 열지 않습니다. 데이터는 볼륨 `pgdata` 에 남습니다.
 - 로컬에서 `docker compose` 를 돌리면 저장소의 `.env` 가 값으로 읽힙니다. 운영 서버에는 `.env` 를 두지 않습니다.
+- **Hostinger Docker Manager** 는 이미지를 받아 띄우기만 하고 Dockerfile 을 빌드하지 않습니다. 앱을 만든 뒤 웹 콘솔에서 그 폴더의 빌드를 한 번 돌립니다. 새 버전을 올릴 때도 같은 명령입니다.
+
+  ```bash
+  cd /docker/<앱 이름> && docker compose up -d --build
+  ```
 
 ## 검증
 

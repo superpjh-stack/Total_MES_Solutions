@@ -40,7 +40,7 @@ services:
       MES_SESSION_SECRET: ${MES_SESSION_SECRET:-}
       MES_SEED_PASSWORD: ${MES_SEED_PASSWORD:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      MES_PROXY_IP: 172.30.0.10
+      MES_PROXY_IP: 10.213.71.10
       TZ: Asia/Seoul
     volumes:
       - appdata:/data
@@ -60,7 +60,7 @@ services:
       - caddy_config:/config
     networks:
       mesnet:
-        ipv4_address: 172.30.0.10
+        ipv4_address: 10.213.71.10
 
 volumes:
   pgdata:
@@ -72,4 +72,4 @@ networks:
   mesnet:
     ipam:
       config:
-        - subnet: 172.30.0.0/24
+        - subnet: 10.213.71.0/24

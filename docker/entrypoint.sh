@@ -44,4 +44,4 @@ if [ "${MES_SAMPLE:-0}" = "1" ]; then
 fi
 
 exec uvicorn mescore.app.main:app --app-dir src --host 0.0.0.0 --port "${MES_PORT:-8030}" \
-  --proxy-headers --forwarded-allow-ips="${MES_PROXY_IP:-172.30.0.10}"
+  --proxy-headers --forwarded-allow-ips="${MES_PROXY_IP:-10.213.71.10}"

@@ -425,9 +425,11 @@
 ## D-50 Docker 배포 — PostgreSQL 17 + 앱 + Caddy HTTPS · 상태: 확정
 - 사용자 요청(2026-10-10). Hostinger VPS Docker Manager 배포용으로 `Dockerfile` · `docker-compose.yml` · `docker/entrypoint.sh` 를 둔다. Caddy 설정은 compose 명령줄이라 서버에 저장소 파일이 없어도 된다(`MES_BUILD_CONTEXT` 로 GitHub 주소에서 빌드).
 - D-42 의 두 갈래 중 **TLS 종단(리버스 프록시 · HTTPS)** 을 택했다 — Caddy 가 `MES_DOMAIN` 으로 인증서를 받고 앱은 `MES_ENV=prod`(Secure 쿠키) 그대로. 「Secure 끄기」 설정은 만들지 않았다(사내망 HTTP 운영은 D-42 그대로 결정 대기).
-- 앱은 Caddy 고정 주소(172.30.0.10)의 전달 헤더만 믿는다(`--forwarded-allow-ips`). DB 는 내부망에만 있고 포트를 열지 않는다.
+- 앱은 Caddy 고정 주소(10.213.71.10)의 전달 헤더만 믿는다(`--forwarded-allow-ips`). DB 는 내부망에만 있고 포트를 열지 않는다.
 - 비밀값은 이미지 · 저장소에 넣지 않는다. 환경변수로 주지 않으면 첫 기동 때 난수로 만들어 볼륨 `/data/secrets.env` 에 두고 시드 비밀번호를 앱 로그에 한 번 찍는다.
 - 빈 DB 면 스키마 · 뷰 · 시드(팩 포함)를 만든다. `MES_SAMPLE=1` 이면 샘플(예시)과 오늘 데이터를 넣는다. 샘플 스크립트는 운영 Secure 쿠키 때문에 내부 클라이언트를 https 주소로 쓴다.
 - 시간대 Asia/Seoul (앱 · DB) — 「오늘」 지표가 한국 날짜로 잡힌다.
 - 로컬 검증(2026-10-10): 새 볼륨 기동 → HTTPS 200 · 비밀값 생성 · 로그인(Secure 쿠키) · AI Agent 지표 답 · 재기동 후 세션 유지 · HTTP → HTTPS 308 · `/login/as` 404.
 - Hostinger VPS(srv1934103) 사정: 80 은 다른 앱(afc200)이 쓴다 → `MES_HTTP_PORT` 를 다른 번호로 두고 443 만으로 인증서를 받는다(TLS-ALPN-01).
+- compose 내부망은 10.213.71.0/24 (Caddy 10.213.71.10) — 앱이 많은 서버에서 Docker 기본 대역(172.16~31)과 겹치지 않게.
+- **배포(2026-10-10)**: Hostinger VPS srv1934103 · Docker Manager 앱 `rodem-mes` · https://srv1934103.hstgr.cloud (Let's Encrypt) · HTTP 8131 → HTTPS 308 · `MES_SAMPLE=1`. Docker Manager 는 build 를 하지 않아 첫 배포가 「이미지 없음」 으로 실패했고, 웹 콘솔에서 `/docker/rodem-mes` 의 `docker compose up -d --build`(GitHub main 에서 빌드)로 올렸다. 확인: /health 200 · 로그인 화면 200 · 로그인 없이 /agent 401 · `/login/as` 404 · DB 5432 닫힘. 시드 계정 비밀번호는 서버 앱 로그(첫 기동 줄)와 볼륨 `/data/secrets.env` 에만 있다.
