@@ -125,6 +125,21 @@ def create_app() -> FastAPI:
         for route in r.routes:
             for m in getattr(route, "methods", None) or ():
                 registered.add((m, getattr(route, "path", "")))
+    # ── 선택 모듈(MES_ADDONS · D-47) — 코어 밖 패키지 `mes<이름>` 의 `router` 와 메뉴 `MENU`. 코어 화면 · 기능 수에 세지 않는다 ──
+    app.state.addon_menus = []
+    for addon in get_settings().addons:
+        name = f"mes{addon}.router"
+        try:
+            mod = importlib.import_module(name)
+        except Exception as exc:  # noqa: BLE001 — 숨기지 않는다
+            log.exception("선택 모듈 임포트 실패: %s", name)
+            include_errors.append(f"{name}: {type(exc).__name__}: {exc}")
+            include_error_names.append(f"addon {addon}: {type(exc).__name__}")
+            continue
+        app.include_router(mod.router)
+        menu = getattr(mod, "MENU", None)
+        if menu:
+            app.state.addon_menus.append(menu)
     app.state.include_errors = include_errors
     app.state.routers_missing = missing
 

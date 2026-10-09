@@ -79,6 +79,7 @@ class Settings:
     login_lock_count: int | None       # 정본에 수치 없음 → None 이면 잠그지 않는다 (D-14)
     board_refresh_seconds: int         # 현황판 폴링 — spec.md §11 5초
     grid_page_size: int
+    addons: tuple[str, ...] = ()       # MES_ADDONS — 코어 밖 선택 모듈(쉼표). 예: agent → 패키지 mesagent (D-47)
 
     @property
     def is_dev(self) -> bool:
@@ -108,6 +109,7 @@ def get_settings() -> Settings:
         migrate_dir=_env("MIGRATE_DIR"),
         login_lock_count=_env_int("LOGIN_LOCK_COUNT"),
         board_refresh_seconds=_env_int("BOARD_REFRESH_SECONDS") or 5,
+        addons=tuple(a.strip() for a in (_env("ADDONS", "") or "").split(",") if a.strip()),
         grid_page_size=_env_int("GRID_PAGE_SIZE") or 10,
     )
 

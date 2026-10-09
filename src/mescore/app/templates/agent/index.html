@@ -1,0 +1,100 @@
+{# MES AI Agent › 질문하기 — 선택 모듈 mesagent(D-47) 의 화면. ctx: history[{q a sql rows}] result{question status intent answer sql sql_explanation data{columns rows row_count truncated ms} docs[{source title text score}] trace[{agent title status detail ms}] model error} examples configured model n_tables question.
+   스크립트 없음 — 폼 POST 후 서버가 다시 그린다. 쓰기 0. #}
+{% extends "base.html" %}
+{% block head %}
+<style>
+.ag-top{display:flex;justify-content:space-between;align-items:flex-end;gap:10px 24px;flex-wrap:wrap}
+.ag-top h2{margin:0;font-size:var(--fs-xl)}.ag-top p{margin:4px 0 0;color:var(--c-ink-2);font-size:var(--fs-sm)}
+.ag-state{font-size:var(--fs-xs);padding:2px 10px;border-radius:999px;border:var(--bw) solid var(--c-line)}
+.ag-state.on{border-color:var(--c-ok);color:var(--c-ok)}.ag-state.off{border-color:var(--c-warn);color:var(--c-warn)}
+.ag-form{display:flex;gap:8px;margin:14px 0 8px}
+.ag-form textarea{flex:1;min-height:64px;padding:10px 12px;border:var(--bw) solid var(--c-line-strong);border-radius:var(--r-md);font:inherit;font-size:var(--fs-md);background:var(--c-surface);color:var(--c-ink);resize:vertical}
+.ag-form button{min-width:96px}
+.ag-ex{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}
+.ag-ex button{font-size:var(--fs-xs);padding:3px 10px;border-radius:999px;border:var(--bw) solid var(--c-line);background:var(--c-surface-2);color:var(--c-ink-2);cursor:pointer}
+.ag-ex button:hover{border-color:var(--c-accent);color:var(--c-ink)}
+.ag-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:14px;margin-top:14px}
+@media (max-width:1100px){.ag-grid{grid-template-columns:minmax(0,1fr)}}
+.ag-box{border:var(--bw) solid var(--c-line);border-radius:var(--r-md);background:var(--c-surface);padding:12px 14px;min-width:0}
+.ag-box h3{margin:0 0 8px;font-size:var(--fs-md);display:flex;gap:8px;align-items:baseline}
+.ag-box h3 small{font-weight:400;color:var(--c-ink-3);font-size:var(--fs-xs)}
+.ag-q{font-weight:700;margin:0 0 8px}
+.ag-answer{white-space:pre-wrap;line-height:1.6;font-size:var(--fs-md)}
+.ag-err{padding:10px 12px;border-radius:var(--r-md);background:var(--c-warn-tint, var(--c-surface-2));border:var(--bw) solid var(--c-warn);color:var(--c-ink);font-size:var(--fs-sm)}
+.ag-trace{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.ag-trace li{display:grid;grid-template-columns:22px 1fr;gap:8px;font-size:var(--fs-sm)}
+.ag-trace .dot{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--c-ink-inverse);background:var(--c-ink-3)}
+.ag-trace .ok .dot{background:var(--c-ok)}.ag-trace .retry .dot{background:var(--c-warn)}.ag-trace .fail .dot{background:var(--c-err)}
+.ag-trace b{font-size:var(--fs-sm)}.ag-trace span.d{display:block;color:var(--c-ink-3);font-size:var(--fs-xs);word-break:break-all}
+.ag-sql{margin:0;padding:10px;border-radius:var(--r-md);background:var(--c-surface-2);font-family:var(--font-mono);font-size:var(--fs-xs);white-space:pre-wrap;word-break:break-word}
+.ag-tbl{overflow:auto;max-height:420px;border:var(--bw) solid var(--c-line);border-radius:var(--r-md);margin-top:8px}
+.ag-docs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.ag-docs li{font-size:var(--fs-xs);color:var(--c-ink-2);border-left:3px solid var(--c-line);padding-left:8px}
+.ag-docs li b{display:block;color:var(--c-ink);font-size:var(--fs-sm)}
+.ag-hist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.ag-hist li{font-size:var(--fs-sm);border-bottom:var(--bw) dashed var(--c-line);padding-bottom:8px}
+.ag-hist li .a{white-space:pre-wrap;color:var(--c-ink-2);max-height:7.5em;overflow:hidden}
+</style>
+{% endblock %}
+{% block body %}
+<section class="panel">
+  <div class="ag-top">
+    <div>
+      <h2>MES AI Agent</h2>
+      <p>{{ t('MES 데이터를 SQL 로 조회하고 문서를 찾아 답하는 멀티 에이전트') }} — {{ t('라우터') }} → {{ t('스키마 탐색') }} → {{ t('SQL 작성') }} ⇄ {{ t('SQL 실행') }} → {{ t('문서 검색') }} → {{ t('답변') }}. {{ t('지금 역할로 읽을 수 있는 테이블') }} {{ n_tables }} · {{ t('DB 는 읽기만 한다') }}</p>
+    </div>
+    <span class="ag-state {{ 'on' if configured else 'off' }}">{{ ('LLM ' ~ model) if configured else t('LLM 미구성 — 문서 검색만') }}</span>
+  </div>
+
+  <form class="ag-form" method="post" action="/agent/ask">
+    <textarea name="question" required placeholder="{{ t('예: 이번 주 불합격 판정이 난 검사를 품목별로 알려줘') }}" aria-label="{{ t('질문') }}">{{ question or '' }}</textarea>
+    <button type="submit" class="btn primary">{{ t('질문') }}</button>
+  </form>
+  <form class="ag-ex" method="post" action="/agent/ask" aria-label="{{ t('예시 질문') }}">
+    {% for ex in examples %}<button type="submit" name="question" value="{{ ex }}">{{ ex }}</button>{% endfor %}
+  </form>
+
+  {% if result %}
+  <div class="ag-grid">
+    <div class="ag-box">
+      <p class="ag-q">Q. {{ result.question }}</p>
+      {% if result.error %}<div class="ag-err" role="alert">{{ result.error }}</div>{% endif %}
+      {% if result.answer %}<div class="ag-answer">{{ result.answer }}</div>{% endif %}
+      {% if result.sql %}
+      <h3 style="margin-top:14px">SQL <small>{{ result.sql_explanation }}</small></h3>
+      <pre class="ag-sql">{{ result.sql }}</pre>
+      {% endif %}
+      {% if result.data %}
+      <h3 style="margin-top:14px">{{ t('조회 결과') }} <small>{{ result.data.row_count }}{{ t('행') }}{% if result.data.truncated %} · {{ t('상한에서 잘림') }}{% endif %} · {{ result.data.ms }}ms</small></h3>
+      <div class="ag-tbl">
+        <table class="grid plain">
+          <thead><tr>{% for c in result.data.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+          <tbody>{% for r in result.data.rows %}<tr>{% for c in result.data.columns %}<td>{{ r[c] if r[c] is not none else '' }}</td>{% endfor %}</tr>{% else %}<tr><td colspan="{{ result.data.columns|length or 1 }}">{{ t('조회된 행 없음') }}</td></tr>{% endfor %}</tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+    <div class="ag-box">
+      <h3>{{ t('에이전트 진행') }} <small>{{ result.intent or '—' }}</small></h3>
+      <ol class="ag-trace">
+        {% for s in result.trace %}
+        <li class="{{ s.status }}"><span class="dot">{{ loop.index }}</span><div><b>{{ s.agent }}</b> — {{ s.title }}{% if s.ms is not none %} <small>({{ s.ms }}ms)</small>{% endif %}{% if s.detail %}<span class="d">{{ s.detail }}</span>{% endif %}</div></li>
+        {% endfor %}
+      </ol>
+      {% if result.docs %}
+      <h3 style="margin-top:14px">{{ t('근거 문서 (RAG)') }}</h3>
+      <ul class="ag-docs">{% for d in result.docs %}<li><b>{{ d.title }}</b>{{ d.source }} · {{ d.score }}<br>{{ d.text[:220] }}{% if d.text|length > 220 %}…{% endif %}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if history %}
+  <div class="ag-box" style="margin-top:14px">
+    <h3>{{ t('이 세션의 대화') }} <small>{{ t('최근') }} {{ history|length }} · {{ t('재기동하면 비워진다') }}</small>
+      <form method="post" action="/agent/reset" style="margin-left:auto"><button type="submit" class="btn">{{ t('대화 비우기') }}</button></form></h3>
+    <ul class="ag-hist">{% for h in history %}<li><b>Q. {{ h.q }}</b>{% if h.rows is not none %} <small>· SQL {{ h.rows }}{{ t('행') }}</small>{% endif %}<div class="a">{{ h.a }}</div></li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

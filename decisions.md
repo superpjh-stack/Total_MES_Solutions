@@ -399,3 +399,12 @@
 - 업종 문장은 코어 금지어 규칙(G-C23) 때문에 코어 코드에 두지 않는다 — 저장소 루트 `domains/<도메인>.yaml` 이 원본이고 코어(`app/domains.py` · `home/domains.html`)는 읽어서 그리기만 한다. 파일을 하나 더 두면 도메인이 늘어난다. 업종 문장에는 `t()` 를 걸지 않는다(이미 그 업종 말).
 - 단계 화면 = 코어 화면 ID · 그 도메인 팩의 `X-` 화면 · 아직 없는 제안 화면 셋으로 가른다. 팩 화면은 그 팩을 올렸을 때만 링크된다.
 - 김치 · 급식 · 인쇄는 참조 팩(packs/kimchi · foodservice · printfilm) 기획 · 구현에서 옮겼다. **금속 가공은 팩이 없는 설계 제안**이다 — 실제 회사 산출물이 오면 그것이 우선하고, 외주 표면처리(M04)는 코어에 외주 모듈이 없어 코어 변경 요청 후보로 적었다.
+
+## D-47 MES AI Agent — 선택 모듈 `mesagent` (코어 밖) · SQL 조회 + 문서 RAG 멀티 에이전트 · 상태: 확정
+- 사용자 요청(2026-10-09). 사이드바 맨 끝 「MES AI Agent」 메뉴(`/agent` 질문하기 · `/agent/about` 에이전트 구성)에서 자연어 질문을 MES DB 조회(SQL)와 문서 검색(RAG)으로 답한다.
+- 코어(`src/mescore/app/**`)는 AI · 네트워크 라이브러리를 들이지 않는다(G-C12). 그래서 에이전트는 별도 패키지 `src/mesagent` 이고 `.env` 의 `MES_ADDONS=agent` 로만 켜진다 — 코어는 `mes<addon>.router` 의 `router` · `MENU` 를 읽어 붙이기만 한다(`settings.addons` · `main.py` · `templating` · `base.html`). 끄면 메뉴 · 라우트가 모두 사라진다.
+- 에이전트 6: ① 라우터(LLM · 구조화 출력 — 의도 data/docs/both · 테이블 선택) ② 스키마 탐색(코드 — information_schema 컬럼 · 외래키 + `db-schema.md` 설명) ③ SQL 작성(LLM · 구조화 출력) ④ SQL 실행(코드 — 실패 시 오류를 ③에 돌려 최대 3회 자기수정) ⑤ 문서 검색(BM25 · 한글 2-gram · 질문 말투 조각 제외) ⑥ 답변(LLM — 조회 결과 · 문서 조각만 근거).
+- LLM = Anthropic SDK · 모델 `claude-opus-5-5`(`MES_AGENT_MODEL` 로 바꿈) · 서버 측 대체 모델 허용. 키(`ANTHROPIC_API_KEY`)는 로컬 `.env` 에만 — 없으면 501 「LLM 미구성」 과 문서 검색 결과만, LLM 호출 실패는 502.
+- 안전: SELECT/WITH 한 문장만 · 쓰기/관리/파일/네트워크 함수 · 시스템 카탈로그 차단 · 읽기 전용 트랜잭션 · 5초 · 최대 200행 · 항상 롤백. 역할 권한표(`rbac.can_read_menu`)로 읽을 수 있는 모듈의 테이블만, `sys_session` · `sys_user` · `sys_number_seq` 는 어느 역할에도 안 준다. 질문 · SQL · 행 수는 접근 로그(SYS-04 · screen `AGENT`)에 남는다. 대화는 세션별 메모리 10개(저장 테이블 없음).
+- 시험: `tests/test_agent.py` — 가짜 Claude 응답기로 네트워크 없이. 실제 API 종단 확인은 키가 생긴 뒤.
+- 판정: goal.md · spec.md 는 AI Agent 를 코어 범위 밖(선택 팩 `agent`)으로 둔다. 그래서 `make gate` · `gate-full` 은 `MES_PACK=` 처럼 `MES_ADDONS=` 로 선택 모듈을 끄고 코어를 판정한다. G-C12 의 `ai|agent` 라우트 금지는 그대로이며, 코어에 에이전트가 섞이면 여전히 FAIL 이다. 에이전트 자체의 안전성은 `tests/test_agent.py` 로 확인한다(SQL 관문 · 읽기 전용 · 역할).

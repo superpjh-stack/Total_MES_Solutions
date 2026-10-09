@@ -190,6 +190,7 @@ def module_exists(name: str) -> bool:
 def core_env() -> dict:
     env = dict(os.environ)
     env["MES_PACK"] = ""
+    env["MES_ADDONS"] = ""          # 코어 판정은 선택 모듈(D-47 mesagent) 없이 — 범위 밖 판정(G-C12)의 대상은 코어
     return env
 
 
@@ -672,6 +673,7 @@ def pack_gates(pack: str) -> dict[str, tuple[str, str]]:
         return result
     env = dict(os.environ)
     env["MES_PACK"] = pack
+    env["MES_ADDONS"] = ""
     code, out = run(["uv", "run", "python", str(TOOLS / "check_pack.py")], env=env)
     result["G-P01"] = per_gate(out).get("G-P01", (FAIL, f"[{pack}] check_pack 출력에 G-P01 행 없음 (rc={code}) — {last_line(out, 160)}"))
     c1, o1 = run(["uv", "run", "python", str(TOOLS / "check_trace.py")], env=env)
@@ -711,6 +713,7 @@ def pack_gates(pack: str) -> dict[str, tuple[str, str]]:
 def main() -> int:
     run_seeds = "--run-seeds" in sys.argv
     os.environ["MES_PACK"] = ""
+    os.environ["MES_ADDONS"] = ""   # D-47 — 선택 모듈은 코어 · 팩 판정에 넣지 않는다
     from mescore.app import settings as _s
     _s.reset_cache()
 

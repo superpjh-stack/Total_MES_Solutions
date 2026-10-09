@@ -193,6 +193,18 @@
       </ul>
     </div>
     {% endfor %}
+    {# 선택 모듈 메뉴(MES_ADDONS · D-47) — 맨 마지막. MENU = {code name items[(href, label)]} #}
+    {% for am in addon_menus or [] %}
+    {% set am_on = request.url.path.startswith('/' ~ am.code) %}
+    <div class="mg menu-group mg-addon{% if am_on %} on{% endif %}" data-menu="{{ am.code }}">
+      <button type="button" class="mg-h menu-head" title="{{ am.name }}" aria-expanded="{{ 'true' if am_on else 'false' }}"><i class="mg-ic" aria-hidden="true">{{ am.icon or am.name[:1] }}</i><span class="mg-t">{{ am.name }}</span><small>{{ am['items']|length }}</small></button>
+      <ul>
+        {% for href, label in am['items'] %}
+        <li><a href="{{ href }}"{% if request.url.path == href %} class="cur" aria-current="page"{% endif %}>{{ label }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
   </nav>
   {% endif %}
 

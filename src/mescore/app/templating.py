@@ -98,6 +98,7 @@ def screen_context(request: Request, screen_id: str | None) -> dict[str, Any]:
         "settings": s,
         "nav": nav,
         "screen_id": screen_id,
+        "addon_menus": getattr(request.app.state, "addon_menus", []),
         "screen": None,
         "screen_name": "",
         "menu_name": "",

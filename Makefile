@@ -90,10 +90,10 @@ check-pack:      # G-P01 — 코어 해시 변동 0 · ALTER 0 · 경로 재정�
 	uv run python $(TOOLS)/check_pack.py
 
 gate:            # G-C01~G-C24 (코어 단독 MES_PACK=) → packs/ 의 팩마다 G-P01~G-P06. 판정표. 시드 멱동(G-C09)은 gate-full
-	@MES_PACK= uv run python $(TOOLS)/gate.py
+	@MES_PACK= MES_ADDONS= uv run python $(TOOLS)/gate.py
 
 gate-full:       # 시드를 한 번 더 돌려 행 수 diff 를 잰다 — 다른 사람이 시드 · 스키마를 돌리는 중에는 쓰지 않는다. 종료 판정은 이것으로
-	@MES_PACK= uv run python $(TOOLS)/gate.py --run-seeds
+	@MES_PACK= MES_ADDONS= uv run python $(TOOLS)/gate.py --run-seeds
 
 kpi-snapshot:    # KPI 스냅샷 배치 (kpi_snapshot — 개발3 stats.snapshot). 날짜를 주려면 DAY=YYYY-MM-DD
 	uv run python -m mescore.app.stats snapshot $(DAY)
