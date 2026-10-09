@@ -41,7 +41,7 @@ def test_process_pages_render_and_dim_screens_the_role_cannot_open():
 
 def test_domain_catalog_data_is_consistent():
     from mescore.app import domains
-    assert {d["code"] for d in domains.all_domains()} >= {"kimchi", "foodservice", "printfilm", "metal"}
+    assert {d["code"] for d in domains.all_domains()} >= {"kimchi", "foodservice", "printfilm", "metal", "alloy"}
     assert domains.problems() == []
 
 
@@ -51,5 +51,7 @@ def test_domain_pages_render_core_pack_and_proposed_steps():
     assert c.get("/main/domains", params={"d": "nope"}).status_code == 404
     k = c.get("/main/domains", params={"d": "kimchi", "p": "K01"}).json()["domain"]["current"]
     assert k["n_core"] > 0 and k["n_pack"] > 0                       # 코어 화면 + 김치 팩 화면이 섞인다
+    a = c.get("/main/domains", params={"d": "alloy", "p": "A02"}).json()["domain"]["current"]
+    assert [(x["screen_id"], x["kind"]) for x in a["steps"]][:2] == [("X-CHG-01", "proposed"), ("MAT-04", "core")]   # 합금: 제안 화면 + 코어 화면
     m = c.get("/main/domains", params={"d": "metal", "p": "M02"}).json()["domain"]["current"]
     assert m["n_proposed"] == 1 and m["steps"][0]["kind"] == "proposed" and not m["steps"][0]["open"]

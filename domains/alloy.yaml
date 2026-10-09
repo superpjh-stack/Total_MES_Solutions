@@ -1,0 +1,83 @@
+# 도메인별 MES 프로세스 — 합금 공장 (팩 없음 · 설계 제안 — 실제 회사 산출물이 오면 그것이 우선)
+# 단계 screen 이 X- 로 시작하는 것은 팩을 만들 때 추가할 화면의 제안 이름이다(아직 없다).
+code: alloy
+seq: 5
+name: 합금 공장
+industry: 비철 합금 (알루미늄 · 동 합금 잉곳 · 빌렛 — 용해 · 성분 조정 · 주조 · 균질화)
+pack: null
+status: 팩 없음 — 설계 제안 (코어 + 설정으로 바로 시작 · 고유 기능은 팩으로)
+summary: 순금속 · 모합금 · 스크랩을 배합해 용해로에 장입하고, 용탕 성분을 분석 · 조정한 뒤 잉곳 · 빌렛으로 주조한다. 균질화 열처리 · 절단 · 검사를 거쳐 성분 성적서(밀시트)와 함께 출하한다. 여러 원료 LOT 이 한 용해 차지(Heat)로 합쳐지고 다시 여러 주괴로 나뉘는 계보와 원소별 성분 규격 판정이 중심이다.
+flow: [수주(합금 규격), 원료 입고 (순금속 · 모합금 · 스크랩), 장입 배합, 용해 · 합금화, 탈가스 · 정련, 성분 분석 · 조정, 주조 (잉곳 · 빌렛), 균질화 열처리, 절단 · 검사, 출하 · 밀시트]
+lot_model: 원료 LOT(순금속 · 모합금 · 스크랩 등급) → 용해 차지 LOT(Heat — 여러 원료 LOT 합병) → 주괴 LOT(잉곳 · 빌렛 — 차지 분할) → 균질화 LOT → 출하 LOT
+controls:
+  - 장입 배합 — 원료별 투입량 · 목표 성분 · 스크랩 비율
+  - 원소별 성분 규격 (Si · Fe · Cu · Mn · Mg · Zn 등 상한 · 하한 %) · 분석 횟수
+  - 용탕 온도 · 탈가스 후 수소량 · 정련 시간
+  - 주조 온도 · 주조 속도 · 냉각수 온도
+  - 균질화 온도 · 유지 시간
+  - 스크랩 등급 · 회수율 · 수율(투입 대비 양품 주괴)
+kpi: [차지당 수율 %, 성분 1회 합격률 %, 스크랩 재사용률 %, 용해로 가동률 %, 납기 준수율 %]
+equipment: [용해로 · 보온로, 탈가스 장치, 발광분광분석기, 반연속 주조기, 균질화로, 절단기 · 초음파 탐상기]
+extensions:
+  - { point: E1 설정, what: "용어 — 품목→합금 규격, 원재료 LOT→원료 LOT, 생산 LOT→차지(Heat) LOT · 주괴 LOT, 성적서→밀시트 · 역할(용해 · 주조 · 분석)" }
+  - { point: E2 속성, what: "합금 규격의 원소별 목표 성분 · 원료 LOT 의 스크랩 등급 · 성분 (확장 테이블)" }
+  - { point: E3 측정값, what: "용탕 온도 · 수소량 · 주조 속도 · 균질화 온도/시간 / 검사 계획 항목 = 원소별 성분 %(상한 · 하한)" }
+  - { point: E4 팩 화면, what: "장입 배합 계산 · 스크랩 등급 관리 (제안)" }
+  - { point: E5 훅, what: "성분 불합격 차지의 주조 차단 · 장입량 합계 ≠ 차지 중량이면 경고 · 밀시트 없는 출하 차단" }
+  - { point: E6 계보, what: "장입(여러 원료 LOT → 차지 합병) · 주조(차지 → 주괴 분할) · 스크랩 회수(생산 1:1)" }
+  - { point: E7 수집, what: "용해로 · 보온로 온도 · 주조기 속도 · 냉각수 온도 (Data Gateway)" }
+processes:
+  - code: A01
+    name: 합금 잉곳 주문 생산
+    when: 고객 합금 규격 · 중량으로 주문을 받아 주조 · 출하할 때
+    goal: 출하 주괴 하나에서 용해 차지 · 성분 분석 · 투입 원료 LOT 까지 이어진다
+    steps:
+      - { screen: BAS-01, role: ADMIN, action: "합금 규격 등록 — 규격명 · 형상(잉곳 · 빌렛) · 목표 성분(속성)", output: 합금 규격 }
+      - { screen: QUA-01, role: QA, action: "규격별 성분 검사 계획 — 원소별 상한 · 하한 %", output: 검사 계획 }
+      - { screen: ORD-01, role: PROD, action: "고객 · 합금 규격 · 중량 · 납기로 수주", output: 수주 }
+      - { screen: JOB-01, role: PROD, action: "용해 · 주조 · 균질화 작업지시", output: 작업지시 }
+      - { screen: POP-03, role: FIELD, action: "원료 LOT 스캔 장입 (순금속 · 모합금 · 스크랩)", output: 장입 기록 }
+      - { screen: POP-02, role: FIELD, action: "용해 종료 — 여러 원료 LOT 이 차지 LOT 하나로 합병", output: 차지 LOT }
+      - { screen: QUA-02, role: QA, action: "차지 성분 분석 판정", output: 성분 판정 }
+      - { screen: POP-02, role: FIELD, action: "주조 실적 — 차지를 주괴 LOT 여럿으로 분할", output: 주괴 LOT }
+      - { screen: SHP-02, role: FIELD, action: "출하 주괴 LOT 스캔 → 승인", output: 출하 LOT }
+      - { screen: SHP-04, role: PROD, action: "밀시트 발행 (차지 번호 · 원소별 성분 · 중량)", output: 밀시트 }
+  - code: A02
+    name: 장입 배합 · 용해 차지 관리
+    when: 목표 성분에 맞춰 원료 투입량을 정하고 용해로 한 차지를 관리할 때
+    goal: 차지마다 투입 원료 LOT · 투입량 · 스크랩 비율이 남고 원료 재고가 맞게 줄어든다
+    steps:
+      - { screen: X-CHG-01, role: PROD, action: "장입 배합 계산 — 목표 성분 · 원료 성분으로 투입량 (제안 화면)", output: 배합표 }
+      - { screen: MAT-04, role: PROD, action: "원료 재고 확인 (순금속 · 모합금 · 스크랩 등급별)", output: 가용 재고 }
+      - { screen: POP-03, role: FIELD, action: "배합표대로 원료 LOT 스캔 · 투입량 입력", output: 투입 기록 }
+      - { screen: POP-02, role: FIELD, action: "용해 측정값 — 용탕 온도 · 탈가스 후 수소량", output: 측정값 }
+      - { screen: EQP-04, role: PROD, action: "용해로 온도 수집값 확인", output: 수집값 }
+  - code: A03
+    name: 성분 분석 · 성분 조정
+    when: 용탕 성분이 규격을 벗어나 원료를 더 넣고 다시 분석할 때
+    goal: 분석 · 조정 이력이 차지에 남고 불합격 차지는 주조로 넘어가지 않는다
+    steps:
+      - { screen: QUA-02, role: QA, action: "1차 성분 분석 — 원소별 값 입력 · 상하한 자동 판정", output: 판정 }
+      - { screen: POP-03, role: FIELD, action: "부족 원소 보정 — 모합금 · 순금속 추가 투입 스캔", output: 추가 투입 }
+      - { screen: QUA-02, role: QA, action: "재분석 판정 (합격 차지만 주조)", output: 최종 판정 }
+      - { screen: QUA-04, role: QA, action: "반복 불합격 — 이상 등록 · 원인 · 시정", output: 시정 기록 }
+    checks: [성분 불합격 차지의 주조 차단은 E5 훅 제안 — 코어는 판정을 남기고 팩 훅이 막는다]
+  - code: A04
+    name: 주조 · 균질화 · 절단
+    when: 합격 차지를 잉곳 · 빌렛으로 주조하고 균질화 · 절단할 때
+    goal: 주괴마다 차지 번호 · 주조 조건 · 균질화 조건이 이어지고 라벨이 붙는다
+    steps:
+      - { screen: BAS-04, role: ADMIN, action: "주조 · 균질화 공정 측정값 선언 (주조 속도 · 온도 · 유지 시간)", output: 측정값 정의 }
+      - { screen: POP-02, role: FIELD, action: "주조 실적 — 차지 → 주괴 LOT 분할 · 주조 조건", output: 주괴 LOT }
+      - { screen: POP-04, role: FIELD, action: "주괴 LOT 라벨 출력 (차지 번호 · 규격 · 중량)", output: 라벨 }
+      - { screen: POP-02, role: FIELD, action: "균질화 실적 — 로 투입 단위 · 온도 · 시간", output: 균질화 LOT }
+      - { screen: QUA-02, role: QA, action: "외관 · 치수 · 초음파 검사", output: 판정 }
+  - code: A05
+    name: 스크랩 회수 · 재용해
+    when: 절단 끝단 · 불량 주괴 · 반품을 스크랩으로 회수해 다시 원료로 쓸 때
+    goal: 회수 스크랩이 등급별 원료 LOT 이 되어 다음 차지에 투입되고 수율 · 재사용률이 집계된다
+    steps:
+      - { screen: X-SCR-01, role: FIELD, action: "스크랩 등급 판정 · 회수 등록 (제안 화면)", output: 스크랩 등급 }
+      - { screen: MAT-01, role: FIELD, action: "회수 스크랩 원료 LOT 입고 — 등급 · 출처 차지", output: 스크랩 LOT }
+      - { screen: TRC-01, role: QA, action: "스크랩이 들어간 이후 차지 · 출하 확인", output: 영향 범위 }
+      - { screen: KPI-02, role: ADMIN, action: "차지 수율 · 스크랩 재사용률 · 성분 1회 합격률", output: 지표 }
