@@ -342,3 +342,202 @@ def test_make_product_lot_with_merge_parents(cur, monkeypatch):
         _end(cur, r3["id"], 1)
         with pytest.raises(HTTPException):
             lineage.make_product_lot(cur, work_result_id=r3["id"], by=BY, merge_parent_ids=bad_ids, merge_relation=rel)
+
+
+# ── 회전 7 — 계보 무결성 (DEF-QA2-007 · 008 · 009 · WARN 2) ────────────────────────────
+def _held(cur, wo: dict, good: float = 20) -> tuple[dict, dict]:
+    """생산 LOT(good) 하나 + 그것을 통째로 투입한 **열린** 실적 — 잔량 0 · 종료 전."""
+    p = _product(cur, wo, good, "합격")
+    r = _result(cur, wo)
+    lineage.consume_material(cur, work_result_id=r["id"], material_lot_id=p["id"], qty=good, by=BY)
+    return p, r
+
+
+def _kids(cur, lot_id: int) -> dict:
+    cur.execute("select relation_base, count(*) as n from lot_genealogy where parent_lot_id = %s group by 1", (lot_id,))
+    return {r["relation_base"]: r["n"] for r in cur.fetchall()}
+
+
+def test_remaining_counts_children_and_open_inputs(cur):
+    wo = new_work_order(cur)
+    p = _product(cur, wo, 20)
+    assert lineage.remaining(cur, p["id"]) == 20
+    r = _result(cur, wo)
+    lineage.consume_material(cur, work_result_id=r["id"], material_lot_id=p["id"], qty=15, by=BY)
+    assert lineage.remaining(cur, p["id"]) == 5                                            # 열린 투입
+    _end(cur, r["id"], 15)
+    lineage.make_product_lot(cur, work_result_id=r["id"], by=BY)
+    assert lineage.remaining(cur, p["id"]) == 5                                            # 종료 → 계보 투입(두 번 세지 않음)
+    cur.execute("select remain_qty from v_lot_stock where lot_id = %s", (p["id"],))
+    assert cur.fetchone()["remain_qty"] == lineage.remaining(cur, p["id"])                  # 뷰와 같은 문장
+
+
+def test_end_merge_option_rejects_own_input_lot(cur):
+    """DEF-QA2-007 — 이 실적이 투입한 LOT 을 같은 실적 종료의 merge_parent_ids 로 다시 이으면 422 (잔량 음수 0)."""
+    wo = new_work_order(cur)
+    a = _product(cur, wo, 20)
+    r = _result(cur, wo)
+    lineage.consume_material(cur, work_result_id=r["id"], material_lot_id=a["id"], qty=15, by=BY)
+    with pytest.raises(HTTPException) as e:
+        lineage.merge_parents_of(cur, [a["id"]], work_result_id=r["id"])                    # 라우터가 ended_at 쓰기 전에 부르는 판정
+    assert e.value.status_code == 422
+    _end(cur, r["id"], 35)
+    with pytest.raises(HTTPException):
+        lineage.make_product_lot(cur, work_result_id=r["id"], by=BY, merge_parent_ids=[a["id"]])
+    assert _kids(cur, a["id"]) == {}                                                       # 합병 화살표 0 (라우터는 이 422 로 tx 전체를 되돌린다)
+
+
+@pytest.mark.parametrize("path", ["투입(수량 없음)", "투입 1", "분할(수량 없음)", "분할 수량", "합병", "종료 합병 옵션", "출하"])
+def test_open_input_zero_remaining_blocks_every_path(cur, path):
+    """DEF-QA2-008 — 열린 투입으로 잔량 0 인 생산 LOT 은 어느 경로로도 다시 못 쓴다(422) · 잡은 실적 종료 뒤 자식은 투입 1 뿐."""
+    wo = new_work_order(cur)
+    x, rh = _held(cur, wo)
+    other = _product(cur, wo, 5, "합격")
+    with pytest.raises(HTTPException) as e:
+        if path.startswith("투입"):
+            r2 = _result(cur, wo)
+            lineage.consume_material(cur, work_result_id=r2["id"], material_lot_id=x["id"], qty=None if "없음" in path else 1, by=BY)
+        elif path == "분할(수량 없음)":
+            lineage.split(cur, parent_id=x["id"], count=2, by=BY)
+        elif path == "분할 수량":
+            lineage.split(cur, parent_id=x["id"], count=2, by=BY, qtys=[1, 1])
+        elif path == "합병":
+            lineage.merge(cur, parent_ids=[x["id"], other["id"]], by=BY)
+        elif path == "종료 합병 옵션":
+            r3 = _result(cur, wo)
+            _end(cur, r3["id"], 20)
+            lineage.make_product_lot(cur, work_result_id=r3["id"], by=BY, merge_parent_ids=[x["id"]])
+        else:
+            lineage.ship(cur, shipment_id=new_shipment(cur)["id"], lot_id=x["id"], by=BY)
+    assert e.value.status_code == 422
+    _end(cur, rh["id"], 20)
+    lineage.make_product_lot(cur, work_result_id=rh["id"], by=BY)
+    assert _kids(cur, x["id"]) == {"투입": 1} and lineage.remaining(cur, x["id"]) == 0
+
+
+def test_whole_lot_paths_wait_for_open_input(cur):
+    """잔량이 남아도(20 중 15 열린 투입) LOT 통째 쓰기(출하 · 합병 · 수량 없는 분할 · 종료 합병)는 실적 종료 전 422. 수량 준 분할은 잔량 안에서 된다."""
+    wo = new_work_order(cur)
+    p = _product(cur, wo, 20, "합격")
+    r = _result(cur, wo)
+    lineage.consume_material(cur, work_result_id=r["id"], material_lot_id=p["id"], qty=15, by=BY)
+    other = _product(cur, wo, 5, "합격")
+    for call in (lambda: lineage.ship(cur, shipment_id=new_shipment(cur)["id"], lot_id=p["id"], by=BY),
+                 lambda: lineage.merge(cur, parent_ids=[p["id"], other["id"]], by=BY),
+                 lambda: lineage.split(cur, parent_id=p["id"], count=2, by=BY)):
+        with pytest.raises(HTTPException):
+            call()
+    with pytest.raises(HTTPException):
+        lineage.split(cur, parent_id=p["id"], count=2, by=BY, qtys=[3, 3])                  # 6 > 잔량 5
+    _end(cur, r["id"], 15)
+    lineage.make_product_lot(cur, work_result_id=r["id"], by=BY)
+    s = new_shipment(cur)
+    gid = lineage.ship(cur, shipment_id=s["id"], lot_id=p["id"], by=BY)                     # 종료 뒤 남은 5 출하
+    cur.execute("select qty from lot_genealogy where id = %s", (gid,))
+    assert cur.fetchone()["qty"] == 5
+
+
+def test_qtyless_input_takes_whole_remaining(cur):
+    wo = new_work_order(cur)
+    p = _product(cur, wo, 20)
+    r = _result(cur, wo)
+    lineage.consume_material(cur, work_result_id=r["id"], material_lot_id=p["id"], qty=8, by=BY)
+    iid = lineage.consume_material(cur, work_result_id=r["id"], material_lot_id=p["id"], qty=None, by=BY)
+    cur.execute("select qty from pop_input where id = %s", (iid,))
+    assert cur.fetchone()["qty"] == 12 and lineage.remaining(cur, p["id"]) == 0
+    with pytest.raises(HTTPException):
+        lineage.consume_material(cur, work_result_id=r["id"], material_lot_id=p["id"], qty=None, by=BY)
+
+
+def test_end_merge_option_inherits_fail(cur):
+    """WARN ① — 불합격 생산 LOT 을 종료 합병 옵션으로 이으면 새 LOT 도 불합격(출하 422). 아니면 미검사(새 생산)."""
+    wo = new_work_order(cur)
+    ng, ok = _product(cur, wo, 10, "불합격"), _product(cur, wo, 10, "합격")
+    r = _result(cur, wo)
+    _end(cur, r["id"], 10)
+    lot = lineage.make_product_lot(cur, work_result_id=r["id"], by=BY, merge_parent_ids=[ng["id"]])
+    assert lot["insp_status"] == "불합격"
+    with pytest.raises(HTTPException):
+        lineage.ship(cur, shipment_id=new_shipment(cur)["id"], lot_id=lot["id"], by=BY)
+    r2 = _result(cur, wo)
+    _end(cur, r2["id"], 10)
+    assert lineage.make_product_lot(cur, work_result_id=r2["id"], by=BY, merge_parent_ids=[ok["id"]])["insp_status"] == "미검사"
+
+
+def test_partial_split_keeps_remaining_on_parent(cur):
+    """WARN ② — 수량을 모두 준 분할(20 → 5+5)은 남는 10 을 부모 잔량으로 둔다(lineage 쪽 · 상태는 v_lot_state 가 같은 잔량으로 판정)."""
+    wo = new_work_order(cur)
+    p = _product(cur, wo, 20)
+    lineage.split(cur, parent_id=p["id"], count=2, by=BY, qtys=[5, 5])
+    assert lineage.remaining(cur, p["id"]) == 10
+    with pytest.raises(HTTPException):
+        lineage.split(cur, parent_id=p["id"], count=2, by=BY, qtys=[10, 10])                # 20 > 잔량 10 (또는 상태 소진)
+
+
+# 두 커넥션 동시 실행 (DEF-QA2-009) — 커밋되는 데이터라 되돌림 픽스처를 쓰지 않는다
+def _committed_lot(good: float = 20) -> tuple[int, int]:
+    """커밋된 생산 LOT(합격) 하나 + 열린 실적 하나 → (lot_id, open_result_id)."""
+    with conn.tx() as c:
+        wo = new_work_order(c)
+        r = _result(c, wo)
+        _end(c, r["id"], good)
+        p = lineage.make_product_lot(c, work_result_id=r["id"], by=BY)
+        c.execute("update lot set insp_status = '합격' where id = %s", (p["id"],))
+        r2 = _result(c, wo)
+    return p["id"], r2["id"]
+
+
+def _race(first, second) -> tuple[object, bool]:
+    """A 가 first 를 하고 커밋하지 않은 채로 B 가 second 를 시작한다. B 결과(성공 'ok' 또는 예외)와 'A 커밋 전에 B 가 끝났나'."""
+    import threading
+
+    out: dict = {}
+    with conn.tx() as ca:
+        first(ca)
+
+        def run_b():
+            try:
+                with conn.tx() as cb:
+                    cb.execute("set local lock_timeout = '10s'")
+                    second(cb)
+                out["b"] = "ok"
+            except Exception as exc:  # noqa: BLE001 — 거부 자체가 판정 근거
+                out["b"] = exc
+
+        th = threading.Thread(target=run_b)
+        th.start()
+        th.join(1.0)
+        early = not th.is_alive()
+    th.join(15)
+    return out.get("b"), early
+
+
+@pytest.mark.parametrize("pair", ["투입 ‖ 분할", "분할 ‖ 분할", "투입 ‖ 출하", "합병 ‖ 투입"])
+def test_concurrent_writes_never_go_negative(pair):
+    lid, rid = _committed_lot(20)
+    other, _ = _committed_lot(5)
+    ship = new_shipment()
+
+    def consume15(c):
+        lineage.consume_material(c, work_result_id=rid, material_lot_id=lid, qty=15, by=BY)
+
+    def split1010(c):
+        lineage.split(c, parent_id=lid, count=2, qtys=[10, 10], by=BY)
+
+    def ship_(c):
+        lineage.ship(c, shipment_id=ship["id"], lot_id=lid, by=BY)
+
+    def merge_(c):
+        lineage.merge(c, parent_ids=[lid, other], by=BY)
+
+    first, second = {"투입 ‖ 분할": (consume15, split1010), "분할 ‖ 분할": (split1010, split1010),
+                     "투입 ‖ 출하": (consume15, ship_), "합병 ‖ 투입": (merge_, consume15)}[pair]
+    b, early = _race(first, second)
+    assert not early, "B 는 A 의 LOT 행 잠금에서 기다려야 한다"
+    assert isinstance(b, HTTPException) and b.status_code == 422, f"B 결과 {b!r}"
+    with conn.tx() as c:
+        assert lineage.remaining(c, lid, for_update=False) >= 0
+        c.execute("select remain_qty from v_lot_stock where lot_id = %s", (lid,))
+        assert c.fetchone()["remain_qty"] >= 0
+    with conn.tx() as c:                                                                   # 정리 — 열린 실적 종료
+        _end(c, rid, 1)

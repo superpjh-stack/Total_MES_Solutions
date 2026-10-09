@@ -203,6 +203,8 @@ def result_end(request: Request, id: int, good_qty: str | None = Form(None), def
     with conn.tx() as cur:
         cur.execute("select * from pop_work_result where id = %s for update", (id,))
         row = dict(cur.fetchone())
+        if merge_ids:                                                                # 합병 부모 판정은 ended_at 을 쓰기 **전에** (DEF-QA2-007) — 이 실적의 투입 LOT · 잔량 0 · 투입 중 LOT 422
+            lineage.merge_parents_of(cur, merge_ids, f.opt_text(merge_relation) or lineage.MERGE, work_result_id=id)
         row.update({"ended_at": datetime.now(), "good_qty": good, "defect_qty": bad, "unit": f.opt_text(unit) or row["unit"], "note": f.opt_text(note) or row["note"],
                     "measures": values})
         packs.hook("validate_pop_work_result")(cur, row, user)

@@ -285,3 +285,40 @@ def test_product_lot_open_inputs_count_against_remain():
     k = conn.q1("select consumed_qty, remain_qty from v_lot_stock where lot_id = %s", (p["lot_id"],))
     assert float(k["consumed_qty"]) == 20.0 and float(k["remain_qty"]) == 0.0
     assert lineage.state(p["lot_id"]) == lineage.CONSUMED
+
+
+@pytest.mark.fn("F-POP-03")
+def test_end_merge_option_own_input_lot_is_422_before_end():
+    """DEF-QA2-007 (QA2 재현 그대로) — 생산 LOT 20 → 실적에 15 투입 → 같은 실적 종료 merge_lot_ids=<그 LOT> → 422 · 종료도 되돌림 · 잔량 5."""
+    c = client("prod")
+    s0 = start(c)
+    a = c.post(f"{POP02}/{s0['id']}/end", data={"good_qty": 20}).json()
+    ra = start(c)
+    assert c.post(POP03, data={"work_result_id": ra["id"], "barcode": a["lot_no"], "qty": 15}).status_code == 200
+    r = c.post(f"{POP02}/{ra['id']}/end", data={"good_qty": 35, "merge_lot_ids": a["lot_no"]})
+    assert r.status_code == 422 and r.json()["fields"][0]["name"] == "merge_lot_ids", r.text
+    assert conn.q1("select ended_at from pop_work_result where id = %s", (ra["id"],))["ended_at"] is None
+    assert c.post(f"{POP02}/{ra['id']}/end", data={"good_qty": 15}).status_code == 200
+    k = conn.q1("select consumed_qty, remain_qty from v_lot_stock where lot_id = %s", (a["lot_id"],))
+    assert float(k["consumed_qty"]) == 15.0 and float(k["remain_qty"]) == 5.0
+
+
+@pytest.mark.fn("F-POP-06")
+def test_open_input_zero_remaining_lot_refused_by_api_paths():
+    """DEF-QA2-008 — LOT 20 을 실적에 20 투입(종료 전) 뒤 수량 없는 투입 · 분할 · 합병 · 종료 합병 옵션 → 전부 422 · 자식은 투입 1 뿐."""
+    c = client("prod")
+    s0 = start(c)
+    x = c.post(f"{POP02}/{s0['id']}/end", data={"good_qty": 20}).json()
+    s1 = start(c)
+    y = c.post(f"{POP02}/{s1['id']}/end", data={"good_qty": 5}).json()
+    rh = start(c)
+    assert c.post(POP03, data={"work_result_id": rh["id"], "barcode": x["lot_no"], "qty": 20}).status_code == 200
+    r2 = start(c)
+    assert c.post(POP03, data={"work_result_id": r2["id"], "barcode": x["lot_no"]}).status_code == 422
+    assert c.post(f"{POP02}/{rh['id']}/split", data={"count": "2", "lot_id": str(x["lot_id"])}).status_code == 422
+    assert c.post(f"{POP02}/{rh['id']}/merge", data={"lot_ids": f"{x['lot_no']},{y['lot_no']}"}).status_code == 422
+    assert c.post(f"{POP02}/{r2['id']}/end", data={"good_qty": 20, "merge_lot_ids": x["lot_no"]}).status_code == 422
+    assert c.post(f"{POP02}/{rh['id']}/end", data={"good_qty": 20}).status_code == 200
+    kids = conn.q("select relation_base from lot_genealogy where parent_lot_id = %s", (x["lot_id"],))
+    assert [k["relation_base"] for k in kids] == ["투입"]
+    assert c.post(f"{POP02}/{r2['id']}/end", data={"good_qty": 1}).status_code == 200

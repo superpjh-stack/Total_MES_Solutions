@@ -135,10 +135,13 @@ numbering.rule(kind) -> dict | None                 # sys_number_rule 행. 없�
 ```python
 # 쓰기 — 전부 conn.tx() 의 커서를 받는다. 검증 실패는 422
 lineage.link(cur, parent_id, child_id, relation, *, by, qty=None, at=None) -> int   # 화살표 한 줄. genealogy_id. 자기 참조 · 순환 · 모르는 relation 422. at = linked_at(이관 원본 시각 · 없으면 now())
-lineage.assert_usable(cur, lot_ids) -> None                                         # PRODUCT 는 재고, MATERIAL 은 합격(또는 조건부)이어야 한다
+lineage.assert_usable(cur, lot_ids) -> None                                         # LOT 행 잠금(id 오름차순) 뒤 PRODUCT 는 재고, MATERIAL 은 합격(또는 조건부) · 소진 전, 그리고 잔량 > 0 (회전 7)
+lineage.remaining(cur, lot_id, for_update=True) -> Decimal | None                     # 쓰기 경로의 유일한 잔량 = v_lot_stock.remain_qty 문장(자식 계보 + 열린 투입). LOT 수량 NULL → None (회전 7)
+lineage.lock_lots(cur, lot_ids) -> None                                              # LOT 행 for update — id 오름차순 한 문장 (DEF-QA2-009)
+lineage.merge_parents_of(cur, parent_ids, relation=MERGE, *, work_result_id=None) -> list[Node]   # 종료 합병 옵션 부모 검증(잠금 포함) — F-POP-03 이 ended_at 쓰기 전에 부른다 (DEF-QA2-007)
 lineage.split(cur, *, parent_id, count, by, qtys=None, relation=SPLIT, kind=None, process_id=None, equipment_id=None, attrs=None, user=None) -> list[dict]   # 1 → N (코어 분할 N ≥ 2 · 팩 분할 계열 N ≥ 1 · D-503)
 lineage.merge(cur, *, parent_ids, by, qty=None, relation=MERGE, kind=None, process_id=None, equipment_id=None, attrs=None, user=None) -> dict                 # N → 1 (코어 합병 N ≥ 2 · 팩 합병 계열 N ≥ 1 · D-503)
-lineage.ship(cur, *, shipment_id, lot_id, by, user=None) -> int                      # F-SHP-05 (개발3 이 부른다). 출하 LOT 이 없으면 만든다(LOT_SHIPMENT 채번). 이미 출하 · 소진 · 불합격 422
+lineage.ship(cur, *, shipment_id, lot_id, by, user=None) -> int                      # F-SHP-05 (개발3 이 부른다). 출하 LOT 이 없으면 만든다(LOT_SHIPMENT 채번). 이미 출하 · 소진 · 불합격 · 잔량 ≤ 0 · 투입 중 422 · 화살표 qty = 잔량
 lineage.unship(cur, *, shipment_id, lot_id, by, user=None) -> int                    # F-SHP-06 — 출하 화살표 삭제. 등록 상태의 출하만
 lineage.consume_material(cur, *, work_result_id, material_lot_id, qty, by, unit=None) -> int    # F-POP-06 투입 스캔 → pop_input (계보는 종료 때) + 원재료면 mat_stock* 소비
 lineage.cancel_consume(cur, *, input_id, by) -> int                                  # F-POP-07 — 종료 전만 · 재고 되돌림
@@ -166,8 +169,17 @@ lineage.node(lot_id) · nodes(lot_ids) · genealogy_rows(lot_ids) · relation(na
 ```
 - `trace_*` 는 **재귀 조회 하나**(`db-schema.md` §3.3). 깊이 · 분기를 가정하지 않고 경로를 저장하지 않는다. `Trace.edges` 는 중복 없이 출발점에서 가까운 순.
 - 팩 relation 은 `base` 로 동작한다 — `splice`(base 합병)는 `merge(relation="splice")`, `슬리팅`(base 분할)은 `split(relation="슬리팅")`. 추적 · 상태 계산은 base 만 본다.
-- `split` · `merge` 의 자식 LOT `insp_status` 는 부모에서 잇는다(`inherit_insp` — 부모 하나면 그 값). 불합격을 이은 자식은 출하 422. `make_product_lot` 의 새 LOT 은 늘 `미검사`(새 생산).
+- `split` · `merge` 의 자식 LOT `insp_status` 는 부모에서 잇는다(`inherit_insp` — 부모 하나면 그 값). 불합격을 이은 자식은 출하 422. `make_product_lot` 의 새 LOT 은 `미검사`(새 생산) — 합병 · 생산 부모에 불합격이 있으면 `불합격`(회전 7).
 - 작업 종료 전에 LOT 을 만들지 않는다. `pop_input` 에 모였다가 `make_product_lot` 이 한 번에 계보로 옮긴다.
+
+**잔량 · 잠금 규칙 (회전 7 · 개발2 · DEF-QA2-007 · 008 · 009 · QA2 WARN 2)**
+- **잔량은 `lineage.remaining` 하나로 센다** — MATERIAL `qty − Σ pop_input(취소 제외)` · PRODUCT `qty − Σ 자식 계보 qty − Σ 종료 전 실적의 pop_input(취소 제외)`(`v_lot_stock` 과 같은 문장). `assert_usable` · `consume_material` · `split` · `merge` · `merge_parents_of`(종료 합병) · `make_product_lot(parent_id=)` · `ship` 이 전부 이것으로 **잔량 > 0**(수량을 주면 ≥ 수량)을 본다 — 아니면 422. 화살표 수량(합병 · 생산 · 출하)도 잠근 뒤 읽은 이 값이다.
+- **잠금**: 잔량으로 판정하는 쓰기는 판정 **전에** `lock_lots`(LOT 행 `for update` · **id 오름차순** 한 문장)를 부르고 그 뒤 문장으로 상태 · 잔량을 다시 읽는다. 순서는 §1 대로 실적(또는 출하 헤더) 행 → LOT 행(오름차순) → 지시 행(`for share`) → 채번. 뒤 트랜잭션은 LOT 잠금에서 기다렸다가 앞이 커밋한 잔량으로 판정한다(동시 실행 잔량 음수 0).
+- **수량 없는 투입 = 잔량 전부.** `consume_material(qty=None)` 은 그 시점 잔량을 `pop_input.qty` 로 적는다(원재료면 재고 거래도 −잔량). 잔량 0 이면 422. LOT 수량이 NULL 일 때만 수량 없이 남는다.
+- **LOT 통째 쓰기는 열린 투입을 기다린다.** 합병 · 출하 · `make_product_lot` 의 생산 부모 · 종료 합병 옵션 · 수량을 다 주지 않은 분할은, 그 LOT 이 종료 전 실적에 투입 스캔돼 있으면(취소 아님) 잔량이 남아도 422 — 실적 종료 또는 투입 취소 뒤에 한다(취소되면 화살표 수량이 LOT 과 어긋나고, 종료되면 같은 LOT 이 두 경로에 나온다). 수량을 모두 준 분할은 잔량 안에서 받는다.
+- **종료 합병 옵션**: 이 실적이 투입한 LOT 은 합병 부모가 될 수 없다(422). F-POP-03 은 `ended_at` 을 쓰기 **전에** `merge_parents_of(…, work_result_id=)` 로 판정하고, `make_product_lot` 이 같은 tx 에서 다시 본다.
+- **종료 합병 · 생산 부모의 검사 상태**: 새 LOT 은 `미검사`(새 생산)이되, 합병 · 생산 부모 중 `불합격` 이 하나라도 있으면 `불합격`(출하 422) — `merge` 의 `inherit_insp` 와 같은 쪽으로 불합격을 잇는다.
+- **부분 분할은 부모에 잔량을 남긴다.** 수량을 모두 준 분할(예 20 → 5+5)은 부모 잔량 10 이 남는다 — `v_lot_state` 는 분할 화살표가 전부 수량을 가지면 「투입」 과 같이 **잔량으로**(잔량 > 0 → 재고) 판정한다(아키텍트 `views.sql`). 수량 없는 분할(화살표 qty NULL) · 합병 · 생산 · 출하는 LOT 통째(소진 · 출하). D-503 의 「분할 계보가 생기면 부모는 소진」 문장을 이것으로 바꾼다.
 
 ## 5. 출력 — `app.printing` (개발2)
 

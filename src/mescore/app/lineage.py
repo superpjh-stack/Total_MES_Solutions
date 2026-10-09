@@ -238,9 +238,73 @@ def link(cur, parent_id: int, child_id: int, relation_name: str, *, by: str, qty
     return int(row["id"])
 
 
+def _ids_of(lot_ids) -> list[int]:
+    return [int(x) for x in (lot_ids if isinstance(lot_ids, (list, tuple, set)) else [lot_ids])]
+
+
+def _int_ids(values) -> list[int]:
+    """정수로 읽히는 것만 — 잠금 대상 고르기용(값 오류 422 는 각 검증이 따로 낸다)."""
+    out = []
+    for v in values:
+        try:
+            out.append(int(v))
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
+def lock_lots(cur, lot_ids) -> None:
+    """LOT 행 잠금(`for update`) — **id 오름차순** 한 문장(interfaces.md §1 · §4 잠금 순서 · DEF-QA2-009). 잔량을 읽어 판정하는 쓰기
+    (투입 · 분할 · 합병 · 출하 · 종료 합병)는 판정 **전에** 이것을 부르고, 그 뒤의 문장(새 스냅숏)으로 상태 · 잔량을 읽는다.
+    동시에 같은 LOT 을 쓰는 뒤 트랜잭션은 여기서 기다렸다가 앞 트랜잭션이 커밋한 잔량으로 다시 판정한다."""
+    ids = sorted(set(_ids_of(lot_ids)))
+    if ids:
+        _rows(cur, "select id from lot where id = any(%s) order by id for update", (ids,))
+
+
+def remaining(cur, lot_id: int, for_update: bool = True) -> Decimal | None:
+    """LOT 잔량 — 쓰기 경로의 **유일한** 잔량 계산(회전 7 · DEF-QA2-008). `v_lot_stock.remain_qty` 와 같은 문장:
+    MATERIAL: qty − Σ 취소 아닌 pop_input. PRODUCT 등: qty − Σ 자식 계보 qty − Σ **열린** pop_input(취소 아님 · 실적 미종료 — 종료되면
+    계보 `투입` 으로 세므로 두 번 세지 않는다). LOT 수량이 없으면 None(판정하지 않음). `for_update` 면 LOT 행을 먼저 잠근다."""
+    if for_update:
+        lock_lots(cur, [lot_id])
+    r = _one(cur, "select qty, kind_base from lot where id = %s", (int(lot_id),))
+    if r is None or r["qty"] is None:
+        return None
+    if r["kind_base"] == MATERIAL:
+        used = _one(cur, "select coalesce(sum(qty), 0) as s from pop_input where material_lot_id = %s and canceled_yn = 'N'", (int(lot_id),))["s"]
+    else:
+        used = _one(cur, """select coalesce((select sum(g.qty) from lot_genealogy g where g.parent_lot_id = %(id)s), 0)
+                                 + coalesce((select sum(i.qty) from pop_input i join pop_work_result w on w.id = i.work_result_id
+                                              where i.material_lot_id = %(id)s and i.canceled_yn = 'N' and w.ended_at is null), 0) as s""",
+                    {"id": int(lot_id)})["s"]
+    return Decimal(str(r["qty"])) - Decimal(str(used))
+
+
+def _open_inputs(cur, lot_ids, exclude_result: int | None = None) -> dict[int, list[int]]:
+    """종료 전 실적에 투입 스캔된(취소 아님) LOT → 그 실적 id 들."""
+    rows = _rows(cur, """select i.material_lot_id as lot_id, array_agg(distinct i.work_result_id order by i.work_result_id) as rids
+                           from pop_input i join pop_work_result w on w.id = i.work_result_id
+                          where i.material_lot_id = any(%s) and i.canceled_yn = 'N' and w.ended_at is null and (%s::bigint is null or w.id <> %s::bigint)
+                          group by i.material_lot_id""", (_ids_of(lot_ids), exclude_result, exclude_result))
+    return {r["lot_id"]: list(r["rids"]) for r in rows}
+
+
+def _assert_not_in_progress(cur, nodes_: list[Node], field_name: str = "lot_id", exclude_result: int | None = None) -> None:
+    """LOT **통째** 쓰기(합병 · 출하 · 생산 부모 · 종료 합병 · 수량 없는 분할)는 열린 투입이 있으면 422 — 그 투입이 취소되면 화살표 수량이
+    LOT 과 어긋나고, 종료되면 같은 LOT 이 다음 공정과 다른 경로 양쪽에 나온다(DEF-QA2-008 · 009). 실적을 종료하거나 투입을 취소한 뒤 한다."""
+    busy = _open_inputs(cur, [n.id for n in nodes_], exclude_result)
+    if busy:
+        reason = ", ".join(f"{n.no} → {t('실적')} {busy[n.id]}" for n in nodes_ if n.id in busy)
+        raise http.validation_error(t("종료 전 실적에 투입 중인 LOT 입니다 — 실적 종료 또는 투입 취소 뒤에 하세요"),
+                                    fields=[{"name": field_name, "label": t("LOT"), "reason": reason}])
+
+
 def assert_usable(cur, lot_ids) -> None:
-    """투입 · 분할 · 합병 · 출하에 쓸 수 있는가 — PRODUCT 는 `재고`, MATERIAL 은 합격(또는 조건부)이고 소진 전. 아니면 422."""
-    ids = [int(x) for x in (lot_ids if isinstance(lot_ids, (list, tuple, set)) else [lot_ids])]
+    """투입 · 분할 · 합병 · 출하에 쓸 수 있는가 — LOT 행을 잠그고(id 오름차순) PRODUCT 는 `재고`, MATERIAL 은 합격(또는 조건부)이고 소진 전,
+    그리고 **잔량 > 0**(`remaining` — 열린 투입 · 자식 계보 포함 · LOT 수량이 없으면 보지 않음). 아니면 422 (회전 7 · DEF-QA2-008)."""
+    ids = _ids_of(lot_ids)
+    lock_lots(cur, ids)
     found = nodes(ids, cur)
     for lid in ids:
         n = found.get(lid)
@@ -257,6 +321,9 @@ def assert_usable(cur, lot_ids) -> None:
         elif n.state != IN_STOCK:
             raise http.validation_error(t("재고 상태가 아닌 LOT 입니다"),
                                         fields=[{"name": "lot_id", "label": t("생산 LOT"), "reason": f"{n.no} {state_label(n.state)}"}])
+        rest = remaining(cur, n.id, for_update=False)
+        if rest is not None and rest <= 0:
+            raise http.validation_error(t("잔량이 없는 LOT 입니다"), fields=[{"name": "lot_id", "label": t("LOT"), "reason": f"{n.no} {t('잔량')} {rest}"}])
 
 
 def _insert_lot(cur, row: dict, *, by: str, user=None) -> dict:
@@ -310,8 +377,10 @@ def _lock_work_order(cur, work_order_id: int | None) -> dict | None:
 def make_product_lot(cur, *, work_result_id: int, by: str, kind: str = PRODUCT, qty=None, unit: str | None = None, attrs: dict | None = None,
                      parent_id: int | None = None, merge_parent_ids=None, merge_relation: str = MERGE, user=None) -> dict:
     """F-POP-03 종료 — 생산 LOT 1 + 그 실적의 `pop_input`(취소 제외) 마다 `투입` 계보 한 줄. `parent_id` 를 주면 앞 공정 LOT 과 `생산` 1:1.
-    `merge_parent_ids` 를 주면 그 LOT 들(재고인 생산 LOT · 1 개 이상)을 새 LOT 에 `merge_relation`(base 합병) 으로 잇는다 — 별도 합병 LOT 없이
-    "투입 + 합병 → 이 실적의 한 LOT". 실적에 이미 생산 LOT 이 있으면 422. 수량은 `qty` → 실적 양품 수량 순."""
+    `merge_parent_ids` 를 주면 그 LOT 들(재고 · 잔량 > 0 · 투입 중 아닌 생산 LOT · 1 개 이상 · **이 실적이 투입한 LOT 은 안 됨**)을 새 LOT 에
+    `merge_relation`(base 합병) 으로 잇는다 — 별도 합병 LOT 없이 "투입 + 합병 → 이 실적의 한 LOT". 실적에 이미 생산 LOT 이 있으면 422.
+    수량은 `qty` → 실적 양품 수량 순. 새 LOT `insp_status` 는 `미검사`(새 생산) — 단 합병 · 생산 부모 중 `불합격` 이 있으면 `불합격`(회전 7).
+    잠금 순서: 실적 행 → LOT 행(id 오름차순) → 지시 행(`for share`) → 채번."""
     if lot_kind(kind).base != PRODUCT:
         raise http.validation_error(t("생산 LOT 종류가 아닙니다"), fields=[{"name": "kind", "label": t("LOT 종류"), "reason": kind}])
     r = _one(cur, "select * from pop_work_result where id = %s for update", (int(work_result_id),))
@@ -319,7 +388,6 @@ def make_product_lot(cur, *, work_result_id: int, by: str, kind: str = PRODUCT, 
         raise http.validation_error(t("없는 실적입니다"), fields=[{"name": "work_result_id", "label": t("실적"), "reason": str(work_result_id)}])
     if r["product_lot_id"] is not None:
         raise http.validation_error(t("이미 생산 LOT 이 있는 실적입니다"), fields=[{"name": "work_result_id", "label": t("실적"), "reason": str(r["id"])}])
-    wo = _lock_work_order(cur, r["work_order_id"])
     inputs = _rows(cur, """select material_lot_id, sum(qty) as qty from pop_input
                             where work_result_id = %s and canceled_yn = 'N' group by material_lot_id order by material_lot_id""", (r["id"],))
     if inputs:
@@ -329,19 +397,28 @@ def make_product_lot(cur, *, work_result_id: int, by: str, kind: str = PRODUCT, 
         missing = [x for x in assert_usable_inputs if x not in found]
         if missing:
             raise http.validation_error(t("없는 LOT 입니다"), fields=[{"name": "material_lot_id", "label": t("원재료 LOT"), "reason": str(missing)}])
-    parent = _require_node(cur, parent_id, "앞 공정 LOT") if parent_id is not None else None
-    if parent is not None:
+    lock_lots(cur, _int_ids([parent_id] if parent_id is not None else []) + _int_ids(merge_parent_ids or []))   # 실적 → LOT(오름차순) → 지시 (§1)
+    parent = None
+    if parent_id is not None:
+        parent = _require_node(cur, parent_id, "앞 공정 LOT")
+        if parent.id in {i["material_lot_id"] for i in inputs}:
+            raise http.validation_error(t("이 실적이 투입한 LOT 은 앞 공정 LOT 으로 이을 수 없습니다"),
+                                        fields=[{"name": "parent_id", "label": t("앞 공정 LOT"), "reason": parent.no}])
         assert_usable(cur, [parent.id])
-    merge_parents = _merge_parents(cur, merge_parent_ids, merge_relation) if merge_parent_ids else []
+        _assert_not_in_progress(cur, [parent], "parent_id", exclude_result=r["id"])
+    merge_parents = merge_parents_of(cur, merge_parent_ids, merge_relation, work_result_id=r["id"]) if merge_parent_ids else []
+    wo = _lock_work_order(cur, r["work_order_id"])
+    whole = ([parent] if parent is not None else []) + merge_parents
+    insp = "불합격" if any(n.insp_status == "불합격" for n in whole) else "미검사"
     lot = _insert_lot(cur, {"kind": kind, "item_id": wo["item_id"] if wo else None, "work_order_id": r["work_order_id"], "process_id": r["process_id"],
                             "equipment_id": r["equipment_id"], "work_result_id": r["id"], "qty": qty if qty is not None else r["good_qty"],
-                            "unit": unit or r["unit"] or (wo["unit"] if wo else None), "insp_status": "미검사", "attrs": attrs}, by=by, user=user)
+                            "unit": unit or r["unit"] or (wo["unit"] if wo else None), "insp_status": insp, "attrs": attrs}, by=by, user=user)
     for i in inputs:
         link(cur, i["material_lot_id"], lot["id"], INPUT, by=by, qty=i["qty"])
     if parent is not None:
-        link(cur, parent.id, lot["id"], PRODUCE, by=by, qty=parent.remain_qty)
+        link(cur, parent.id, lot["id"], PRODUCE, by=by, qty=remaining(cur, parent.id, for_update=False))
     for m in merge_parents:
-        link(cur, m.id, lot["id"], merge_relation, by=by, qty=m.remain_qty)
+        link(cur, m.id, lot["id"], merge_relation, by=by, qty=remaining(cur, m.id, for_update=False))
     cur.execute("update pop_work_result set product_lot_id = %s, updated_at = now(), updated_by = %s where id = %s", (lot["id"], by, r["id"]))
     return lot
 
@@ -361,17 +438,20 @@ def inherit_insp(statuses) -> str:
     return "조건부"
 
 
-def _merge_parents(cur, parent_ids, relation_name: str) -> list[Node]:
-    """make_product_lot 의 합병 부모 — base 합병 관계 · 중복 없음 · 전부 재고인 생산 LOT."""
+def merge_parents_of(cur, parent_ids, relation_name: str = MERGE, *, work_result_id: int | None = None) -> list[Node]:
+    """종료 합병 옵션(`make_product_lot(merge_parent_ids=)`)의 합병 부모 검증 — 잠금(id 오름차순) 후 base 합병 관계 · 중복 없음 · 생산 LOT ·
+    `assert_usable`(재고 · 잔량 > 0) · 투입 중 아님 · **`work_result_id` 실적이 투입한 LOT 아님**(DEF-QA2-007). 아니면 422.
+    F-POP-03 라우터는 `ended_at` 을 쓰기 **전에** 이것으로 먼저 판정한다(같은 tx 안에서 make_product_lot 이 다시 본다)."""
     relation_of_base(relation_name, MERGE)
     ids: list[int] = []
-    for x in parent_ids:
+    for x in parent_ids or []:
         try:
             ids.append(int(x))
         except (TypeError, ValueError):
             raise http.validation_error(t("LOT 을 가리키는 값이 아닙니다"), fields=[{"name": "merge_lot_ids", "label": t("합병 LOT"), "reason": repr(x)}]) from None
     if len(set(ids)) != len(ids):
         raise http.validation_error(t("같은 LOT 이 두 번 들어 있습니다"), fields=[{"name": "merge_lot_ids", "label": t("합병 LOT"), "reason": str(ids)}])
+    lock_lots(cur, ids)
     found = nodes(ids, cur)
     missing = [i for i in ids if i not in found]
     if missing:
@@ -379,7 +459,15 @@ def _merge_parents(cur, parent_ids, relation_name: str) -> list[Node]:
     bad = [found[i].no for i in ids if found[i].kind_base != PRODUCT]
     if bad:
         raise http.validation_error(t("생산 LOT 만 합병할 수 있습니다"), fields=[{"name": "merge_lot_ids", "label": t("합병 LOT"), "reason": str(bad)}])
+    if work_result_id is not None:
+        own = {r["material_lot_id"] for r in _rows(cur, "select material_lot_id from pop_input where work_result_id = %s and canceled_yn = 'N'",
+                                                   (int(work_result_id),))}
+        clash = [found[i].no for i in ids if i in own]
+        if clash:
+            raise http.validation_error(t("이 실적이 투입한 LOT 은 합병 LOT 으로 다시 이을 수 없습니다"),
+                                        fields=[{"name": "merge_lot_ids", "label": t("합병 LOT"), "reason": str(clash)}])
     assert_usable(cur, ids)
+    _assert_not_in_progress(cur, [found[i] for i in ids], "merge_lot_ids", exclude_result=work_result_id)
     return [found[i] for i in ids]
 
 
@@ -396,7 +484,9 @@ def _qty_list(qtys, count: int) -> list:
 
 def split(cur, *, parent_id: int, count: int, by: str, qtys=None, relation: str = SPLIT, kind: str | None = None,
           process_id: int | None = None, equipment_id: int | None = None, attrs: dict | None = None, user=None) -> list[dict]:
-    """1 → N. 코어 `분할` 은 N ≥ 2, 팩이 등록한 분할 계열 관계는 N ≥ 1(부분 분할 — merge 와 대칭). 부모는 재고인 생산 LOT.
+    """1 → N. 코어 `분할` 은 N ≥ 2, 팩이 등록한 분할 계열 관계는 N ≥ 1(부분 분할 — merge 와 대칭). 부모는 재고 · 잔량 > 0 인 생산 LOT.
+    부모 LOT 행을 먼저 잠그고(DEF-QA2-009) 잔량을 다시 읽는다. 수량을 **모두** 주면 Σ ≤ 잔량이고 남는 양은 부모 잔량으로 남는다(부분 분할 ·
+    회전 7 — `v_lot_state` 는 수량 있는 분할을 잔량으로 판정). 수량을 하나라도 비우면 LOT **통째** 분할이라 열린 투입이 있으면 422.
     `relation` 은 base 가 `분할` 인 관계. `process_id · equipment_id · attrs` 는 D-503. 자식 `insp_status` 는 부모 값을 잇는다(`inherit_insp`)."""
     rel = relation_of_base(relation, SPLIT)
     try:
@@ -407,15 +497,19 @@ def split(cur, *, parent_id: int, count: int, by: str, qtys=None, relation: str 
     if n < least:
         raise http.validation_error(t("분할은 2 이상으로 나눕니다") if least == 2 else t("분할 수는 1 이상입니다"),
                                     fields=[{"name": "count", "label": t("분할 수"), "reason": f"{n} < {least}"}])
+    vals = _qty_list(qtys, n)
+    lock_lots(cur, _int_ids([parent_id]))                                          # LOT → 지시 → 채번 (§1)
     parent = _require_node(cur, parent_id, "부모 LOT")
     if parent.kind_base != PRODUCT:
         raise http.validation_error(t("생산 LOT 만 분할할 수 있습니다"), fields=[{"name": "parent_id", "label": t("LOT"), "reason": f"{parent.no} {parent.kind}"}])
     assert_usable(cur, [parent.id])
-    vals = _qty_list(qtys, n)
+    rest = remaining(cur, parent.id, for_update=False)
     given = [q for q in vals if q is not None]
-    if given and parent.remain_qty is not None and sum(given) > Decimal(str(parent.remain_qty)) + Decimal("0.0005"):
+    if given and rest is not None and sum(given) > rest + Decimal("0.0005"):
         raise http.validation_error(t("분할 수량의 합이 잔량을 넘습니다"),
-                                    fields=[{"name": "qtys", "label": t("분할 수량"), "reason": f"{sum(given)} > {parent.remain_qty}"}])
+                                    fields=[{"name": "qtys", "label": t("분할 수량"), "reason": f"{sum(given)} > {rest}"}])
+    if len(given) != n:
+        _assert_not_in_progress(cur, [parent], "parent_id")
     _lock_work_order(cur, parent.work_order_id)
     base = _one(cur, "select * from lot where id = %s", (parent.id,))
     children: list[dict] = []
@@ -439,7 +533,8 @@ def relation_of_base(name: str, base: str) -> Relation:
 
 def merge(cur, *, parent_ids, by: str, qty=None, relation: str = MERGE, kind: str | None = None,
           process_id: int | None = None, equipment_id: int | None = None, attrs: dict | None = None, user=None) -> dict:
-    """N → 1. 코어 `합병` 은 N ≥ 2, 팩이 등록한 합병 계열 관계(1:1 이어붙임 포함)는 N ≥ 1. 부모는 전부 재고인 생산 LOT. 수량은 `qty` → 부모 잔량 합.
+    """N → 1. 코어 `합병` 은 N ≥ 2, 팩이 등록한 합병 계열 관계(1:1 이어붙임 포함)는 N ≥ 1. 부모는 전부 재고 · 잔량 > 0 · 투입 중 아닌 생산 LOT
+    (LOT 통째 — 화살표 수량 = 잠근 뒤 읽은 잔량). 부모 LOT 행을 id 오름차순으로 먼저 잠근다(DEF-QA2-009). 수량은 `qty` → 부모 잔량 합.
     자식 `insp_status` 는 부모들에서 잇는다(`inherit_insp`)."""
     rel = relation_of_base(relation, MERGE)
     ids: list[int] = []
@@ -453,6 +548,7 @@ def merge(cur, *, parent_ids, by: str, qty=None, relation: str = MERGE, kind: st
     least = 2 if rel.name == MERGE else 1
     if len(ids) < least:
         raise http.validation_error(t("합병할 LOT 이 모자랍니다"), fields=[{"name": "parent_ids", "label": t("LOT"), "reason": f"{len(ids)} < {least}"}])
+    lock_lots(cur, ids)                                                            # LOT(오름차순) → 지시 → 채번 (§1 · DEF-QA2-009)
     found = nodes(ids, cur)
     parents = [found[i] for i in ids if i in found]
     if len(parents) != len(ids):
@@ -461,20 +557,22 @@ def merge(cur, *, parent_ids, by: str, qty=None, relation: str = MERGE, kind: st
     if bad:
         raise http.validation_error(t("생산 LOT 만 합병할 수 있습니다"), fields=[{"name": "parent_ids", "label": t("LOT"), "reason": str(bad)}])
     assert_usable(cur, ids)
+    _assert_not_in_progress(cur, parents, "parent_ids")
+    rests = {p.id: remaining(cur, p.id, for_update=False) for p in parents}
     wo_ids = {p.work_order_id for p in parents}
     work_order_id = parents[0].work_order_id if len(wo_ids) == 1 else None
     _lock_work_order(cur, work_order_id)
     first = _one(cur, "select * from lot where id = %s", (parents[0].id,))
     total = qty
-    if total is None and all(p.remain_qty is not None for p in parents):
-        total = sum(Decimal(str(p.remain_qty)) for p in parents)
+    if total is None and all(rests[p.id] is not None for p in parents):
+        total = sum(rests[p.id] for p in parents)
     child = _insert_lot(cur, {"kind": kind or first["kind"], "item_id": first["item_id"], "work_order_id": work_order_id,
                               "process_id": process_id if process_id is not None else first["process_id"],
                               "equipment_id": equipment_id if equipment_id is not None else first["equipment_id"],
                               "qty": total, "unit": first["unit"], "insp_status": inherit_insp([p.insp_status for p in parents]),
                               "attrs": attrs if attrs is not None else {}}, by=by, user=user)
     for p in parents:
-        link(cur, p.id, child["id"], rel.name, by=by, qty=p.remain_qty)
+        link(cur, p.id, child["id"], rel.name, by=by, qty=rests[p.id])
     return child
 
 
@@ -495,8 +593,10 @@ def shipment_lot(cur, shipment_id: int) -> dict | None:
 
 def ship(cur, *, shipment_id: int, lot_id: int, by: str, user=None) -> int:
     """F-SHP-05 (개발3). 출하 LOT 이 없으면 만든다(`LOT_SHIPMENT` 채번 · 거래처는 출하 헤더). 생산 LOT → 출하 LOT `출하` 한 줄.
-    이미 출하된 · 소진된 · 불합격 LOT 은 422."""
+    이미 출하된 · 소진된 · 불합격 · 잔량 ≤ 0 · 종료 전 실적에 투입 중인 LOT 은 422(회전 7 · DEF-QA2-008). LOT 행을 잠근 뒤 판정한다(009).
+    화살표 수량 = 잠근 뒤 읽은 잔량(부분 투입 뒤 남은 양)."""
     s = _shipment(cur, shipment_id)
+    lock_lots(cur, _int_ids([lot_id]))                                             # 출하 → LOT 행 잠금 뒤 다시 읽는다 (DEF-QA2-009)
     n = _require_node(cur, lot_id, "LOT")
     if n.kind_base != PRODUCT:
         raise http.validation_error(t("생산 LOT 만 출하할 수 있습니다"), fields=[{"name": "lot_id", "label": t("LOT"), "reason": f"{n.no} {n.kind}"}])
@@ -506,11 +606,15 @@ def ship(cur, *, shipment_id: int, lot_id: int, by: str, user=None) -> int:
         raise http.validation_error(t("다음 공정에 쓰인(소진) LOT 은 출하할 수 없습니다"), fields=[{"name": "lot_id", "label": t("생산 LOT"), "reason": n.no}])
     if n.insp_status == "불합격":
         raise http.validation_error(t("최신 검사가 불합격인 LOT 은 출하할 수 없습니다"), fields=[{"name": "lot_id", "label": t("생산 LOT"), "reason": n.no}])
+    rest = remaining(cur, n.id, for_update=False)
+    if rest is not None and rest <= 0:
+        raise http.validation_error(t("잔량이 없는 LOT 은 출하할 수 없습니다"), fields=[{"name": "lot_id", "label": t("생산 LOT"), "reason": f"{n.no} {t('잔량')} {rest}"}])
+    _assert_not_in_progress(cur, [n])
     x = shipment_lot(cur, s["id"])
     if x is None:
         x = _insert_lot(cur, {"kind": SHIPMENT, "shipment_id": s["id"], "partner_id": s["partner_id"], "unit": n.unit, "insp_status": "미검사",
                               "note": s["shipment_no"]}, by=by, user=user)
-    return link(cur, n.id, x["id"], SHIP, by=by, qty=n.remain_qty)
+    return link(cur, n.id, x["id"], SHIP, by=by, qty=rest)
 
 
 def unship(cur, *, shipment_id: int, lot_id: int, by: str, user=None) -> int:
@@ -535,37 +639,24 @@ def _stock_move(cur, *, item_id: int, lot_id: int, qty, unit: str | None, trx_ty
                                                        updated_at = now(), updated_by = excluded.created_by""", (item_id, qty, unit, by))
 
 
-def _input_available(cur, n: Node) -> Decimal | None:
-    """투입 스캔이 받을 수 있는 잔량 (DEF-QA2-001). LOT 행을 잠그고 뷰를 거치지 않고 센다 — 같은 LOT 을 동시에 스캔해도 넘치지 않게.
-    MATERIAL: qty − Σ 취소 아닌 pop_input. PRODUCT 등: qty − Σ 자식 계보 qty − Σ **열린** pop_input(취소 아님 · 실적 미종료 — 종료되면 계보 투입 행으로 세므로 두 번 세지 않는다).
-    LOT 수량이 없으면 None(검사하지 않음)."""
-    r = _one(cur, "select qty from lot where id = %s for update", (int(n.id),))
-    if r is None or r["qty"] is None:
-        return None
-    if n.kind_base == MATERIAL:
-        used = _one(cur, "select coalesce(sum(qty), 0) as s from pop_input where material_lot_id = %s and canceled_yn = 'N'", (int(n.id),))["s"]
-    else:
-        used = _one(cur, """select coalesce((select sum(g.qty) from lot_genealogy g where g.parent_lot_id = %(id)s), 0)
-                                 + coalesce((select sum(i.qty) from pop_input i join pop_work_result w on w.id = i.work_result_id
-                                              where i.material_lot_id = %(id)s and i.canceled_yn = 'N' and w.ended_at is null), 0) as s""",
-                    {"id": int(n.id)})["s"]
-    return Decimal(str(r["qty"])) - Decimal(str(used))
-
-
 def consume_material(cur, *, work_result_id: int, material_lot_id: int, qty, by: str, unit: str | None = None) -> int:
-    """F-POP-06 투입 스캔 → `pop_input` 한 행(계보는 종료 때). 불합격 · 미검사 · 소진 LOT · 잔량 부족 · 종료된 실적은 422.
+    """F-POP-06 투입 스캔 → `pop_input` 한 행(계보는 종료 때). 불합격 · 미검사 · 소진 LOT · 잔량 ≤ 0 · 잔량 부족 · 종료된 실적은 422.
+    `qty` 를 비우면 **잔량 전부**를 투입량으로 적는다(LOT 수량이 없으면 비운 채 — 회전 7).
     원재료(MATERIAL)면 재고 거래 `투입` −qty + 현재고 갱신. 반제품(PRODUCT 재고) 투입도 받는다. pop_input.id 를 돌려준다."""
     r = _one(cur, "select * from pop_work_result where id = %s for update", (int(work_result_id),))
     if r is None:
         raise http.validation_error(t("없는 실적입니다"), fields=[{"name": "work_result_id", "label": t("실적"), "reason": str(work_result_id)}])
     if r["ended_at"] is not None:
         raise http.validation_error(t("종료된 실적에는 투입할 수 없습니다"), fields=[{"name": "work_result_id", "label": t("실적"), "reason": str(r["id"])}])
+    lock_lots(cur, _int_ids([material_lot_id]))                                    # 실적 → LOT 행 잠금 뒤 다시 읽는다 (DEF-QA2-001 · 009)
     n = _require_node(cur, material_lot_id, "원재료 LOT")
     assert_usable(cur, [n.id])
     q = None if qty in (None, "") else Decimal(str(qty))
     if q is not None and q <= 0:
         raise http.validation_error(t("투입량은 0 보다 커야 합니다"), fields=[{"name": "qty", "label": t("투입량"), "reason": str(qty)}])
-    avail = _input_available(cur, n)
+    avail = remaining(cur, n.id, for_update=False)
+    if q is None and avail is not None:
+        q = avail                                                                  # 수량 없는 투입 = 잔량 전부 (회전 7 · DEF-QA2-008)
     if q is not None and avail is not None and q > avail + Decimal("0.0005"):
         raise http.validation_error(t("투입량이 LOT 잔량을 넘습니다"), fields=[{"name": "qty", "label": t("투입량"), "reason": f"{q} > {avail}"}])
     row = _one(cur, """insert into pop_input (work_result_id, material_lot_id, qty, unit, created_by) values (%s, %s, %s, %s, %s) returning id""",

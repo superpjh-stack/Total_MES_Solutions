@@ -11,13 +11,16 @@ from mescore.app import lineage
 # 상수: INPUT PRODUCE SPLIT MERGE SHIP = 투입 생산 분할 합병 출하 · MATERIAL PRODUCT SHIPMENT · IN_STOCK CONSUMED SHIPPED = 재고 소진 출하 · FORWARD BACKWARD
 # 쓰기 — 전부 conn.tx() 의 cur. by = login_id · user = rbac.User(훅 validate_lot/after_save_lot/on_lot_created 에 넘김 · 없으면 None). 검증 실패 422
 lineage.link(cur, parent_id, child_id, relation, *, by, qty=None, at=None) -> int   # at = linked_at(없으면 now() · 회전 4). 자기참조 · 순환 · 모르는 relation · 중복 (부모,자식,관계) 422. relation_base 저장
-lineage.assert_usable(cur, lot_ids) -> None                                         # PRODUCT 재고 · MATERIAL 합격/조건부 + 소진 전. 아니면 422
+lineage.assert_usable(cur, lot_ids) -> None                                         # LOT 잠금(id 오름차순) 뒤 PRODUCT 재고 · MATERIAL 합격/조건부 + 소진 전 · 잔량 > 0 (회전 7). 아니면 422
+lineage.remaining(cur, lot_id, for_update=True) -> Decimal | None                     # 회전 7 — 쓰기 경로의 유일한 잔량(= v_lot_stock 문장 · 자식 계보 + 열린 투입). LOT 수량 NULL → None
+lineage.lock_lots(cur, lot_ids) -> None                                              # 회전 7 — LOT 행 for update · id 오름차순 한 문장
+lineage.merge_parents_of(cur, parent_ids, relation="합병", *, work_result_id=None) -> list[Node]   # 회전 7 — 종료 합병 옵션 부모 검증(잠금 · 자기 투입 LOT 422 · 잔량 > 0 · 투입 중 아님). F-POP-03 이 ended_at 전에 부른다
 lineage.make_material_lot(cur, *, item_id, qty, unit, by, partner_id=None, lot_no=None, made_at=None, attrs=None, insp_status="미검사", note=None, kind="MATERIAL", user=None) -> dict
 lineage.make_product_lot(cur, *, work_result_id, by, kind="PRODUCT", qty=None, unit=None, attrs=None, parent_id=None, merge_parent_ids=None, merge_relation="합병", user=None) -> dict
 #   pop_input(취소 제외) → 투입 N줄 · parent_id → 생산 1:1 · merge_parent_ids(재고 생산 LOT ≥ 1) → 새 LOT 에 base 합병 화살표(별도 합병 LOT 없음 · 회전 4 · F-POP-03 폼 merge_lot_ids)
 lineage.split(cur, *, parent_id, count, by, qtys=None, relation="분할", kind=None, process_id=None, equipment_id=None, attrs=None, user=None) -> list[dict]   # D-503 · 코어 분할 N ≥ 2 · 팩 분할 계열 N ≥ 1 · 수량 합 ≤ 잔량 · 자식 insp_status 상속
 lineage.merge(cur, *, parent_ids, by, qty=None, relation="합병", kind=None, process_id=None, equipment_id=None, attrs=None, user=None) -> dict            # D-503 · 코어 합병 N ≥ 2 · 팩 합병 계열 N ≥ 1
-lineage.ship(cur, *, shipment_id, lot_id, by, user=None) -> int        # 개발3 F-SHP-05. 출하 LOT 없으면 LOT_SHIPMENT 채번. 등록 상태 출하만 · 이미 출하/소진/불합격 422
+lineage.ship(cur, *, shipment_id, lot_id, by, user=None) -> int        # 개발3 F-SHP-05. 출하 LOT 없으면 LOT_SHIPMENT 채번. 등록 상태 출하만 · 이미 출하/소진/불합격 · 잔량 ≤ 0 · 투입 중 422 (회전 7 · LOT 잠금 · 화살표 qty = 잔량)
 lineage.unship(cur, *, shipment_id, lot_id, by, user=None) -> int      # 개발3 F-SHP-06. 출하 화살표 삭제. 담기지 않은 LOT 422
 lineage.consume_material(cur, *, work_result_id, material_lot_id, qty, by, unit=None) -> int   # pop_input + 원재료면 mat_stock_trx(투입 −qty) · mat_stock. 미검사/불합격/소진/잔량 부족/종료 실적 422
 lineage.cancel_consume(cur, *, input_id, by) -> int                     # 종료 전만 · 재고 되돌림
@@ -192,3 +195,26 @@ G-P05  용어 — terms 키 치환 안 된 노출 0                             
 - **개발3 / 디자이너3**: `app/stats.py: TODAY_COUNT_SOURCES` 문구를 화면에 낼 때 `t()` — printfilm G-P05 남은 2(「오늘 계획 작업지시」 · 「오늘 시작 실적」).
 - **아키텍트**: ① `make core-hash` 재기록(내 `lineage.py` · `measure.py` · `routers/{mat,pop,qua,eqp}.py` · `home/_measure.html`) ② 팩 attrs 라벨 `t()` — printfilm 은 지금 노출 0 이지만 다른 팩 몫 ③ `v_lot_stock` 열린 투입 규칙은 lineage 와 독립이라 어느 쪽을 택해도 두 번 빼지 않는다 ④ `interfaces.md` §6 에 `measure.params_with_recorded` 한 줄.
 - **디자이너2**: POP-02 측정값 표에 `recorded_only` 행(꺼진 선언의 기록)이 섞여 나온다 — 구분 표시가 필요하면 `p.recorded_only` 로. 목록 6 화면에 `?sort=` 가 생겼다(ctx `sort`) — 머리글 링크는 모양 쪽 판단.
+
+## §7 회전 7 (2026-10-09) — 계보 무결성 (QA2 DEF-QA2-007 · 008 · 009 · WARN 2)
+
+규칙 전문은 `contracts/interfaces.md` §4 「잔량 · 잠금 규칙 (회전 7)」. 시그니처 추가 3(`remaining` · `lock_lots` · `merge_parents_of`) — §1 갱신. `_merge_parents` · `_input_available` 은 지웠다(대체).
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| **DEF-QA2-007 중대** 종료 합병 옵션 자기 투입 LOT | `merge_parents_of(work_result_id=)` 가 그 실적의 취소 아닌 pop_input LOT 과 겹치면 **422**(`merge_lot_ids`). F-POP-03 은 `ended_at` 을 쓰기 **전에** 부르고, `make_product_lot` 이 같은 tx 에서 다시 본다. QA2 재현(20 → 15 투입 → 같은 실적 종료 `merge_lot_ids`) → 422 · 종료 되돌림 · 다시 종료 뒤 소비 15 · 잔량 5 | `test_pop_api.py::test_end_merge_option_own_input_lot_is_422_before_end` · `test_lineage_scenario.py::test_end_merge_option_rejects_own_input_lot` · QA2 check_data 행 **PASS** |
+| **DEF-QA2-008 중대** 잔량 0 재사용 | 잔량을 `lineage.remaining` 하나로 — `assert_usable` · `consume_material` · `split` · `merge` · `merge_parents_of` · `make_product_lot(parent_id=)` · `ship` 전부 잔량 > 0(수량 시 ≥ 수량) 아니면 422. **수량 없는 투입 = 잔량 전부**(그 값을 pop_input.qty 로 · 잔량 0 이면 422). LOT **통째** 쓰기(합병 · 출하 · 생산 부모 · 종료 합병 · 수량 다 주지 않은 분할)는 열린 투입이 있으면 잔량이 남아도 422. 7경로(투입 수량 없음/1 · 분할 수량 없음/수량 · 합병 · 종료 합병 · 출하) 전부 422 · 잡은 실적 종료 뒤 자식 {투입 1} | `test_lineage_scenario.py::test_open_input_zero_remaining_blocks_every_path[7]` · `test_whole_lot_paths_wait_for_open_input` · `test_qtyless_input_takes_whole_remaining` · `test_pop_api.py::test_open_input_zero_remaining_lot_refused_by_api_paths` · QA2 행 **PASS** |
+| **DEF-QA2-009 경미** 동시성 | `lock_lots` — `select id from lot where id = any(…) order by id for update` 를 판정 **전에**: consume_material · split · merge · merge_parents_of/make_product_lot(실적 → LOT → 지시) · ship(출하 헤더 → LOT). 그 뒤 문장으로 상태 · 잔량을 다시 읽는다. 화살표 qty 도 잠근 뒤 잔량 | `test_lineage_scenario.py::test_concurrent_writes_never_go_negative[투입‖분할 · 분할‖분할 · 투입‖출하 · 합병‖투입]` — 두 커넥션 · 스레드 2 · B 는 A 커밋까지 대기 → 422 · 잔량 ≥ 0. QA2 동시성 3쌍 **PASS**(B 가 A 커밋 전 끝남 False 3/3) |
+| WARN ① 불합격 → 종료 합병 | `make_product_lot` 새 LOT 은 `미검사`, 합병 · 생산 부모에 `불합격` 이 있으면 **`불합격`**(출하 422) | `test_end_merge_option_inherits_fail` · QA2 참고 행: 200 · insp_status **불합격**(행 판정은 200 이면 WARN 으로 찍는 검사기 기준 그대로 WARN) |
+| WARN ② 부분 분할 | 결정: **수량을 모두 준 분할은 남는 양을 부모 잔량으로 둔다**(20 → 5+5 → `remaining` 10). lineage 는 반영. 상태는 `v_lot_state` 몫 — 지금 뷰는 분할 화살표 하나로 `소진` 이라 QA2 참고 행은 아직 WARN(잔량 10 · 소진) | `test_partial_split_keeps_remaining_on_parent` (lineage 잔량만 단언) · 아키텍트 요청 ② |
+| QA2 `check_data.py`(코어 · mes_qa2_db 새로) | **행 41 · FAIL 0 · WARN 2** · 37s(회전 6: FAIL 3). G-C04 새 공격 3행 전부 PASS. WARN 2 = 위 참고 ① ② | `uv run python src/mescore/tools/check_data.py` |
+| pytest (코어) | **322 passed** · 0 failed | `uv run pytest -q` |
+| 팩 pytest | printfilm **39** · foodservice **19** · kimchi **26** passed | `MES_PACK=<팩> uv run pytest -q packs/<팩>/tests` |
+| 계보 10행 | `test_core_scenario_is_exactly_10_rows` PASS(10행 유지) · `test_lineage_scenario.py` 35 passed | |
+| 라우트 · 용어 | check-routes G-C03 PASS 56/56 · placeholder 0 · RBAC 위반 0 · check-terms G-C23 PASS(위반 0 · t() 누락 0) | `make check-routes` · `make check-terms` |
+
+### §7-1 요청 (회전 7)
+- **아키텍트**: ① `make core-hash` 재기록(`app/lineage.py` · `routers/pop.py`) ② **`v_lot_state` 부분 분할** — PRODUCT 의 `분할` 화살표가 **전부 qty 를 가지면** 「투입」 과 같이 잔량으로 판정(잔량 > 0 → 재고). qty NULL 분할 · 합병 · 생산은 지금대로 소진(이 셋은 lineage 가 화살표 qty = 잔량으로 적어 잔량 0 이 된다). D-503 「분할 계보가 생기면 부모는 소진」 문장 대체 · `db-schema.md` §3.4 문장도 ③ `interfaces.md` §1 잠금 순서 줄에 「LOT 행은 id 오름차순 한 문장(`lineage.lock_lots`)」 을 더해 달라(§4 에는 적었다).
+- **개발3**: `routers/shp.py: _assert_remaining` 은 이제 `lineage.ship` 이 같은 검사(잠금 뒤 `remaining` ≤ 0 → 422 · 열린 투입 → 422)를 하므로 지워도 된다(주석대로). kimchi S4 는 부분 분할 결정이 뷰에 반영되면 `split(count=1, qtys=[600])` 만으로 K1 잔량 400 재고가 된다(DEF-QA2-010 선택지).
+- **QA2**: 참고 ① 행은 응답 200 이면 WARN 으로 찍힌다 — 이제 새 LOT 이 `불합격` 을 잇는 것이 설계다(§4). 판정 기준을 insp_status 로 바꿀지 판단.
+
