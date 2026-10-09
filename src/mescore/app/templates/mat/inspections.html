@@ -1,7 +1,7 @@
 {# MAT-02 입고검사 — F-MAT-04 판정 · F-MAT-05 조회 (스캔 ?no= · 없는 번호는 이 화면 422 재렌더 · data-scan 하나 · S-11).
    POP: docs/design/pop/mat_inspections_pop.html — LOT 스캔 → 검사 항목(측정값 폼과 같은 모양 mf.measure_fields) → 판정 3버튼 → 미검사 LOT.
    ctx: rows · lot · plan · fields · judgement_options · scan_no · scan_error · last #}
-{% extends "pop/_layout.html" %}
+{% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "home/_measure.html" as mf %}
 {% import "pop/_ui.html" as pui %}

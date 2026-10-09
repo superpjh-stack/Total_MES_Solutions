@@ -1,7 +1,7 @@
 {# MAT-04 재고 — F-MAT-08 조회 · F-MAT-09 조정(관리자 Web 만).
    모바일(body.ch-mobile): docs/design/mobile/mat_stock_m.html — 390px 가로 넘침 0 · 표 없음 · 품목 요약 줄(details) → LOT 접힘 · 첫 품목(또는 고른 품목)만 open · 쓰기 0.
    ctx: rows[{item_code item_name item_type qty unit trx_sum lots[]}] · item_options · item_id #}
-{% extends "pop/_layout.html" %}
+{% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "pop/_ui.html" as pui %}
 

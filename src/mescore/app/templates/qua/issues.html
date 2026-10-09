@@ -1,7 +1,9 @@
 {# QUA-04 이상 · 시정 — F-QUA-08 등록 · F-QUA-09 조치 · F-QUA-10 종결 · F-QUA-11 조회 #}
 {% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
+{% import "pop/_ui.html" as pui %}
 {% block search %}
+{{ pui.sort_keep(sort) }}
 {{ ui.select('상태', 'status', status_options, status) }}
 {{ ui.field('기간 시작', 'frm', frm, type='date') }}
 {{ ui.field('기간 끝', 'to', to, type='date') }}
@@ -10,7 +12,7 @@
 {% block grid %}
 <h2>{{ t('이상') }}</h2>
 <table class="grid">
-  <thead><tr><th>{{ t('번호') }}</th><th>{{ t('발생') }}</th><th>{{ t('공정') }}</th><th>LOT</th><th>{{ t('내용') }}</th><th>{{ t('원인') }}</th><th>{{ t('조치') }}</th><th>{{ t('상태') }}</th><th>{{ t('출처') }}</th><th></th></tr></thead>
+  <thead><tr>{{ pui.sort_th('번호', 'no', sort, request) }}{{ pui.sort_th('발생', 'at', sort, request) }}{{ pui.sort_th('공정', 'process', sort, request) }}{{ pui.sort_th('LOT', none, sort, request) }}{{ pui.sort_th('내용', none, sort, request) }}{{ pui.sort_th('원인', none, sort, request) }}{{ pui.sort_th('조치', none, sort, request) }}{{ pui.sort_th('상태', 'status', sort, request) }}{{ pui.sort_th('출처', none, sort, request) }}{{ pui.sort_th('', none, sort, request) }}</tr></thead>
   <tbody>
   {% for r in rows %}
   <tr><td>{{ r.issue_no }}</td><td>{{ r.occurred_at|dt }}</td><td>{{ r.process_name|txt }}</td><td>{{ r.lot_no|txt }}</td><td>{{ r.content }}</td><td>{{ r.cause|txt }}</td><td>{{ r.action|txt }}{% if r.action_at %} · {{ r.action_at|dt }} {{ r.action_by|txt('') }}{% endif %}</td><td>{{ r.status }}</td><td>{{ r.source }}</td>

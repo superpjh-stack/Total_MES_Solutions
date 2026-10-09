@@ -2,11 +2,11 @@
    화면에 data-scan 은 하나 — 출하가 열리기 전에는 출하 번호 스캔칸, 열린 뒤에는 생산 LOT 스캔칸. 스캔 성공은 배너만(S-10 · data-flash-banner).
    POP: docs/design/pop/shp_scan.html — 출하 선택(카드) → LOT 스캔 목록 → 승인(관리자만 활성 · 인라인 확인). 개발3 라우터 ctx 키 · 폼 name 그대로.
    ctx: opened · lots · summary · scan_error{message fields} · waiting · can_approve · can_scan #}
-{% extends "pop/_layout.html" %}
+{% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "pop/_ui.html" as pui %}
 {% import "trc/_cards.html" as cards %}
-{% block head_extra %}{% if device not in ['pop', 'mobile'] %}{{ cards.styles() }}{% endif %}{% endblock %}
+{% block head %}{% if device not in ['pop', 'mobile'] %}{{ cards.styles() }}{% endif %}{% endblock %}
 
 {% macro approve_box(big=false) %}
 {% if opened.status == '등록' %}

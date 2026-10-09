@@ -1,11 +1,11 @@
 {# SHP-03 출하 현황 — F-SHP-08. 오늘 · 이번 주 출하 · 납기 대비(stats.delivery). 쓰기 0.
    모바일(body.ch-mobile): docs/design/mobile/shp_status_m.html — 390px 가로 넘침 0 · 표 대신 카드 · stat 타일 2×2 · LOT 3건 초과면 접힘 · 납기 대비 배지.
    개발3 라우터 ctx 키 그대로: rows[{shipment_no partner_name ship_date order_no due_date due_days due_state status lot_count total_qty lots[]}] · total · stat · delivery_total · frm · to · today #}
-{% extends "pop/_layout.html" %}
+{% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "pop/_ui.html" as pui %}
 {% import "trc/_cards.html" as cards %}
-{% block head_extra %}{% if device not in ['pop', 'mobile'] %}{{ cards.styles() }}{% endif %}{% endblock %}
+{% block head %}{% if device not in ['pop', 'mobile'] %}{{ cards.styles() }}{% endif %}{% endblock %}
 
 {% macro due_badge(r) %}
 {% if r.due_days is defined and r.due_days is not none %}

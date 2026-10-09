@@ -276,6 +276,7 @@ Code128 · 값 = 번호 글자 그대로(`A-Z 0-9 -` · 권장 ≤ 20자) · 인
 | **S-12** | 503(DB 끊김)은 서버가 POP 레이아웃의 오류 화면으로 그린다 — 빨간 띠 + 연결 「끊김」 + **스캔칸 `disabled`**. app.js 는 `disabled` 스캔칸에 포커스를 주지 않는다. 오프라인 큐 · 자동 재시도 없음(현황판과 다르다) | 띠 · 「다시 시도」 버튼만 |
 | **S-13** | 시각 · 작업자 · 설비는 서버 렌더값. app.js 가 시계를 돌리지 않는다(초 단위 갱신 없음 — 낡은 화면을 새것처럼 보이지 않게) | 새로고침해야 바뀐다 |
 | **S-14** | `data-demo` · `data-demo-popup` · `.demo` 는 **원형 전용** — 템플릿으로 옮길 때 지운다. 남아 있으면 폼이 서버로 가지 않는다 | `grep data-demo templates/` = 0 |
+| **S-15** | 고르기 칩 `button[data-pick-into=칸 id][data-pick-value=번호]` — 누르면 그 칸(쉼표 목록)에 번호를 넣고 다시 누르면 뺀다(`aria-pressed`). 칸이 값의 주인(손으로 고쳐도 칩 표시가 따라온다) · 전송은 그 폼의 버튼. 스캔칸 포커스를 빼앗지 않는다(S-03 버튼 예외) | POP-02 종료 폼 `merge_lot_ids` |
 
 ### 3. 측정값 자동 폼 — `ui.measure_fields(process_id, values=None)` 의 상태 표
 
@@ -429,4 +430,30 @@ S-01~S-14 구현 위치(`static/app.js`): S-01 `scans.length !== 1 → console.e
 | 디자이너3 | `trc/{search,backward,forward}.html` · `kpi/summary.html` · `home/main.html` · `dashboard/index.html` 의 모바일 분기 — 이제 base 의 `.m-frame` 안에 들어간다. `.m-only` 카드 · 자체 검색 줄이 `.m-top` 과 겹치지 않는지 · 모바일 머리 제목을 화면 안에서 다시 그리지 않는지 본다. 가능하면 `{% block body %}` 대신 `{% block mobile_body %}` 로 모바일 본문을 나눈다 | 모바일 틀이 하나가 됐다(전에는 base 헤더 + 좌측 메뉴) |
 | 디자이너3 | `board.css` · `print.css` 의 `TEMP-TOKENS` 블록을 지우고 `kpi/board.html` · `print/*.html` 에 `<link rel="stylesheet" href="/static/tokens.css">` 한 줄 | `tokens.css` 가 웨이브 A′ 부터 있다 |
 | 디자이너3 | 현황판 오류 화면(503)도 `_error.html` 의 ch-board 자동 새로고침을 쓰는지 확인 — `kpi/board.html` 이 503 을 자기 화면 안 「연결 끊김」 으로 그리면 그대로 | S-12 · 자동 새로고침은 board 만 |
+
+## 이식 결과 (디자이너2 · 회전 5 · 2026-10-09)
+
+**디자이너1: base.html 의 「이미 그린 틀이면 그대로 낸다」 분기를 지워도 된다.** `templates/pop/_layout.html` 은 지웠고 이를 extends 하던 17 파일이 전부 `{% extends "base.html" %}` 다(`head_extra` → `head`). 이제 어느 템플릿도 `<main class="pop-main">` · `<div class="m-frame">` 을 스스로 그리지 않는다 — base 의 `'<main class="pop-main">' in body_html` · `'<div class="m-frame">' in body_html` 두 분기는 늘 거짓이다. 머리 주석의 「pop/_layout.html(디자이너2)은 옮겨 가는 동안 남는다 …」 줄도 함께.
+
+| 한 것 | 파일 | 확인 |
+|---|---|---|
+| `_layout.html` 삭제 · 17 파일 base 로 | `templates/{pop,mat,qua,eqp,shp}/*.html` | 전후 HTML(공백 정규화 · 시각 가림) 72 응답 비교 — Web · POP(field · admin) 전부 같음. 차이는 ① 모바일 `main.m-main` 에 `id="main"`(base 쪽 개선) ② POP-01 · POP-04 의 목록 맨 위 카드 1장(같은 DB 를 다른 담당이 동시에 써서 생긴 데이터 차이 — 마크업 같음) 뿐 |
+| 토큰 임시 `@layer pop-token-fallback` 삭제 | `pop.css` · `mobile.css` | 지운 토큰 이름 전부 `tokens.css` 에 있음(빠진 것 0) |
+| `body.ch-mobile:has(.m-frame) > .hdr …` 삭제 | `mobile.css` | 모바일 8 화면 `.hdr/.side/.ftr` 0 · 390px 가로 넘침 0 |
+| 모바일 알림 · 토스트 | `mobile.css` | `.m-main > .alert` 는 흐름 안(위 `.m-top` 아래 · 거터 한 번) · `.toast` 는 하단 탭 바로 위(390 틀 폭 · safe-area). 실측: 토스트 아래끝 776 < 탭 위끝 786 · 알림 위끝 120 > `.m-top` 아래끝 108 |
+| MAT-01 · EQP-01 POP 스캔칸 | `mat/receipts` · `eqp/status` | 스캔칸 1 · 열자마자 포커스. EQP-01 스캔한 설비 카드 `.card.sel` = 4px 강조선 + 옅은 강조 바탕 + 「스캔한 설비」 표지 · `aria-current` |
+| POP-02 종료 폼 `merge_lot_ids` | `pop/result` · `pop.css` · `app.js` S-15 | 칸 하나(번호 · 쉼표) + 이 지시의 재고 생산 LOT 칩. 한 바퀴: 칩 → 칸 `P…` → 다시 눌러 빠짐 → 종료 → 새 LOT 계보에 `합병` 1행 · 칩 LOT `소진` |
+| POP-02 꺼진 선언의 지난 기록(`params[].recorded_only`) | `pop/result` · `pop.css` | 종료 폼: 입력칸 아래 회색 점선 「지난 기록」 상자(읽기 전용 · 「선언 꺼짐」 배지). 종료 뒤: 측정값 표 아래 「선언 꺼짐 · 지난 기록만: …」 한 줄 |
+| QUA-02 검사 공정 폼 `#insp-process-form` | `qua/inspections` · `pop.css` | 패널 한 줄 — 공정 선택 + 「이 공정의 검사 항목」 + 설명 한 줄. name · id 그대로 |
+| 목록 서버 정렬 `?sort=` | `pop/_ui.html` `sort_th` · `sort_keep` · 6 화면 | 관리자 Web 표 머리글만(POP · 모바일은 정렬 없음 — 터치 화면은 서버 기본순). MAT-01 · MAT-03 · QUA-02 · QUA-04 · EQP-02 · EQP-03 의 허용 열(라우터 `*_SORT`)만 링크 · `th[aria-sort]` · ▲▼↕ · 같은 열 다시 = 반대 방향 · 조회 조건 유지 · 「조회」 폼에 숨은 `sort`. `app.js` 화면 정렬은 `th.th-sort` 를 건너뛴다 |
+| 금지어 | `app.js` | `splice` → `filter`/`concat` (G-C23 PASS) |
+
+캡처 `outputs/design/pop/r5_*.png` — POP 한 바퀴(`r5_pop01_work` → `r5_pop02_end` · `r5_pop02_merge_pick` → `r5_pop03_inputs` → `r5_pop02_ended` → `r5_pop04_label`) · `r5_mat01_scan` · `r5_eqp01_scan_sel` · `r5_qua02_process_form(_el)` · 모바일 `r5_mobile_mat04_alert` · `r5_mobile_shp03_toast`(알림 · 토스트는 위치 확인용으로 페이지에 넣어 찍음 — 모바일은 쓰기가 없어 실제 422 · 저장 토스트가 나지 않는다).
+
+| 다음 회전 요청 | 누구 | 왜 |
+|---|---|---|
+| base.html 의 두 분기 · 머리 주석 한 줄 삭제 | 디자이너1 | 위 |
+| `style.css` 에 `th.th-sort a`(색 상속 · 밑줄 없음 · 화살표 `--c-ink-3`) · `th[aria-sort=ascending|descending] a`(굵게) | 디자이너1 | 지금은 브라우저 기본 링크 모양 |
+| `home/_measure.html` 의 `measure_table` 에서 `recorded_only` 행에 「선언 꺼짐」 표지 | 개발2(그 파일 주인) | 지금은 POP-02 가 표 아래 한 줄로만 구분 |
+| 조회 역할(관리자)의 POP-03 스캔칸 — POST 403(QA3 §126) | 개발2 · 디자이너2 | 스캔칸을 숨기면 S-01(스캔칸 하나) 화면 규칙이 깨진다. `user.can('F-POP-06')` 이 거짓이면 스캔칸 `disabled` + 「이 역할은 투입 권한이 없다」 로 할지 다음 회전에 정한다 |
 

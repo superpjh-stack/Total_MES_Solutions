@@ -2,7 +2,7 @@
    분할/합병(D-12 · POST /pop/result/{id}/split|merge · 개발2 라우터 그대로). 스캔칸은 「다른 지시로 바꾸기」(POP-01 ?no=) 하나.
    디자인: docs/design/pop/pop_result_start.html · pop_result_end.html · pop_stop_scrap.html (디자이너2).
    ctx: worker_id_default · work_order · result · results · params · values · latest · stops · scraps · product_lot · stock_lots · stock_lot_options · equipment_options · worker_options · stop_reasons · defect_options · attr_specs #}
-{% extends "pop/_layout.html" %}
+{% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "home/_measure.html" as mf %}
 {% import "pop/_ui.html" as pui %}
@@ -88,16 +88,30 @@
   <section class="panel">
     <h2>{{ t('측정값') }} <small>{{ result.process_name }} · {{ t('공정 측정값 정의에서 자동') }}</small></h2>
     {{ mf.measure_fields(params, values, latest) }}
+    {% set rec_only = params|selectattr('recorded_only')|list %}
+    {% if rec_only %}
+    <div class="rec-only" role="group" aria-label="{{ t('지난 기록') }}">
+      <h3>{{ t('지난 기록') }} <small>{{ t('선언이 꺼진 측정값 — 읽기 전용 · 입력칸 아님') }}</small></h3>
+      <dl class="kv">
+        {% for p in rec_only %}{% set row = values.get(p.param_key) if values else none %}
+        <dt>{{ t(p.label) }}{% if p.unit %} <small>{{ p.unit }}</small>{% endif %}</dt>
+        <dd>{% if row and row.value_num is not none %}{{ row.value_num }}{% elif row and row.value_text %}{{ row.value_text }}{% else %}{{ NOT_COLLECTED }}{% endif %}{% if row and row.deviated %} {{ pui.badge('이탈') }}{% endif %} {{ pui.badge('선언 꺼짐') }}</dd>
+        {% endfor %}
+      </dl>
+    </div>
+    {% endif %}
     {% if attr_specs %}<div class="form-grid" style="margin-top:12px">{{ ui.attrs_fields(attr_specs) }}</div>{% endif %}
   </section>
-  <section class="panel">
+  <section class="panel merge-pick">
     <h2>{{ t('생산 LOT') }} <small>{{ t('종료하면 하나 생긴다 — 수량 = 양품') }}</small></h2>
-    <div class="actions">
-      <button type="button" class="btn" disabled title="{{ t('종료 뒤 생산 LOT 이 생기면 할 수 있다') }}">{{ t('분할') }}</button>
-      <button type="button" class="btn" disabled title="{{ t('종료 뒤 생산 LOT 이 생기면 할 수 있다') }}">{{ t('합병') }}</button>
-      {{ ui.undecided('D-12', '분할 · 합병 화면') }}
+    {{ ui.field('함께 합칠 재고 LOT (선택)', 'merge_lot_ids', '', id='merge_lot_ids', cls='wide', hint=t('번호 · 쉼표로 여럿'), autocomplete='off') }}
+    {% if stock_lots %}
+    <div class="pick-chips" role="group" aria-label="{{ t('이 지시의 재고 생산 LOT') }}">
+      {% for n in stock_lots %}<button type="button" class="chip" data-pick-into="merge_lot_ids" data-pick-value="{{ n.no }}" aria-pressed="false"><code>{{ n.no }}</code> <small>{{ n.qty|num(3) }} {{ n.unit|txt('') }}</small></button>{% endfor %}
     </div>
-    <div class="field" style="margin-top:12px">{{ ui.field('합병할 재고 LOT 번호 (쉼표 · 선택)', 'merge_lot_ids') }}</div>
+    {% endif %}
+    <ul class="notes"><li>{{ t('비우면 새 LOT 하나. 고르면 그 재고 LOT 이 새 LOT 에 합쳐진다(계보 합병). 분할은 종료 뒤 이 화면에서.') }}</li></ul>
+    {{ ui.undecided('D-12', '분할 · 합병 화면') }}
   </section>
   {{ ui.write_button('작업 종료 → 생산 LOT 만들기', user.can('F-POP-03'), form='end-form') }}
 </form>
@@ -105,6 +119,7 @@
 <section class="panel">
   <h2>{{ t('측정값') }} <small>{{ result.process_name }}</small></h2>
   {{ mf.measure_table(params, values) }}
+  {% set rec_only = params|selectattr('recorded_only')|list %}{% if rec_only %}<ul class="notes"><li>{{ t('선언 꺼짐 · 지난 기록만') }}: {% for p in rec_only %}{{ t(p.label) }}{% if not loop.last %} · {% endif %}{% endfor %}</li></ul>{% endif %}
 </section>
 <section class="panel">
   <h2>{{ t('생산 LOT') }}{% if product_lot %} <small><code>{{ product_lot.no }}</code> · {{ product_lot.qty|num(3) }} {{ product_lot.unit|txt('') }} · {{ pui.badge(product_lot.state) }}</small>{% endif %}</h2>

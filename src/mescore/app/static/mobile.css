@@ -1,20 +1,6 @@
 /* 모바일 채널 스타일 — 디자이너2 (docs/design/mobile/mobile.css 이식). base.html 이 body.ch-mobile 일 때 <link> 한다.
    폭 390px 기준 · 가로 넘침 0 · 조회 중심(쓰기 버튼 없음) · JS 0(접기는 details/summary). 규칙은 전부 body.ch-mobile 아래에만. */
 
-/* ── 토큰 임시값 — style.css 의 :root 에 디자이너1 토큰이 아직 없을 때만 (pop.css 와 같은 @layer — 토큰이 생기면 지운다) ── */
-@layer pop-token-fallback {
-  :root {
-    --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", "Noto Sans KR", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "D2Coding", "Liberation Mono", monospace;
-    --c-bg: #f2f3f5; --c-surface: #ffffff; --c-surface-2: #eef0f2; --c-line: #d3d7dc; --c-line-strong: #a9b0b8;
-    --c-ink: #1b1f24; --c-ink-2: #5c6670; --c-ink-3: #8c959e; --c-ink-inverse: #ffffff;
-    --c-accent: #1f5fa8; --c-accent-ink: #ffffff; --c-focus: #8fb4e3;
-    --c-ok: #1e7b3f; --c-ok-bg: #e4f4e9; --c-warn: #9a6200; --c-warn-bg: #fff3d4; --c-err: #b42318; --c-err-bg: #fbe9e7;
-    --c-neutral: #5c6670; --c-neutral-bg: #eceff2; --c-empty: #8c959e;
-    --fs-mobile-base: 16px; --fs-mobile-no: 15px; --touch-min: 48px; --touch-mobile-tab: 56px; --r-lg: 6px;
-  }
-}
-
 /* ── 토큰 매핑 — 색은 전부 style.css(디자이너1)의 --c-* 를 쓴다. 이 파일은 모바일 채널의 치수만 정한다. ── */
 body.ch-mobile {
   --bg: var(--c-surface);
@@ -50,11 +36,6 @@ body.ch-mobile {
   font: var(--font)/1.4 var(--font-sans);
   -webkit-text-size-adjust: 100%;
 }
-/* pop/_layout.html 의 .m-frame 이 있는 화면(MAT-04 · SHP-03)에서만 base.html 의 Web 틀(헤더 · 좌측 메뉴 · 푸터)을 숨긴다 —
-   그 밖의 모바일 화면(TRC · KPI · JOB-02 · ORD-03 · 디자이너3)은 base.html 틀 그대로. base.html 이 모바일 분기를 품으면 :has() 는 없어진다 */
-body.ch-mobile:has(.m-frame) > .hdr, body.ch-mobile:has(.m-frame) > .shell > .side, body.ch-mobile:has(.m-frame) > .shell > .desc, body.ch-mobile:has(.m-frame) > .ftr, body.ch-mobile:has(.m-frame) .menu-jump { display: none; }
-body.ch-mobile:has(.m-frame) > .shell { display: block; padding: 0; }
-body.ch-mobile:has(.m-frame) > .shell > .main { display: block; }
 
 /* 데스크톱에서 볼 때 390px 틀. 실제 기기(≤390)에서는 틀이 사라진다 */
 body.ch-mobile .m-frame { width: 390px; max-width: 100%; margin: 0 auto; min-height: 100vh; background: var(--bg); position: relative; overflow-x: hidden; }
@@ -78,13 +59,28 @@ body.ch-mobile .m-search input { flex: 1; min-height: var(--touch); font: inheri
 body.ch-mobile .m-search input:focus { outline: 4px solid var(--focus); }
 body.ch-mobile .m-search button { min-height: var(--touch); min-width: var(--touch); padding: 0 14px; font: inherit; font-weight: 700; border: 2px solid var(--primary); background: var(--primary); color: var(--primary-fg); border-radius: var(--radius); }
 
-body.ch-mobile main.m-main { padding: 12px var(--gutter) calc(var(--tab) + 24px); }
+body.ch-mobile main.m-main { padding: 12px var(--gutter) calc(var(--tab) + 24px + env(safe-area-inset-bottom, 0px)); }
 
 /* 하단 탭 4 */
 body.ch-mobile .m-tabs { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 390px; max-width: 100%; display: grid; grid-template-columns: repeat(4, 1fr); background: var(--bg); border-top: 2px solid var(--fg); z-index: 5; }
 body.ch-mobile .m-tabs a { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: var(--tab); text-decoration: none; font-size: 13px; font-weight: 700; color: var(--muted); gap: 2px; }
 body.ch-mobile .m-tabs a .ico { font-size: 18px; line-height: 1; }
 body.ch-mobile .m-tabs a.on { color: var(--fg); box-shadow: inset 0 4px 0 var(--fg); }
+
+/* 알림 · 토스트 — base.html 이 .m-main 맨 위에 .alert(422 · info · warn), body 끝에 .toast(저장됨 8초)를 그린다.
+   알림은 본문 흐름 안(위 .m-top 아래 · 아래 .m-main 의 탭 높이 여백) — 겹침 0. 토스트는 .m-top(검색 줄)을 가리지 않게
+   아래쪽 · 하단 탭 바로 위에 띄운다(390 틀 폭 안). 홈 막대가 있는 기기는 safe-area 만큼 더 올린다. */
+body.ch-mobile .m-main > .alert { margin: 0 0 12px; font-size: 15px; line-height: 1.45; overflow-wrap: anywhere; scroll-margin-top: 120px; }
+body.ch-mobile .m-main > .alert .alert-x { min-width: 40px; min-height: 40px; margin: -8px -8px 0 4px; }
+body.ch-mobile .m-main > .alert ul.fields { padding-left: 18px; font-size: 14px; }
+body.ch-mobile .m-tabs { padding-bottom: env(safe-area-inset-bottom, 0px); }
+body.ch-mobile .toast {
+  top: auto; right: auto; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--tab) + 12px + env(safe-area-inset-bottom, 0px));
+  width: calc(min(390px, 100vw) - 2 * var(--gutter)); max-width: none; z-index: 6;
+  font-size: 15px; overflow-wrap: anywhere;
+}
+body.ch-mobile .toast-x { min-width: 40px; min-height: 40px; }
 
 /* 칩(필터) — 옆으로 밀기는 이 줄만, 본문은 가로 넘침 0 */
 body.ch-mobile .chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 10px; scrollbar-width: none; }

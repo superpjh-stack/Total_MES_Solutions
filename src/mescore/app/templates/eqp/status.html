@@ -1,7 +1,7 @@
 {# EQP-01 가동 현황 — F-EQP-01 조회 · F-EQP-02 가동 상태 기록 (기록이지 제어가 아니다). 수집 설비는 collect.latest · 없으면 미수집.
    POP: docs/design/pop/eqp_status_pop.html — 설비 카드 + 상태 4버튼(기록) · 점검 · 고장 화면으로 링크. 스캔 진입 ?equip_code= → 그 설비 카드가 맨 앞 · .sel(없는 설비는 이 화면 422 재렌더) — 스캔칸 하나.
    ctx: rows[{id equip_code equip_name process_name state state_since state_source collect_yn latest last_received_at}] · states · state_options · equipment_options · now(문자열 YYYY-MM-DD HH:MM) · scan_no · selected_id #}
-{% extends "pop/_layout.html" %}
+{% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "pop/_ui.html" as pui %}
 
@@ -13,7 +13,8 @@
   <h2>{{ t('설비') }} <small>{{ rows|length }}{{ t('대') }} · {{ now[11:16] if now is string else now|dt('%H:%M') }}</small></h2>
   <div class="cards">
     {% for e in rows %}
-    <article class="card{% if e.id == selected_id %} sel{% endif %}">
+    <article class="card{% if e.id == selected_id %} sel{% endif %}"{% if e.id == selected_id %} aria-current="true" id="equip-sel"{% endif %}>
+      {% if e.id == selected_id %}<p class="sel-tag">{{ t('스캔한 설비') }}</p>{% endif %}
       <h3>{{ e.equip_code }} {{ e.equip_name }} {{ pui.badge(e.state) }}</h3>
       <dl class="kv">
         <dt>{{ t('공정') }}</dt><dd>{{ e.process_name|txt }}</dd>

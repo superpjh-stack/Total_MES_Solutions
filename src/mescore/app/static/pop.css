@@ -2,39 +2,6 @@
    전제: 장갑 낀 손 · 1m 거리 · 터치. 기본 글자 20px · 터치 높이 56px 이상 · 장식 0 · 외부 폰트 0.
    규칙은 전부 body.ch-pop 아래에만 — 관리자 Web 에는 아무 영향이 없다. */
 
-/* ── 토큰 임시값 — style.css 의 :root 에 디자이너1 토큰(--c-* · --fs-pop-* · --touch-pop-*)이 아직 없을 때만 쓰인다.
-   @layer 안의 선언은 layer 밖(style.css :root)의 같은 이름에 늘 진다 — 토큰이 생기면 이 블록은 지워도 된다(README 이식 요청). ── */
-@layer pop-token-fallback {
-  :root {
-    --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", "Noto Sans KR", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "D2Coding", "Liberation Mono", monospace;
-    --c-bg: #f2f3f5; --c-surface: #ffffff; --c-surface-2: #eef0f2; --c-surface-3: #e3e6ea;
-    --c-line: #d3d7dc; --c-line-strong: #a9b0b8;
-    --c-ink: #1b1f24; --c-ink-2: #5c6670; --c-ink-3: #8c959e; --c-ink-inverse: #ffffff;
-    --c-accent: #1f5fa8; --c-accent-hover: #184d89; --c-accent-ink: #ffffff; --c-accent-tint: #e6eef9;
-    --c-focus: #8fb4e3; --c-focus-pop: #ffd600;
-    --c-ok: #1e7b3f; --c-ok-bg: #e4f4e9; --c-warn: #9a6200; --c-warn-bg: #fff3d4; --c-err: #b42318; --c-err-bg: #fbe9e7;
-    --c-info: #1f5fa8; --c-info-bg: #e6eef9; --c-neutral: #5c6670; --c-neutral-bg: #eceff2;
-    --c-lot-stock: #0f6f7c; --c-lot-stock-bg: #dff3f6; --c-lot-shipped: #233f8a; --c-lot-shipped-bg: #e3e8f7;
-    --c-undecided: #8a5a00; --c-undecided-bg: #fff3d4; --c-undecided-line: #e8cf9a; --c-empty: #8c959e;
-    --fs-pop-base: 20px; --fs-pop-badge: 16px; --fs-pop-note: 17px; --fs-pop-input: 20px; --fs-pop-scan: 30px;
-    --fs-pop-alert: 28px; --fs-pop-num: 32px; --fs-pop-primary: 26px;
-    --touch-pop: 56px; --touch-min-pop: 56px; --touch-pop-choice: 64px; --touch-pop-primary: 80px; --touch-pop-scan: 72px;
-    --r-lg: 6px;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --c-bg: #15181c; --c-surface: #1e2227; --c-surface-2: #262b31; --c-surface-3: #2f353c; --c-line: #353b43; --c-line-strong: #525a64;
-      --c-ink: #e6e9ec; --c-ink-2: #a3acb5; --c-ink-3: #6f7983; --c-ink-inverse: #15181c;
-      --c-accent: #6ea3e8; --c-accent-hover: #8ab6ee; --c-accent-ink: #0f1114; --c-accent-tint: #1f2d40; --c-focus: #4e7fc0;
-      --c-ok: #6dc98b; --c-ok-bg: #16301f; --c-warn: #e9b84a; --c-warn-bg: #3a2c0c; --c-err: #f08a7f; --c-err-bg: #3c1a16;
-      --c-info: #6ea3e8; --c-info-bg: #1b2a3f; --c-neutral: #a3acb5; --c-neutral-bg: #262b31;
-      --c-lot-stock: #5fc3d0; --c-lot-stock-bg: #10303a; --c-lot-shipped: #93a9ee; --c-lot-shipped-bg: #1c2447;
-      --c-undecided: #e9b84a; --c-undecided-bg: #3a2c0c; --c-undecided-line: #7a5f1a; --c-empty: #6f7983;
-    }
-  }
-}
-
 /* ── 토큰 매핑 — 색은 전부 style.css(디자이너1)의 --c-* 를 쓴다. 이 파일은 POP 채널의 치수만 정한다. ── */
 body.ch-pop {
   --bg: var(--c-surface);
@@ -143,7 +110,8 @@ body.ch-pop .panel > h1, body.ch-pop .panel > h2 { font-size: 22px; margin-botto
 body.ch-pop .panel > h3 { font-size: 19px; margin: 10px 0 8px; }
 body.ch-pop .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
 body.ch-pop .card { border: 2px solid var(--line); border-radius: var(--radius); padding: 12px 14px; background: var(--bg); display: flex; flex-direction: column; gap: 8px; text-decoration: none; }
-body.ch-pop .card.sel { border: 4px solid var(--primary); }
+body.ch-pop .card.sel { border: 4px solid var(--primary); background: var(--c-accent-tint); box-shadow: 0 0 0 4px var(--c-accent-tint); scroll-margin-top: 16px; }
+body.ch-pop .card .sel-tag { margin: 0; align-self: flex-start; padding: 2px 12px; border-radius: 12px; background: var(--primary); color: var(--primary-fg); font-size: var(--fs-pop-badge); font-weight: 700; }
 body.ch-pop .card h3 { font-size: 24px; display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 0; }
 body.ch-pop .card .actions { margin-top: auto; }
 body.ch-pop .card ul { margin: 0; padding-left: 18px; font-size: 17px; }
@@ -211,12 +179,33 @@ body.ch-pop input:focus, body.ch-pop select:focus, body.ch-pop textarea:focus { 
 body.ch-pop input[readonly], body.ch-pop .readonly { background: var(--off-bg); border-color: var(--line); color: var(--off); }
 body.ch-pop input[type="checkbox"], body.ch-pop input[type="radio"] { width: 28px; height: 28px; min-height: 0; }
 body.ch-pop .req { color: var(--err); font-style: normal; position: static; }
-body.ch-pop .field .hint { font-size: 16px; color: var(--muted); font-weight: 400; }
+body.ch-pop .field .hint, body.ch-pop label.f .hint { font-size: 16px; color: var(--muted); font-weight: 400; }
 body.ch-pop .unit { font-size: var(--font); color: var(--muted); font-weight: 400; }
 body.ch-pop .field.inline { flex-direction: row; align-items: center; }
 body.ch-pop .field.inline input { width: 200px; text-align: right; }
 body.ch-pop .qty-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 body.ch-pop .qty-row input { font-size: var(--fs-pop-num); min-height: var(--touch-pop-scan); text-align: right; }
+/* POP-02 종료 폼 — 함께 합칠 재고 LOT(merge_lot_ids · 선택). 칸 하나 + 이 지시의 재고 LOT 칩(누르면 칸에 번호를 넣고 빼는 app.js S-15) */
+body.ch-pop .merge-pick label.f input { font-family: var(--font-mono); }
+body.ch-pop .pick-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+body.ch-pop .pick-chips .chip { display: inline-flex; align-items: center; gap: 8px; min-height: var(--touch); padding: 0 16px; border: 2px solid var(--fg); border-radius: var(--radius); background: var(--bg); color: var(--fg); font: inherit; font-weight: 700; cursor: pointer; }
+body.ch-pop .pick-chips .chip small { color: inherit; opacity: .8; }
+body.ch-pop .pick-chips .chip[aria-pressed="true"] { background: var(--fg); color: var(--inverse); }
+body.ch-pop .pick-chips .chip:focus-visible { outline: 0; box-shadow: 0 0 0 5px var(--focus); }
+body.ch-pop .merge-pick .notes { margin-top: 10px; }
+
+/* QUA-02 검사 공정 고르기(#insp-process-form · GET) — 한 줄: 공정 선택 + 버튼, 아래 설명 */
+body.ch-pop form.proc-pick { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; }
+body.ch-pop form.proc-pick > label.f:not(.w-btn) { flex: 1 1 320px; }
+body.ch-pop form.proc-pick > label.w-btn { flex: 0 0 auto; }
+body.ch-pop form.proc-pick > label.w-btn > span { display: none; }
+body.ch-pop form.proc-pick .hint { flex: 1 0 100%; margin: 0; font-size: 16px; color: var(--muted); }
+
+/* POP-02 측정값 — 선언이 꺼졌지만 기록이 있는 키(params[].recorded_only) — 입력칸과 섞이지 않게 회색 점선 상자 · 읽기 전용 */
+body.ch-pop .rec-only { margin-top: 12px; padding: 10px 12px; border: 2px dashed var(--line); border-radius: var(--radius); background: var(--off-bg); color: var(--off); }
+body.ch-pop .rec-only h3 { font-size: 18px; margin: 0 0 8px; color: var(--off); }
+body.ch-pop .rec-only dd { color: var(--fg); font-weight: 400; }
+
 body.ch-pop fieldset { border: 2px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin: 0; }
 
 /* 배지 */

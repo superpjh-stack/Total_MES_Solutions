@@ -1,7 +1,9 @@
 {# EQP-02 점검 — F-EQP-03 등록 · F-EQP-04 조회 #}
-{% extends "pop/_layout.html" %}
+{% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
+{% import "pop/_ui.html" as pui %}
 {% block search %}
+{{ pui.sort_keep(sort) }}
 {{ ui.select('설비', 'equipment_id', equipment_options, equipment_id) }}
 {{ ui.field('기간 시작', 'frm', frm, type='date') }}
 {{ ui.field('기간 끝', 'to', to, type='date') }}
@@ -10,7 +12,14 @@
 <h2>{{ t('점검') }}</h2>
 {% set rows_ = [] %}
 {% for r in rows %}{% set _ = rows_.append([r.equip_code ~ ' ' ~ r.equip_name, r.checked_at|dt, r.item, r.result|txt, r.checker|txt, r.note|txt]) %}{% endfor %}
-{{ ui.grid(['설비', '점검 일시', '점검 항목', '결과', '점검자', '비고'], rows_) }}
+{% set cols = [('설비', 'equip'), ('점검 일시', 'at'), ('점검 항목', 'item'), ('결과', 'result'), ('점검자', none), ('비고', none)] %}
+<table class="grid cardify">
+  <thead><tr>{% for l, k in cols %}{{ pui.sort_th(l, k, sort, request) }}{% endfor %}</tr></thead>
+  <tbody>
+  {% for row in rows_ %}<tr>{% for cell in row %}<td data-l="{{ t(cols[loop.index0][0]) }}">{{ cell }}</td>{% endfor %}</tr>
+  {% else %}<tr><td colspan="{{ cols|length }}" class="empty"><b>{{ NOT_COLLECTED }}</b></td></tr>{% endfor %}
+  </tbody>
+</table>
 <section class="panel">
   <h2>{{ t('점검') }} {{ t('등록') }} <small>F-EQP-03</small></h2>
   <form method="post" action="{{ nav.path_of('EQP-02') }}" id="check-form" class="form-grid">

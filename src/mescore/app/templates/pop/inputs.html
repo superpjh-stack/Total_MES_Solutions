@@ -1,7 +1,7 @@
 {# POP-03 투입 스캔 — F-POP-06 스캔(한 번 = 한 건 · S-05) · F-POP-07 취소. ?no= 미리 보기 — 없는 번호는 이 화면 422 재렌더(S-11) · data-scan 하나.
    폼 POST 의 422(불합격 · 미검사 · 소진 · 없는 번호 · 투입량)는 303 + 알림(S-09) · 성공은 배너만(S-10 · data-flash-banner).
    디자인: docs/design/pop/pop_inputs.html (디자이너2). ctx: result · rows · lot · open_results · last_qty · last_unit · scan_no · scan_error #}
-{% extends "pop/_layout.html" %}
+{% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "pop/_ui.html" as pui %}
 {% set who_equip = (result.equip_code ~ ' ' ~ (result.equip_name or '')) if result and result.equip_code else '' %}

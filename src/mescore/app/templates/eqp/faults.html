@@ -1,7 +1,9 @@
 {# EQP-03 고장 — F-EQP-05 등록 · F-EQP-06 조치 · F-EQP-07 조회 (MTTR 은 stats.equipment) #}
-{% extends "pop/_layout.html" %}
+{% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
+{% import "pop/_ui.html" as pui %}
 {% block search %}
+{{ pui.sort_keep(sort) }}
 {{ ui.select('설비', 'equipment_id', equipment_options, equipment_id) }}
 {{ ui.field('기간 시작', 'frm', frm, type='date') }}
 {{ ui.field('기간 끝', 'to', to, type='date') }}
@@ -10,7 +12,7 @@
 {% block grid %}
 <h2>{{ t('고장') }}</h2>
 <table class="grid">
-  <thead><tr><th>{{ t('설비') }}</th><th>{{ t('발생 시각') }}</th><th>{{ t('증상') }}</th><th>{{ t('복구 시각') }}</th><th>{{ t('조치 내용') }}</th><th>{{ t('조치자') }}</th><th>{{ t('시간') }}</th><th></th></tr></thead>
+  <thead><tr>{{ pui.sort_th('설비', 'equip', sort, request) }}{{ pui.sort_th('발생 시각', 'at', sort, request) }}{{ pui.sort_th('증상', none, sort, request) }}{{ pui.sort_th('복구 시각', 'fixed', sort, request) }}{{ pui.sort_th('조치 내용', none, sort, request) }}{{ pui.sort_th('조치자', none, sort, request) }}{{ pui.sort_th('시간', 'hours', sort, request) }}{{ pui.sort_th('', none, sort, request) }}</tr></thead>
   <tbody>
   {% for r in rows %}
   <tr{% if not r.fixed_at %} class="warn"{% endif %}><td>{{ r.equip_code }} {{ r.equip_name }}</td><td>{{ r.occurred_at|dt }}</td><td>{{ r.symptom }}</td><td>{{ r.fixed_at|dt }}</td><td>{{ r.fix_action|txt }}</td><td>{{ r.fixed_by|txt }}</td><td>{{ r.hours|num(1) }}</td>

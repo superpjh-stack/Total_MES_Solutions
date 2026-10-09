@@ -1,7 +1,7 @@
 {# QUA-02 검사 결과 — F-QUA-04 등록(LOT 스캔 ?no= · 없는 번호 422 재렌더 · S-11) · F-QUA-05 판정(불합격이면 불량코드 · 수량) · F-QUA-06 조회. data-scan 하나.
    POP: docs/design/pop/qua_inspections_pop.html — LOT 스캔 → 항목 값(측정값 폼과 같은 모양 · 이탈 표시) → 항목 저장 → 판정 3버튼(검사 #) → 불합격 불량 줄.
    ctx: rows · lot · fields · pending · history · insp_type · insp_process_id · process_options(검사 공정 — 기본 LOT 공정) · type_options · judgement_options · defect_options · frm · to · judgement · lot_filter · scan_no · scan_error #}
-{% extends "pop/_layout.html" %}
+{% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "home/_measure.html" as mf %}
 {% import "pop/_ui.html" as pui %}
@@ -14,10 +14,11 @@
     <dt>{{ t('수량') }}</dt><dd class="num">{{ lot.qty|num(3) }} {{ lot.unit|txt('') }}</dd>
   </dl>
 </section>
-<form method="get" action="{{ nav.path_of('QUA-02') }}" id="insp-process-form" class="form-grid">
+<form method="get" action="{{ nav.path_of('QUA-02') }}" id="insp-process-form" class="panel proc-pick">
   <input type="hidden" name="no" value="{{ lot.no }}"><input type="hidden" name="insp_type" value="{{ insp_type }}">
   {{ ui.select('검사 공정', 'process_id', process_options, insp_process_id or '') }}
-  <button type="submit" class="btn">{{ t('이 공정의 검사 항목') }}</button>
+  <label class="f w-btn"><span>&nbsp;</span><button type="submit" class="btn">{{ t('이 공정의 검사 항목') }}</button></label>
+  <p class="hint">{{ t('기본은 LOT 을 만든 공정 — 바꾸면 아래 검사 항목이 그 공정 것으로 바뀐다') }}</p>
 </form>
 <form method="post" action="{{ nav.path_of('QUA-02') }}" id="insp-form">
   <input type="hidden" name="lot_id" value="{{ lot.id }}"><input type="hidden" name="process_id" value="{{ insp_process_id or '' }}">
@@ -89,10 +90,10 @@
 <form class="search-form" method="get" id="screen-search">
   {{ ui.field('기간 시작', 'frm', frm, type='date') }}{{ ui.field('기간 끝', 'to', to, type='date') }}
   {{ ui.select('검사 유형', 'insp_type', type_options, '') }}{{ ui.select('판정', 'judgement', judgement_options, judgement) }}{{ ui.field('LOT', 'lot', lot_filter) }}
-  <button type="submit" class="btn">{{ t('조회') }}</button>
+  {{ pui.sort_keep(sort) }}<button type="submit" class="btn">{{ t('조회') }}</button>
 </form>
 <table class="grid">
-  <thead><tr><th>#</th><th>LOT</th><th>{{ t('품목') }}</th><th>{{ t('검사 유형') }}</th><th>{{ t('검사 일시') }}</th><th>{{ t('검사자') }}</th><th>{{ t('항목') }}</th><th>{{ t('이탈') }}</th><th>{{ t('판정') }}</th></tr></thead>
+  <thead><tr>{{ pui.sort_th('#', none, sort, request) }}{{ pui.sort_th('LOT', 'lot', sort, request) }}{{ pui.sort_th('품목', 'item', sort, request) }}{{ pui.sort_th('검사 유형', 'type', sort, request) }}{{ pui.sort_th('검사 일시', 'at', sort, request) }}{{ pui.sort_th('검사자', none, sort, request) }}{{ pui.sort_th('항목', none, sort, request) }}{{ pui.sort_th('이탈', none, sort, request) }}{{ pui.sort_th('판정', 'judgement', sort, request) }}</tr></thead>
   <tbody>
   {% for r in rows %}
   <tr{% if r.deviated_count %} class="deviated"{% endif %}><td>{{ r.id }}</td><td><a href="{{ nav.path_of('QUA-02') }}?no={{ r.lot_no }}">{{ r.lot_no }}</a></td><td>{{ r.item_code|txt }} {{ r.item_name|txt('') }}</td><td>{{ r.insp_type }}</td><td>{{ r.inspected_at|dt }}</td><td>{{ r.inspector|txt }}</td>

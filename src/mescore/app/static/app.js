@@ -1,4 +1,4 @@
-/* 공통 UI 동작 — 좌측 메뉴 접기 · 목록 정렬 · 쪽 넘김 · 알림 팝업 · 스캔칸 포커스(POP S-01~S-14) · 현황판 자동 새로고침.
+/* 공통 UI 동작 — 좌측 메뉴 접기 · 목록 정렬 · 쪽 넘김 · 알림 팝업 · 스캔칸 포커스(POP S-01~S-15) · 현황판 자동 새로고침.
    외부 라이브러리 0. 실패를 조용히 삼키지 않는다(콘솔에 그대로 남긴다). 스크립트는 이 파일 하나다 (CLAUDE.md).
    POP 동작 사양 S-01~S-14 는 docs/design/README.md "POP · 모바일" §2 — 번호를 주석에 그대로 적는다. */
 (function () {
@@ -37,13 +37,13 @@
     b.addEventListener("click", function () { var d = b.closest("details"); if (d) { d.open = false; var sm = d.querySelector("summary"); if (sm) sm.focus(); } });
   });
 
-  /* 목록 머리행 클릭 정렬 */
+  /* 목록 머리행 클릭 정렬 — 이 쪽에 받은 행만. 서버 정렬 링크(th.th-sort > a · ?sort=)가 있는 열은 링크가 맡는다 */
   function dataRows(table) {
     return Array.prototype.slice.call(table.tBodies[0] ? table.tBodies[0].rows : []).filter(function (r) {
       return !r.querySelector(".empty");
     });
   }
-  document.querySelectorAll("table.grid:not(.plain) thead th").forEach(function (th) {
+  document.querySelectorAll("table.grid:not(.plain) thead th:not(.th-sort)").forEach(function (th) {
     th.addEventListener("click", function () {
       var table = th.closest("table"), tbody = table.tBodies[0];
       if (!tbody) return;
@@ -199,6 +199,26 @@
       }
     } catch (e) { console.warn("flash 파싱 실패", e); }
   }
+  /* S-15 고르기 칩 — button[data-pick-into=칸 id][data-pick-value=번호] 를 누르면 그 칸(쉼표 목록)에 번호를 넣고, 다시 누르면 뺀다.
+     칸이 폼 값의 주인이다(손으로 고쳐도 칩 표시가 따라온다). 쓰기는 하지 않는다 — 전송은 그 폼의 버튼. POP-02 종료 폼 merge_lot_ids */
+  function pickList(input) { return input.value.split(",").map(function (v) { return v.trim(); }).filter(Boolean); }
+  function pickSync(input) {
+    var have = pickList(input);
+    document.querySelectorAll('[data-pick-into="' + input.id + '"]').forEach(function (b) {
+      b.setAttribute("aria-pressed", have.indexOf(b.dataset.pickValue) >= 0 ? "true" : "false");
+    });
+  }
+  document.querySelectorAll("[data-pick-into]").forEach(function (b) {
+    var input = document.getElementById(b.dataset.pickInto);
+    if (!input) { console.warn("data-pick-into 칸 없음:", b.dataset.pickInto); return; }
+    b.addEventListener("click", function () {
+      var have = pickList(input), v = b.dataset.pickValue, i = have.indexOf(v);
+      input.value = (i >= 0 ? have.filter(function (x) { return x !== v; }) : have.concat([v])).join(", ");
+      pickSync(input);
+    });
+    if (!input.dataset.pickBound) { input.dataset.pickBound = "1"; input.addEventListener("input", function () { pickSync(input); }); pickSync(input); }
+  });
+
   /* S-13 시각 · 작업자 · 설비는 서버 렌더값 — 시계를 돌리지 않는다. S-14 원형 전용 시연 조각(pop.js)은 템플릿 · 이 파일에 없다. */
 
   /* 현황판 자동 새로고침 (G-C13) — body.ch-board 의 data-refresh-seconds 가 있을 때만 (디자이너3 board.js 와 겹치지 않게). 조작 없이 다시 그린다.

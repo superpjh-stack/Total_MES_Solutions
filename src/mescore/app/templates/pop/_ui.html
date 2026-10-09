@@ -48,3 +48,20 @@
   {% for l, v, u in items %}<div class="stat"><small>{{ t(l) }}</small><b>{% if v is none %}{{ NOT_COLLECTED }}{% else %}{{ v }}{% if u %}<span class="u">{{ u }}</span>{% endif %}{% endif %}</b></div>{% endfor %}
 </div>
 {% endmacro %}
+
+{# 목록 머리글 서버 정렬 (D-37 · 라우터 `?sort=열|-열` · 응답 `sort`) — 관리자 Web 표에만. 서버가 상한(300)까지 정렬해서 주므로 화면 정렬(app.js)보다 앞선다.
+   sort_th('입고일', 'date', sort, request) → th[aria-sort] > a(지금 조회 조건 그대로 + sort). key 가 없으면 보통 th. 같은 열을 다시 누르면 반대 방향.
+   sort_keep(sort) — 조회 조건 폼 안에 두면 「조회」 를 눌러도 정렬이 유지된다. #}
+{% macro sort_th(label, key, sort, request) %}
+{% if not key %}<th>{{ t(label) if label else '' }}</th>{% else %}
+{% set cur = ((sort or '').split(',')[0])|trim %}
+{% set on = cur.lstrip('+-') == key %}
+{% set desc = on and cur.startswith('-') %}
+{% set q = [] %}
+{% for k, v in request.query_params.multi_items() if k not in ('sort', 'page') %}{% set _ = q.append((k, v)) %}{% endfor %}
+{% set _ = q.append(('sort', key if (not on or desc) else '-' ~ key)) %}
+<th class="th-sort" aria-sort="{{ ('descending' if desc else 'ascending') if on else 'none' }}"><a href="?{{ q|urlencode }}" data-sort-key="{{ key }}" title="{{ t('정렬') }}">{{ t(label) }} <i aria-hidden="true">{{ ('▼' if desc else '▲') if on else '↕' }}</i></a></th>
+{% endif %}
+{% endmacro %}
+
+{% macro sort_keep(sort) %}{% if sort %}<input type="hidden" name="sort" value="{{ sort }}">{% endif %}{% endmacro %}

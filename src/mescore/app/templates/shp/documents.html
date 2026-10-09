@@ -1,8 +1,8 @@
 {# SHP-04 성적서 — 발행본 목록 + 발행(F-SHP-09 승인된 출하 → 최신 검사 값 스냅샷) · 출력(F-SHP-10 스냅샷만). 재발행은 새 번호. #}
-{% extends "pop/_layout.html" %}
+{% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "trc/_cards.html" as cards %}
-{% block head_extra %}{% if device not in ["pop", "mobile"] %}{{ cards.styles() }}{% endif %}{% endblock %}
+{% block head %}{% if device not in ["pop", "mobile"] %}{{ cards.styles() }}{% endif %}{% endblock %}
 
 {% block search %}
 {{ ui.field('발행 번호 · 출하 번호', 'no', q.no) }}

@@ -1,7 +1,7 @@
 {# MAT-01 입고 — F-MAT-01 등록 · F-MAT-02 수정 · F-MAT-03 조회 (개발2 라우터 · ctx 키 · 폼 name 그대로).
    POP(body.ch-pop): docs/design/pop/mat_receipts_pop.html — 입고 1건 폼(큰 칸 · 주 버튼 80px) + 오늘 입고. 스캔 진입 ?item_code= → 등록 폼의 품목 칸(없는 품목은 이 화면 422 재렌더) — 스캔칸 하나.
    Web: 조회 조건 · 표 · 등록 폼 3블록. #}
-{% extends "pop/_layout.html" %}
+{% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "pop/_ui.html" as pui %}
 
@@ -41,6 +41,7 @@
 {% endblock %}
 
 {% block search %}
+{{ pui.sort_keep(sort) }}
 {{ ui.field('기간 시작', 'frm', frm, type='date') }}
 {{ ui.field('기간 끝', 'to', to, type='date') }}
 {{ ui.select('품목', 'item_id', item_options, item_id) }}
@@ -50,7 +51,14 @@
 <h2>{{ t('입고') }}</h2>
 {% set rows_ = [] %}
 {% for r in rows %}{% set _ = rows_.append([r.receipt_no, r.receipt_date|dt, r.item_code ~ ' ' ~ r.item_name, r.partner_name|txt, r.qty|num(3) ~ ' ' ~ r.unit|txt(''), r.lot_no|txt, r.insp_status|txt, r.state|txt, r.remain_qty|num(3)]) %}{% endfor %}
-{{ ui.grid(['입고 번호', '입고일', '품목', '거래처', '수량', '원재료 LOT', '검사', '상태', '잔량'], rows_) }}
+{% set cols = [('입고 번호', 'no'), ('입고일', 'date'), ('품목', 'item'), ('거래처', 'partner'), ('수량', 'qty'), ('원재료 LOT', 'lot'), ('검사', none), ('상태', none), ('잔량', none)] %}
+<table class="grid cardify">
+  <thead><tr>{% for l, k in cols %}{{ pui.sort_th(l, k, sort, request) }}{% endfor %}</tr></thead>
+  <tbody>
+  {% for row in rows_ %}<tr>{% for cell in row %}<td data-l="{{ t(cols[loop.index0][0]) }}"{% if loop.index0 in [4, 8] %} class="num"{% endif %}>{{ cell }}</td>{% endfor %}</tr>
+  {% else %}<tr><td colspan="{{ cols|length }}" class="empty"><b>{{ NOT_COLLECTED }}</b></td></tr>{% endfor %}
+  </tbody>
+</table>
 <section class="panel">
   <h2>{{ t('입고 등록') }} <small>F-MAT-01</small></h2>
   <form method="post" action="{{ nav.path_of('MAT-01') }}" id="receipt-form" class="form-grid">
