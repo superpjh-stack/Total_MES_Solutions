@@ -21,7 +21,7 @@ tx()                                # with conn.tx() as cur: … 여러 문장�
 ```
 - DSN 은 `MES_PG_DSN`. 비우면 `settings` 가 `MES_PACK` 에 따라 `postgresql:///mes_core_db`(코어 단독 · `_` 팩) / `postgresql:///mes_<팩>_db` 로 정한다. **DB 연결 실패는 삼키지 않는다** → `DbUnavailable` → 503. 로그의 접속 문자열은 비밀번호를 가린다. `conn.table_counts()` 는 시드 멱등 · 백업 대조용(로그 · 세션 제외).
 - 같이 성공하거나 같이 실패해야 하는 것은 `tx()` 하나에. `numbering.next(..., cur=cur)` · `lineage.*(cur, …)` · `packs.hook(...)(cur, …)` 가 그 커서를 받는다.
-- **작업지시 행 잠금**: 작업지시를 고치는 쪽(수정 · 마감 · 취소 — `routers/job.py: lock_work_order`)은 `for update`, 그 지시에 무엇을 붙이는 쪽(실적 시작 `pop.assert_open` · 생산 LOT · 분할/합병 `lineage._assert_open`)은 `for share`. 한 트랜잭션은 지시 행을 하나만 잠그고 순서는 실적/LOT 행 → 지시 행 → 채번 카운터(교착 없음).
+- **작업지시 행 잠금**: 작업지시를 고치는 쪽(수정 · 마감 · 취소 — `routers/job.py: lock_work_order`)은 `for update`, 그 지시에 무엇을 붙이는 쪽(실적 시작 `pop.assert_open` · 생산 LOT · 분할/합병 `lineage._assert_open`)은 `for share`. 한 트랜잭션은 지시 행을 하나만 잠그고 순서는 실적(또는 출하 헤더) 행 → LOT 행 → 지시 행 → 채번 카운터(교착 없음). **LOT 행은 id 오름차순** 한 문장으로 잠근다(`lineage.lock_lots` · 여러 LOT 을 한꺼번에 — 회전 7 · DEF-QA2-009). 잔량 판정은 잠근 **뒤에** 다시 읽는다(§4 잔량 · 잠금 규칙).
 - `IntegrityError` · `DataError` 는 `main.py` 가 422 로 바꾼다. 사람이 읽을 문장은 라우터가 먼저 검사해 `http.validation_error` 로.
 
 ## 2. 팩 · 메뉴 · 계약 · 권한 · 렌더 (아키텍트 구현)
@@ -179,7 +179,7 @@ lineage.node(lot_id) · nodes(lot_ids) · genealogy_rows(lot_ids) · relation(na
 - **LOT 통째 쓰기는 열린 투입을 기다린다.** 합병 · 출하 · `make_product_lot` 의 생산 부모 · 종료 합병 옵션 · 수량을 다 주지 않은 분할은, 그 LOT 이 종료 전 실적에 투입 스캔돼 있으면(취소 아님) 잔량이 남아도 422 — 실적 종료 또는 투입 취소 뒤에 한다(취소되면 화살표 수량이 LOT 과 어긋나고, 종료되면 같은 LOT 이 두 경로에 나온다). 수량을 모두 준 분할은 잔량 안에서 받는다.
 - **종료 합병 옵션**: 이 실적이 투입한 LOT 은 합병 부모가 될 수 없다(422). F-POP-03 은 `ended_at` 을 쓰기 **전에** `merge_parents_of(…, work_result_id=)` 로 판정하고, `make_product_lot` 이 같은 tx 에서 다시 본다.
 - **종료 합병 · 생산 부모의 검사 상태**: 새 LOT 은 `미검사`(새 생산)이되, 합병 · 생산 부모 중 `불합격` 이 하나라도 있으면 `불합격`(출하 422) — `merge` 의 `inherit_insp` 와 같은 쪽으로 불합격을 잇는다.
-- **부분 분할은 부모에 잔량을 남긴다.** 수량을 모두 준 분할(예 20 → 5+5)은 부모 잔량 10 이 남는다 — `v_lot_state` 는 분할 화살표가 전부 수량을 가지면 「투입」 과 같이 **잔량으로**(잔량 > 0 → 재고) 판정한다(아키텍트 `views.sql`). 수량 없는 분할(화살표 qty NULL) · 합병 · 생산 · 출하는 LOT 통째(소진 · 출하). D-503 의 「분할 계보가 생기면 부모는 소진」 문장을 이것으로 바꾼다.
+- **부분 분할은 부모에 잔량을 남긴다.** 수량을 모두 준 분할(예 20 → 5+5)은 부모 잔량 10 이 남는다 — 쓰기 경로(`lineage.remaining`)는 이 잔량을 본다. **`v_lot_state` 반영은 회전 8 로 미룸(D-43)**: 지금 뷰는 분할 화살표가 하나라도 있으면 부모를 `소진`(LOT 통째)으로 둔다. 회전 8 목표 — 분할 화살표가 전부 수량을 가지면 「투입」 과 같이 잔량으로(잔량 > 0 → 재고) 판정 · 수량 없는 분할 · 합병 · 생산 · 출하는 통째.
 
 ## 5. 출력 — `app.printing` (개발2)
 

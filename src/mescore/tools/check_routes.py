@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """G-C03 화면 라우트 검사 (G-C21 · G-C17 의 일부) — `make check-routes`.
 
-  1. 코어 화면 51 + 공통 5(로그인 · 메인 · 오류 · 대시보드 · 팝업)가 전부 HTTP 200 인가 (관리자로 로그인 · JSON 응답으로 판정 — D-18)
+  1. 코어 화면 51 + 공통 5(로그인 · 메인 · 오류 · 대시보드 · 팝업)가 전부 HTTP 200 인가 (관리자로 로그인 · JSON 응답으로 판정 — D-18).
+     팩이 숨긴 메뉴(menus.hide)의 화면은 403 이 기대값(회전 7 — QA3-004)
   2. `_placeholder` 가 몇 건 남았는가 (0 이어야 G-C03 PASS). 담당별로 센다
   3. 권한 표에서 `없음` 인 칸의 화면은 403 이고 메인에서 숨겨지는가 (기대값은 core.yaml/pack.yaml 병합본 — 역할마다 시드 계정으로)
   4. 미로그인 — 브라우저 GET 은 /login 303, 그 밖은 401
@@ -67,8 +68,16 @@ def main() -> int:
     ok = 0
     placeholders: list[tuple[str, str]] = []
     targets = [s for s in nav.COMMON if s.auth] + nav.SCREENS
+    # 팩이 숨긴 메뉴(menus.hide)의 화면은 관리자도 403 이 계약 (QA3-004 · test_arch_smoke 와 같은 기대값) — 200 대신 403 을 맞으면 통과로 센다
+    hidden_ids = {s.screen_id for m in nav.ALL_MENUS if m.hidden for s in m.screens}
     for s in targets:
         resp = client.get(s.probe or s.path)
+        if s.screen_id in hidden_ids:
+            if resp.status_code == 403:
+                ok += 1
+            else:
+                fails.append(f"{s.screen_id} {s.path} (팩 숨김 메뉴) → HTTP {resp.status_code} (기대 403)")
+            continue
         if resp.status_code != 200:
             fails.append(f"{s.screen_id} {s.path} → HTTP {resp.status_code}")
             continue
