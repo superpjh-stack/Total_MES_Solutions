@@ -1,0 +1,4 @@
+item_code,process_code,storage_temp,note
+MENU-0001,PRC-060,,조리공정구분 가공(볶음) — items_example.csv attrs.cook_process_code 와 같은 값 (after_save_bas_item 이 폼에서 하는 복사를 시드는 여기서)
+MENU-0002,PRC-040,,가공(취사)
+MENU-0003,PRC-030,,무침

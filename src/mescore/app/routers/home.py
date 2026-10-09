@@ -51,7 +51,7 @@ def cards_for(user: rbac.User) -> list[dict]:
         cell = rbac.cell(user.role_code, m.code)
         write_roles = [names.get(r["code"], r["code"]) for r in pack.roles if pack.permission(m.code, r["code"])["level"] == rbac.LEVEL_WRITE]
         out.append({
-            "menu": m, "seq": i, "level": cell.label, "allowed": cell.can_read,
+            "menu": m, "seq": i, "level": packs.t(cell.label), "allowed": cell.can_read,   # 권한 범위(입고검사 …)도 팩 용어로
             "screens": [{"screen": sc, "functions": [f.name for f in contracts.functions_of(sc.screen_id)]} for sc in m.screens],
             "fn_count": len(contracts.functions_of_module(m.code)), "write_roles": write_roles,
             "today": (counts.get(m.code) or {}).get("value"), "today_label": (counts.get(m.code) or {}).get("label") or "오늘", "today_source": (counts.get(m.code) or {}).get("source") or "",
@@ -84,7 +84,7 @@ def role_summary() -> list[dict]:
             n_read += 1
             chans.update(m.channels)
             if c.level == rbac.LEVEL_WRITE:
-                writes.append({"code": m.code, "name": m.name, "label": c.label})
+                writes.append({"code": m.code, "name": m.name, "label": packs.t(c.label)})
         out.append({"code": r.code, "name": r.name,
                     "channels": [{"device": dev, "label": ch} for dev, ch in nav.DEVICE_CHANNEL.items() if ch in chans],
                     "write_menus": writes, "read_count": n_read})

@@ -6,12 +6,11 @@
   `x_foodservice_*` 는 자유. `lot_genealogy` · `sys_number_seq` 직접 SQL 0 (R8).
 - 문구는 전부 `t()`. 값이 없으면 지어내지 않고 `(미확정)` 을 둔다 — 범위 NULL 이면 판정하지 않는다.
 - ext 행은 코어가 `attrs` 로 받은 폼 값을 `after_save_<table>` 에서 같은 트랜잭션에 복사한다(hooks.md §10 "폼 → attrs → 훅이 ext 복사").
-  시드처럼 훅을 거치지 않은 행은 `sync_ext(cur)` 가 같은 규칙으로 따라잡는다(`seed_pack.py`).
+  시드처럼 훅을 거치지 않은 행은 `sync_ext(cur)` 가 같은 규칙으로 따라잡는다(이관 · 수동 적재 뒤 — 시드는 seeds[] 의 ext CSV).
 """
 
 from __future__ import annotations
 
-import csv
 import math
 import re
 from datetime import date, datetime, time
@@ -352,11 +351,13 @@ def on_collect(cur, raw: dict, user=None) -> None:
 
 # ── 8. kpi_extra — stats.indicators · 현황판 (hooks.md §8) ─────────────────
 def _kpi_meta() -> dict[str, dict]:
-    p = PACK_DIR / "seed" / "kpi_indicators.csv"
-    if not p.exists():
-        return {}
-    with p.open(encoding="utf-8-sig", newline="") as f:
-        return {r["indicator_key"]: r for r in csv.DictReader(f)}
+    """지표 정의 — DB `kpi_indicator`(목표 = target_value · 기준값 · 산식 = attrs.base_value · formula). 시드는 seeds[] 의 kpi_indicators.csv,
+    화면(KPI-03)에서 목표를 고치면 그 값이 나온다."""
+    out = {}
+    for r in conn.q("select indicator_key, target_value, attrs from kpi_indicator"):
+        a = r["attrs"] or {}
+        out[r["indicator_key"]] = {"target_value": r["target_value"], "base_value": a.get("base_value"), "formula": a.get("formula")}
+    return out
 
 
 def _f(v) -> float | None:
@@ -369,9 +370,9 @@ def kpi_extra(frm, to, by=None) -> list[dict]:
     def row(key, label, value, unit, note=None):
         m = meta.get(key) or {}
         out = {"key": key, "label": t(label), "value": value, "unit": unit}
-        if m.get("target_value"):
+        if m.get("target_value") not in (None, ""):
             out["target"] = float(m["target_value"])
-        if m.get("base_value"):
+        if m.get("base_value") not in (None, ""):
             out["base"] = float(m["base_value"])
         if note or m.get("formula"):
             out["note"] = note or m.get("formula")
@@ -525,7 +526,7 @@ def after_save_qua_insp_plan(cur, row: dict, user) -> None:
 
 
 def sync_ext(cur, by: str = "seed:foodservice") -> dict[str, int]:
-    """시드처럼 훅을 거치지 않고 들어온 코어 행의 `attrs` 를 같은 규칙으로 ext 에 따라잡는다 (`seed_pack.py`). 돌려주는 값은 테이블별 처리 행 수."""
+    """시드처럼 훅을 거치지 않고 들어온 코어 행의 `attrs` 를 같은 규칙으로 ext 에 따라잡는다 (이관 · 수동 적재 뒤). 돌려주는 값은 테이블별 처리 행 수."""
     class _U:  # noqa: D401 — login_id 만 있는 사용자 대역
         login_id = by
     n: dict[str, int] = {}

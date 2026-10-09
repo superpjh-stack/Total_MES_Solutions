@@ -40,8 +40,8 @@ def test_validate_qua_issue_claim_requires_partner():
 
 
 def test_after_save_ord_order_copies_due_time_and_service_type():
-    order = conn.q1("select id from ord_order order by id desc limit 1")
-    assert order, "수주가 하나는 있어야 한다 (seed_dev3)"
+    order = conn.q1("select o.id from ord_order o where not exists (select 1 from x_foodservice_order_ext e where e.id = o.id) order by o.id desc limit 1")
+    assert order, "ext 가 없는 수주가 하나는 있어야 한다 (seed_dev3) — S1 이 만든 수주는 이미 ext 가 있어 고르지 않는다"
     try:
         with _tx() as cur:
             hooks.after_save_ord_order(cur, {"id": order["id"], "attrs": {"due_time": "11:30", "service_type": "위탁급식"}}, _User())

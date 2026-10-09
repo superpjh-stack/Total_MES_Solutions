@@ -1,0 +1,10 @@
+process_code,collect_type,std_lead_min,batch_std_qty,note
+PRC-010,수동,,,processes.csv attrs.collect_type 과 같은 값 · 표준 소요시간 · 기준수량 (미확정 D-506)
+PRC-020,수동,,,
+PRC-030,반자동(POP),,,
+PRC-040,자동(PLC),,,
+PRC-050,반자동(POP),,,
+PRC-060,자동(PLC),,,
+PRC-070,수동,,,
+PRC-080,수동,,,
+PRC-090,반자동(POP),,,

@@ -1,4 +1,4 @@
-process_code,process_name,seq,use_yn,collect_type,note
+process_code,process_name,seq,use_yn,attrs.collect_type,note
 PRC-010,원재료/자재 입고,1,Y,수동,design.json meta.main_processes 9단계 — TD1 data_collection '수동 입력'
 PRC-020,수입검사,2,Y,수동,'수동 입력 + 사진'
 PRC-030,가공(무침),3,Y,반자동(POP),

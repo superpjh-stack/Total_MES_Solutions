@@ -1,4 +1,4 @@
-equip_code,equip_name,process_code,collect_yn,use_yn,equip_type,comm_type,maker_model,storage_kind,temp_limit,note
+equip_code,equip_name,process_code,collect_yn,use_yn,attrs.equip_type,attrs.comm_type,attrs.maker_model,attrs.storage_kind,attrs.temp_limit,note
 EQ-STIR-01,EV형 인덕션 교반기 #1,,Y,Y,조리설비,Ethernet,지디엠인덕션 EV형,,,AD2-050 · PLC Ethernet · 가공(취사)·가공(볶음) 겸용 — 공정 배정 (미확정 D-514 · 니즈푸드 D-08)
 EQ-STIR-02,EV형 인덕션 교반기 #2,,Y,Y,조리설비,Ethernet,지디엠인덕션 EV형,,,〃
 EQ-THS-01,온습도센서 #1,,Y,Y,계측기,RS-485,오토닉스 THD-WD1-T,,,AD2-052 · 태그 TEMP · HUMI · 임계치 (미확정 — AD2-052 '명시되어 있지 않다')

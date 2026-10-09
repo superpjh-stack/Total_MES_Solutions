@@ -1,7 +1,7 @@
 """foodservice 팩 테스트 공용 — 코어 API 만 부른다 (gates.yaml: scenarios · scenarios.md). 개발1.
 
 실행: `MES_PACK=foodservice MES_PG_DSN=postgresql:///mes_foodservice_db uv run pytest -q packs/foodservice/tests`
-준비: `make db-schema` → `uv run python packs/foodservice/seed_pack.py` (레시피 · KPI 지표 · 역할 6 계정). 비밀번호는 MES_SEED_PASSWORD 뿐.
+준비: `MES_PACK=foodservice make db-schema db-seed` (seeds[] · 레시피는 seed_dev1 · 역할 6 계정은 seed_core). 비밀번호는 MES_SEED_PASSWORD 뿐.
 시드 테이블(bas_*) 은 지우지 않는다. 지시 · 실적 · LOT 는 실행마다 새로 만들고 남겨 둔다(화면 확인용) — 기대값은 **증분**과 산식으로 판정한다.
 """
 
@@ -45,7 +45,7 @@ def client(login_id: str = "admin", device: str | None = None) -> TestClient:
     if device:
         data["device"] = device
     r = c.post("/login", data=data)
-    assert r.status_code == 200 and r.json().get("ok"), f"{login_id} 로그인 실패 {r.status_code} — seed_pack.py · .env 확인"
+    assert r.status_code == 200 and r.json().get("ok"), f"{login_id} 로그인 실패 {r.status_code} — make db-seed · .env 확인"
     return c
 
 
@@ -62,7 +62,7 @@ def ok(r, what: str = "") -> dict:
 
 def item_id(code: str) -> int:
     r = conn.q1("select id from bas_item where item_code = %s", (code,))
-    assert r, f"시드 품목 {code} 없음 — seed_pack.py"
+    assert r, f"시드 품목 {code} 없음 — make db-seed"
     return r["id"]
 
 

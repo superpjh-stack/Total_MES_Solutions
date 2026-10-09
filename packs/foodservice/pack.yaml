@@ -36,11 +36,11 @@ menus:
     ord: 영업 · 수주
     mat: 자재 · 입고
     job: 조리 지시
-    pop: 실적 (POP)                 # 코어가 메뉴 이름에도 t() 를 적용해 '실적'→'조리 실적' 으로 바뀐다 — 치환 전 꼴로 둔다 (기획값 '조리 실적 (POP)' 을 그대로 두면 '조리 조리 실적' · 개발1)
+    pop: 조리 실적 (POP)            # rename 값은 최종 이름 — t() 를 거치지 않는다 (D-38 · 회전 5)
     qua: 품질 · 검식
     eqp: 설비
     shp: 출고
-    trc: 추적                       # 〃 '추적'→'배치 추적' (기획값 '배치 추적' 은 '배치 배치 추적' 이 된다)
+    trc: 배치 추적                  # 〃 최종 이름 (기획값)
     kpi: KPI · 현황판
     sys: 시스템
     ifc: 설비 수집
@@ -89,7 +89,7 @@ attrs:
     - { key: spare_rate,     label: 여유율(%),         type: number }                                        # 일부 원물·공산품 2%
     - { key: partner_code,   label: 주거래처,          type: text }
     # ↓ 개발1 추가 — 폼 입력 경로. after_save_bas_item 이 x_foodservice_item_ext 로 복사한다 (hooks.md §10 의 "폼 → attrs → 훅이 ext 복사" 패턴 · D-504)
-    - { key: cook_process_code, label: 조리공정구분,   type: select, choices: [PRC-030, PRC-040, PRC-050, PRC-060] }   # → item_ext.cook_process_id
+    - { key: cook_process_code, label: 공정구분,       type: select, choices: [PRC-030, PRC-040, PRC-050, PRC-060] }   # → item_ext.cook_process_id
     - { key: storage_temp,   label: 보관기준온도(℃),   type: number }                                        # → item_ext.storage_temp
   bas_bom:
     - { key: cook_step_desc, label: 조리순서 설명,     type: text }                                          # 작업지시서 출력에 찍는다
@@ -133,7 +133,7 @@ attrs:
   pop_work_result:
     - { key: input_type,     label: 입력구분,          type: select, choices: [자동(PLC), POP수동, 스마트패드] }
   pop_stop:
-    - { key: fault_ref,      label: 연결 설비이상,     type: text }
+    - { key: fault_ref,      label: 연결 설비고장,     type: text }
     - { key: delay_desc,     label: 지연내용,          type: text }
   # mat_receipt 의 보관위치 · 입고 시 보관온도는 lot 로 옮겼다 — 코어 F-MAT-01 은 폼의 attr_* 를 `read_attrs(form, "lot")` 로 읽어 lot 과 mat_receipt 둘 다에 저장한다 (개발1 구현 메모)
   lot:
@@ -151,7 +151,7 @@ attrs:
     - { key: inspect_type,   label: 점검구분,          type: select, choices: [일상, 예방, 정기] }
     - { key: plan_date,      label: 점검예정일,        type: date }
   eqp_fault:
-    - { key: fault_type,     label: 이상유형,          type: select, choices: [고장, 오작동, 통신단절, 센서이상] }
+    - { key: fault_type,     label: 고장유형,          type: select, choices: [고장, 오작동, 통신단절, 센서이상] }
   sys_user:
     - { key: org_type,       label: 소속구분,          type: select, choices: [관리자, 영양사, 현장작업자, 외부업체] }
   qua_insp_plan:
@@ -183,13 +183,18 @@ adapters:
   erp: null            # SCM 연계 규격 미정의 → 501 미확정 (D-511)
   printing: null       # 바코드 라벨 없음(AD2-012 "바코드를 사용하지 않고") — 브라우저 인쇄. print/work_order.html 만 덮어쓴다 (README §6)
 
-seeds:                                                  # seed_core 가 받는 이름만 (pack-contract.md §2: codes* items* processes* equipment* partners*)
+seeds:                                                  # seed_core 가 받는다 (pack-contract.md §2 · CR-9) — 순서: 공정 → 품목 → 설비 → process_params → inspection_items → 아래 선언 순
   - seed/codes.csv
-  - seed/processes.csv
-  - seed/equipment.csv
-  - seed/partners_example.csv
-  - seed/items_example.csv
-  # seed/kpi_indicators.csv · seed/bom_example.csv · 역할별 계정 6 · attrs → ext 복사는 `MES_PACK=foodservice uv run python packs/foodservice/seed_pack.py` 가
-  # 코어 API(F-KPI-06 · F-BAS-05 · F-SYS-01)와 hooks.sync_ext 로 넣는다 — seed_core 는 그 이름을 거부한다 (개발1 구현 메모 · README §10)
+  - seed/processes.csv                                  # attrs.collect_type
+  - seed/equipment.csv                                  # attrs.equip_type · comm_type · maker_model · storage_kind · temp_limit
+  - seed/partners_example.csv                           # attrs.biz_no · delivery_addr
+  - seed/items_example.csv                              # attrs.menu_type …
+  - seed/kpi_indicators.csv                             # attrs.base_value · formula
+  # ext — 훅(after_save_*)을 거치지 않는 시드라 ext 값을 직접 둔다. 코드 열은 FK 로 풀린다(item_code → id · process_code → cook_process_id …)
+  - { file: seed/item_ext.csv,      table: x_foodservice_item_ext,      key: [item_code] }
+  - { file: seed/process_ext.csv,   table: x_foodservice_process_ext,   key: [process_code] }
+  - { file: seed/equipment_ext.csv, table: x_foodservice_equipment_ext, key: [equip_code] }
+  # 역할 6 계정 = seed_core 가 roles[] 마다 하나(로그인 ID = 역할 코드 소문자). 레시피(seed/bom_example.csv)는 seeds[] 가 BOM 을 받지 않아
+  # 개발 시드 seed_dev1 이 `seed/bom*.csv` 를 F-BAS-05 와 같은 순서(validate → 저장 → after_save_bas_bom 훅)로 넣는다 (코어 변경 요청 · progress-dev1.md §6)
 tests: tests/
 gates: gates.yaml

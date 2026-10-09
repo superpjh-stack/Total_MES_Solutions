@@ -23,7 +23,7 @@ def _bom_data(item: str, version: str, use_yn: str = "Y", serve=100) -> dict:
 def test_single_active():
     admin = client("admin")
     v1 = conn.q1("select id from bas_bom where item_id = %s and version = 'V1.0'", (item_id(MENU),))
-    assert v1 and conn.q1("select use_yn from bas_bom where id = %s", (v1["id"],))["use_yn"] == "Y", "시드 레시피 V1.0 (활성) — seed_pack.py"
+    assert v1 and conn.q1("select use_yn from bas_bom where id = %s", (v1["id"],))["use_yn"] == "Y", "시드 레시피 V1.0 (활성) — seed/bom_example.csv (seed_dev1)"
     ver = f"T-{uuid.uuid4().hex[:6].upper()}"
     # V1.0 활성인데 새 버전을 Y 로 → 422 hook_rejected
     r = admin.post("/bas/bom", data=_bom_data(MENU, ver))

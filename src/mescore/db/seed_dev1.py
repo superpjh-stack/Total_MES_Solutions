@@ -10,8 +10,10 @@
 
 from __future__ import annotations
 
+import csv
 import json
 
+from ..app import packs
 from ..app.util.screen import example
 from . import conn
 
@@ -105,11 +107,58 @@ def seed_boms(cur) -> None:
                         (row["id"], comp, qty, unit, loss, seq, SEEDED_BY))
 
 
+class _SeedUser:
+    """훅에 넘길 사용자 대역 — 훅은 `login_id` 만 쓴다(created_by · updated_by)."""
+    login_id = SEEDED_BY
+    role_code = "ADMIN"
+
+
+def seed_pack_boms() -> int:
+    """팩 BOM — 실행 팩의 `seed/bom*.csv`(열 `item_code,version,component_code,qty,unit,loss_rate[,use_yn][,attrs.<키>…]`)를
+    (상위 품목 · 버전)마다 헤더 1 + 구성품 줄로 넣는다. F-BAS-05 와 같은 순서 — `validate_bas_bom` 훅 → 저장 → `after_save_bas_bom` 훅(ext 복사).
+    `seeds[]`(seed_core)가 BOM 을 받지 않아서 여기 있다 — 코어 변경 요청(progress-dev1.md §6). 이미 있는 (품목 · 버전)은 건드리지 않는다(멱등)."""
+    p = packs.current()
+    if p.dir is None or not (p.dir / "seed").is_dir():
+        return 0
+    n = 0
+    for path in sorted((p.dir / "seed").glob("bom*.csv")):
+        with path.open(encoding="utf-8-sig", newline="") as f:
+            rows = [{k.strip(): (v.strip() if isinstance(v, str) else v) for k, v in r.items() if k is not None} for r in csv.DictReader(f)]
+        groups: dict[tuple[str, str], list[dict]] = {}
+        for r in rows:
+            groups.setdefault((r["item_code"], r["version"]), []).append(r)
+        for (item_code, version), lines in groups.items():
+            item = conn.q1("select id from bas_item where item_code = %s", (item_code,))
+            if item is None:
+                raise SystemExit(f"팩 BOM {path.name}: 상위 품목 {item_code!r} 가 없다 — seeds[] 의 items* 에 둔다")
+            if conn.q1("select 1 as hit from bas_bom where item_id = %s and version = %s", (item["id"], version)):
+                continue
+            head = lines[0]
+            row = {"item_id": item["id"], "version": version, "use_yn": (head.get("use_yn") or "Y").upper(),
+                   "attrs": {k[6:]: v for k, v in head.items() if k.startswith("attrs.") and v not in (None, "")}}
+            with conn.tx() as cur:
+                packs.hook("validate_bas_bom")(cur, row, _SeedUser())
+                cur.execute("insert into bas_bom (item_id, version, use_yn, attrs, created_by) values (%s, %s, %s, %s::jsonb, %s) returning id",
+                            (row["item_id"], version, row["use_yn"], json.dumps(row["attrs"], ensure_ascii=False), SEEDED_BY))
+                row["id"] = cur.fetchone()["id"]
+                for seq, ln in enumerate(lines, start=1):
+                    comp = conn.q1("select id from bas_item where item_code = %s", (ln["component_code"],))
+                    if comp is None:
+                        raise SystemExit(f"팩 BOM {path.name}: 구성품 {ln['component_code']!r} 가 없다")
+                    cur.execute("""insert into bas_bom_dtl (bom_id, component_item_id, qty, unit, loss_rate, seq, created_by)
+                                   values (%s, %s, %s, %s, %s, %s, %s)""",
+                                (row["id"], comp["id"], ln["qty"], ln.get("unit") or None, ln.get("loss_rate") or 0, seq, SEEDED_BY))
+                packs.hook("after_save_bas_bom")(cur, row, _SeedUser())
+            n += 1
+    return n
+
+
 def main() -> int:
     with conn.tx() as cur:
         seed_master(cur)
         seed_boms(cur)
         seed_user_workers(cur)
+    seed_pack_boms()
     n = {t: conn.q1(f"select count(*) as n from {t}")["n"] for t in ("bas_item", "bas_bom", "bas_bom_dtl", "bas_process", "bas_process_param", "bas_equipment", "bas_partner", "bas_worker", "bas_defect_code")}
     print("seed_dev1 — " + " · ".join(f"{k} {v}" for k, v in n.items()))
     return 0

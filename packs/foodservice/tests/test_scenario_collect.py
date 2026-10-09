@@ -22,7 +22,7 @@ def test_env_alarm():
     t0 = datetime.now(timezone.utc).replace(microsecond=0)
     eq = equipment_id("EQ-TC-05")
     ext = conn.q1("select storage_kind, temp_limit from x_foodservice_equipment_ext where id = %s", (eq,))
-    assert ext["storage_kind"] == "냉장" and ext["temp_limit"] == 5, "시드 EQ-TC-05 (냉장 · 5 ℃) — seed_pack.py"
+    assert ext["storage_kind"] == "냉장" and ext["temp_limit"] == 5, "시드 EQ-TC-05 (냉장 · 5 ℃) — seed/equipment_ext.csv"
     r1 = _send(c, "EQ-TC-05", t0, PV_TEMP=7.2)                                             # 상한 초과
     r2 = _send(c, "EQ-TC-05", t0 + timedelta(minutes=1), PV_TEMP=4.8)                     # 정상
     assert not r1["duplicate"] and not r2["duplicate"]
