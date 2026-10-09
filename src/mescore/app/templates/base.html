@@ -118,8 +118,8 @@
   <div class="row"><h1>{{ screen_name or system_name }}{% if screen_id %} <small>{{ screen_id }}</small>{% endif %}</h1>
     <span class="who">{% if user %}{{ user.user_name }} · {{ user.role_name }} <form method="post" action="/logout"><button>{{ t('로그아웃') }}</button></form>{% else %}<a href="/login">{{ t('로그인') }}</a>{% endif %}</span></div>
   {% if 'trc' in menu_codes and screen_id != 'TRC-03' and nav.channel_allowed('TRC-03', 'mobile') %}
-  <form class="m-search" method="get" action="{{ nav.path_of('TRC-03') }}" role="search">
-    <input type="search" name="q" placeholder="{{ t('LOT · 작업지시 · 출하 번호 검색') }}" aria-label="{{ t('번호 검색') }}" autocomplete="off">
+  <form class="m-search" method="get" action="{{ nav.path_of(screen_id) if screen_id in ('TRC-01', 'TRC-02') else nav.path_of('TRC-03') }}" role="search">
+    <input type="search" name="{{ 'no' if screen_id in ('TRC-01', 'TRC-02') else 'q' }}" placeholder="{{ t('LOT · 작업지시 · 출하 번호 검색') }}" aria-label="{{ t('번호 검색') }}" autocomplete="off">
     <button type="submit">{{ t('검색') }}</button>
   </form>
   {% endif %}

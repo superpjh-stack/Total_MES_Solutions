@@ -514,6 +514,10 @@ body.ch-pop .badge{font-size:var(--fs-pop-badge);line-height:22px}
 body.ch-pop .popup p{font-size:var(--fs-pop-alert);font-weight:700}
 body.ch-pop .scan-result,body.ch-pop .alert-422,body.ch-pop .alert{font-size:var(--fs-pop-alert)}
 body.ch-pop .err-msg{font-size:var(--fs-pop-alert)}
+/* 현황판 벽걸이(1920) 오류 · 503 — 멀리서 읽히게 (회전 5 · 디자이너3 요청) */
+body.ch-board .err-code{font-size:clamp(64px,5vw,120px)}
+body.ch-board .err-msg{font-size:clamp(48px,3.2vw,72px);line-height:1.2}
+body.ch-board .err-sub{font-size:clamp(24px,1.6vw,36px);max-width:none}
 body.ch-pop .toast{font-size:var(--fs-pop-note)}
 
 /* 모바일 — 한 단 · 폭 390 · 가로 넘침 0 · 표는 카드로(아래 @media) */
