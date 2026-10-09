@@ -97,6 +97,7 @@ class Pack:
     _hooks: Any = None
     _terms_sorted: list[tuple[str, str]] = field(default_factory=list)
     _values_sorted: list[str] = field(default_factory=list)      # 키를 품은 치환값 — 겹말 방지 (t)
+    verbatim: set[str] = field(default_factory=set)              # 팩이 쓴 최종 문구(menus.rename 값) — t() 를 걸지 않는다
 
     @property
     def is_core_only(self) -> bool:
@@ -305,6 +306,7 @@ def load(name: str | None) -> Pack:
             errs.append(f"menus.rename {code!r} 는 코어 모듈이 아니다")
         else:
             m["name"] = str(new_name)
+            pack.verbatim.add(str(new_name))          # 팩이 쓴 최종 이름 — t() 를 걸지 않는다(붙여 쓴 합성어 「품질이상」 의 겹말까지 막는다 · 회전 4)
     added: list[str] = []
     for add in menus.get("add") or []:
         code = str(add.get("code", ""))
@@ -509,6 +511,8 @@ def reset() -> None:
 def _index_terms(pack: Pack) -> None:
     pack._terms_sorted = sorted(pack.terms.items(), key=lambda kv: (-len(kv[0]), kv[0]))
     pack._values_sorted = sorted({v for k, v in pack.terms.items() if k in v and k != v}, key=lambda v: (-len(v), v))
+    # rename 값이 용어 키와 똑같으면(`출하`) 그 낱말 전체가 치환 대상이므로 verbatim 에서 뺀다 — 안 빼면 다른 화면의 「출하」 까지 안 바뀐다
+    pack.verbatim = {v for v in pack.verbatim if v not in pack.terms}
 
 
 def translate(text: str, terms: Mapping[str, str], terms_sorted: list[tuple[str, str]] | None = None,
@@ -541,11 +545,13 @@ def translate(text: str, terms: Mapping[str, str], terms_sorted: list[tuple[str,
 
 def t(text: str) -> str:
     """용어 치환 (E1 · D-07). 사전에 키가 그대로 있으면 그 값, 아니면 긴 키부터 한 번 훑어 부분 치환(겹말 방지 — `translate`).
-    `menus.rename` 값은 업종어로 쓴 최종 이름(`실적` → `공정 실적` 일 때 `공정 실적 (POP)`)도, 치환 전 꼴(`실적 (POP)`)도 같은 결과 — 겹말 방지가 이중 치환을 막는다(개발1 ⑤). 사전이 비면 원문."""
+    `menus.rename` 값(`pack.verbatim`)은 팩이 쓴 최종 이름이라 **그대로** 돌려준다(개발1 ⑤ · 회전 4). 사전이 비면 원문."""
     if text is None:
         return ""
     pack = current()
     if not pack.terms:
+        return text
+    if text in pack.verbatim:
         return text
     return translate(text, pack.terms, pack._terms_sorted, pack._values_sorted)
 

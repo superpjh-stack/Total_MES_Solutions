@@ -121,6 +121,8 @@ def scan_pack(pack_name: str) -> tuple[list[str], int, int]:
         n += 1
         plain = re.sub(r"<[^>]*>", " ", resp.text)
         plain = re.sub(r"<code>.*?</code>", " ", resp.text)
+        for v in sorted(packs.current().verbatim, key=len, reverse=True):   # 팩이 쓴 최종 이름(menus.rename 값)은 t() 를 걸지 않는다 — 노출로 세지 않는다
+            plain = plain.replace(v, " ")
         for k in keys:
             if k in plain and terms[k] not in plain:
                 bad.append(f"{s.screen_id} `{k}`")
