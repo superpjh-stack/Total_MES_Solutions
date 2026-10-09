@@ -30,7 +30,7 @@
         <div class="chan">
           {% set chan_note = {'web': t('좌측 메뉴 · 표 · 폼'), 'pop': t('확대 · 스캔칸 1개'), 'mobile': t('폭 390 · 조회 중심'), 'board': t('조작 없음 · 자동 새로고침')} %}
           {% for code, label in nav.DEVICE_CHANNEL.items() %}
-          <label><input type="radio" name="device" value="{{ code }}"{% if code == dev %} checked{% endif %}><span>{{ label }}<small>{{ chan_note.get(code, '') }}</small></span></label>
+          <label><input type="radio" name="device" value="{{ code }}"{% if code == dev %} checked{% endif %}><span>{{ t(label) }}<small>{{ chan_note.get(code, '') }}</small></span></label>
           {% endfor %}
         </div>
       </fieldset>
