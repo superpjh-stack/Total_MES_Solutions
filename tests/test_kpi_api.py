@@ -119,3 +119,16 @@ def test_indicator_list_shows_value_target_status():
     assert seed["target_value"] is None and seed["status"] is None                            # 목표 NULL → 미확정 (D-602)
     assert stats.status_of(96.0, 95.0) == "good" and stats.status_of(91.0, 95.0) == "warn" and stats.status_of(80.0, 95.0) == "critical"
     assert c.get("/kpi/indicators", params={"id": "x"}).status_code == 404
+
+
+def test_dashboard_recent_five_and_html_block():
+    """CMN-04 — recent[{at kind text href}] 최근 변경 5건 (접근 로그 change · 읽기만). 권한 없는 화면은 링크 없이 글자만."""
+    admin = client("admin")
+    body = admin.get("/dashboard").json()
+    assert len(body["recent"]) <= 5 and all({"at", "kind", "text", "href"} <= set(r) for r in body["recent"])
+    field = client("field").get("/dashboard").json()
+    for r in field["recent"]:
+        if r["href"]:
+            assert not r["href"].startswith("/sys/")                                    # 현장은 sys 화면 권한 없음 → 링크 없음
+    h = admin.get("/dashboard", headers=HTML)
+    assert h.status_code == 200 and 'class="recent"' in h.text

@@ -1,6 +1,6 @@
 {# SHP-03 출하 현황 — F-SHP-08. 오늘 · 이번 주 출하 · 납기 대비(stats.delivery). 쓰기 0.
    모바일(body.ch-mobile): docs/design/mobile/shp_status_m.html — 390px 가로 넘침 0 · 표 대신 카드 · stat 타일 2×2 · LOT 3건 초과면 접힘 · 납기 대비 배지.
-   개발3 라우터 ctx 키 그대로: rows[{shipment_no partner_name ship_date order_no due_date status lot_count total_qty lots[]}] · stat · delivery_total · frm · to · today #}
+   개발3 라우터 ctx 키 그대로: rows[{shipment_no partner_name ship_date order_no due_date due_days due_state status lot_count total_qty lots[]}] · total · stat · delivery_total · frm · to · today #}
 {% extends "pop/_layout.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "pop/_ui.html" as pui %}
@@ -8,8 +8,8 @@
 {% block head_extra %}{% if device not in ['pop', 'mobile'] %}{{ cards.styles() }}{% endif %}{% endblock %}
 
 {% macro due_badge(r) %}
-{% if r.due_date and r.ship_date %}
-{% set d = (r.ship_date - r.due_date).days %}
+{% if r.due_days is defined and r.due_days is not none %}
+{% set d = r.due_days %}
 {% if d > 0 %}<span class="badge b-warn">{{ d }}{{ t('일 지남') }}</span>{% elif d == 0 %}<span class="badge b-ok">{{ t('당일') }}</span>{% else %}<span class="badge b-ok">{{ -d }}{{ t('일 앞') }}</span>{% endif %}
 {% else %}-{% endif %}
 {% endmacro %}
@@ -22,7 +22,7 @@
 </form>
 {{ pui.stat_grid([('오늘 출하', stat.today_count, t('건')), ('오늘 승인', stat.today_approved, t('건')), ('기간 출하', stat.week_count, t('건')), ('납기 준수', (delivery_total.on_time_rate|round|int ~ '') if delivery_total and delivery_total.on_time_rate is not none else none, '%')]) }}
 <section class="m-sec">
-  <h2>{{ t('출하') }} <small>{{ frm|dt('%m-%d') }} ~ {{ to|dt('%m-%d') }} · {{ rows|length }}{{ t('건') }}</small></h2>
+  <h2>{{ t('출하') }} <small>{{ frm|dt('%m-%d') }} ~ {{ to|dt('%m-%d') }} · {{ total if total is defined else rows|length }}{{ t('건') }}{% if total is defined and total > rows|length %} ({{ t('최근') }} {{ rows|length }}){% endif %}</small></h2>
   {% for r in rows %}
   {% call pui.mcard(r.shipment_no, r.status, [('거래처', r.partner_name), ('출하일', r.ship_date|dt('%m-%d')), ('수주', (r.order_no ~ ' · ' ~ t('납기') ~ ' ' ~ (r.due_date|dt('%m-%d'))) if r.order_no else none), ('LOT', (r.lot_count ~ t('건') ~ ' · ' ~ (r.total_qty|num(3)))), ('납기 대비', due_badge(r))]) %}
     {% if r.lots %}

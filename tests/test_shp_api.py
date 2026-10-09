@@ -168,6 +168,14 @@ def test_shipment_status_today_week_and_mobile_cards():
     body = r.json()
     assert body["stat"]["today_count"] >= 1 and any(x["shipment_no"] == s["shipment_no"] for x in body["today_rows"])
     assert "delivery" in body and body["stat"]["week_lots"] >= 1
+    assert body["total"] >= len(body["rows"])
+    mine = next(x for x in body["rows"] if x["shipment_no"] == s["shipment_no"])
+    due = conn.q1("select due_date from ord_order where order_no = 'O-EX-S001'")
+    if due and due["due_date"]:
+        assert mine["due_days"] == (TODAY - due["due_date"]).days and mine["due_state"] in ("지연", "당일", "앞섬")
+    else:
+        assert mine["due_days"] is None and mine["due_state"] is None
+    assert prod.get("/shp/shipments").json()["total"] >= 1
     m = client("field", device="mobile").get("/shp/status", headers=HTML)
     assert m.status_code == 200 and "m-card" in m.text and "ch-mobile" in m.text
     assert prod.get("/shp/status", params={"frm": "bad"}).status_code == 422

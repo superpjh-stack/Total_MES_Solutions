@@ -1,6 +1,6 @@
 """kimchi 팩 테스트 공용 — 로그인 클라이언트 · 코어 API 로 입고/검사/실적/출하 · 수집 메시지 · 공정 조건 (개발3 · 2026-10-09).
 
-실행: `MES_PACK=kimchi uv run pytest -q packs/kimchi/tests` — DB 는 `mes_kimchi_db`(시드: `packs/kimchi/seed_bootstrap.py` 또는 `make db-seed`).
+실행: `MES_PACK=kimchi uv run pytest -q packs/kimchi/tests` — DB 는 `mes_kimchi_db`(시드: `MES_PACK=kimchi make db-seed` · 새 DB 는 `make pack-db NAME=kimchi`).
 시나리오는 전부 **코어 API + 팩 API** 로 재현한다(gates.yaml). 작업지시 행만 코어 테스트(`tests/_dev2_helpers.py`)와 같이 테스트 픽스처로 직접 넣는다(번호 `T-W-…`).
 """
 

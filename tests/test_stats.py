@@ -130,6 +130,28 @@ def test_board_keys_and_dashboard():
     d = stats.dashboard(D2)
     assert set(d["today"]) == {"date", "work_orders", "results", "inspections_pending", "shipments_pending"}
     assert {"deviated", "faults", "late_orders", "approvals_pending", "issues_open", "labels_today"} <= set(d["extra"])
+    assert isinstance(d["recent"], list) and len(d["recent"]) <= 5
+    assert all({"logged_at", "login_id", "fn_id", "screen_id", "target", "name"} <= set(r) for r in d["recent"])
+    ats = [r["logged_at"] for r in d["recent"]]
+    assert ats == sorted(ats, reverse=True)                                                             # 최신 순
+
+
+def test_today_counts_modules_and_hand_count():
+    tc = stats.today_counts(D2)
+    assert set(tc) == set(stats.TODAY_COUNT_SOURCES) and len(tc) == 12 and all(isinstance(v, int) for v in tc.values())
+    assert tc["mat"] == conn.q1("select count(*)::int as n from mat_receipt where receipt_date = %s", (D2,))["n"]     # 손계산 — 10-02 입고
+    assert tc["ord"] == conn.q1("select count(*)::int as n from ord_order where due_date = %s and status <> '취소'", (D2,))["n"]
+    assert stats.today_counts()["sys"] >= 0                                                             # 기본 = 오늘
+
+
+def test_shipment_due_days_per_row():
+    row = conn.q1("""select s.id, s.ship_date, o.due_date from shp_shipment s join ord_order o on o.id = s.order_id
+                      where o.due_date is not null order by s.id desc limit 1""")
+    assert stats.shipment_due([]) == {}
+    if row is not None:
+        d = stats.shipment_due([row["id"]])[row["id"]]
+        assert d["due_days"] == (row["ship_date"] - row["due_date"]).days
+        assert d["due_state"] == ("지연" if d["due_days"] > 0 else "당일" if d["due_days"] == 0 else "앞섬")
 
 
 def test_snapshot_writes_then_board_reads_it():

@@ -36,7 +36,7 @@
   {% endfor %}
   </tbody>
 </table>
-{% if rows|length >= limit %}<p class="muted">{{ t('최근') }} {{ limit }}{{ t('건만 보입니다') }}</p>{% endif %}
+{% if total is defined and total > rows|length %}<p class="muted">{{ t('전체') }} {{ total }}{{ t('건') }} · {{ t('최근') }} {{ rows|length }}{{ t('건만 보입니다') }}</p>{% endif %}
 
 {% if opened %}
 <section class="panel">

@@ -346,14 +346,15 @@
 | `adapters/collect_tags.py` | 설비 종류 · 태그 표(`equipment_example.csv` 의 `equip_type` · `collect_tags` 열을 읽는다) · 태그 → 알람 종류 · 센서 ↔ 절임통 고정 매핑 `SENSOR_TO_TANK = {}` (미확정 D-206). 드라이버는 코어 HTTP 수신 그대로 |
 | `routers/{cond,wsh,tank,pkg,age,alm}.py` | 기능 24 = 엔드포인트 24 (`function-list.md` 의 API 열 글자 그대로) |
 | `templates/{cond,wsh,tank,pkg,age,alm}/*.html` | 화면 8 — `base.html` + `ui` 매크로 · `{{ t("…") }}` |
-| `seed_bootstrap.py` | 새 DB 첫 시드 (아래 "코어 시드 순서") |
 | `tests/` | `_helpers.py` · S1~S4 · 기능 24 · 용어 · 스모크 = 26건 |
 
 ### 기획 문서에서 고친 것 (코드가 돌기 위한 최소 수정 — 전부 데이터 · 머리글)
 
 | 파일 | 고친 것 | 왜 |
 |---|---|---|
-| `pack.yaml` `screens[].channels` | `web/pop/board` → `관리자 Web/현장 POP/현황판` 라벨 | `nav.rebuild()` 는 라벨만 받는다(코드 `web` 이면 `AssertionError` 기동 거부). 세 팩 공통 — 코어 `packs.load` 가 코드를 라벨로 바꿔 주는 것이 맞다(§3 요청) |
+| ~~`pack.yaml` `screens[].channels` 라벨~~ | **회전 4 되돌림** — 기획 그대로 코드(`web/pop/mobile/board`). 코어 `packs.load` 가 코드 · 라벨 둘 다 받는다(아키텍트 `733074f`) | — |
+| ~~`pack.yaml` `menus.rename.trc` `추적`~~ | **회전 4 되돌림** — 기획 그대로 `로트 추적`(겹말 방지 `packs.translate`) | — |
+| `pack.yaml` `menus.rename.qua` | 기획 `품질이상` → `품질` (남김) | `t(이상)=품질 이슈` 라 `품질품질 이슈`. 겹말 방지는 치환값이 키를 품을 때(`추적`→`로트 추적`)만 막는다 — 붙여 쓴 합성어는 그대로 치환된다(progress-dev3 §3-22) |
 | `pack.yaml` `menus.add[]` | `owner: 개발3` · `channels` 추가 | `contracts._validate` 가 기능의 담당 = 모듈 owner 를 요구(없으면 `kimchi` 가 되어 24건 전부 거부) |
 | `function-list.md` | `## 1. 읽는 법` · `## 2. 기능` 머리글 추가 | `contracts` 로더가 `## 2.` 절의 표만 읽는다 |
 | `seed/items_example.csv` | 머리글 `capacity_kg` → `attrs.capacity_kg` 등 | `seed_core` 는 `attrs.` 접두 열만 attrs 로 넣는다 (아니면 조용히 버려진다) |
@@ -382,9 +383,10 @@
 - `on_collect` 테이핑 집계: `pack_count` 가 직전 누계보다 작으면 리셋으로 보고 이번 값을 증분으로. `run_state` 값 형식은 미확정이라 `1/0 · run/stop · 가동/정지` 만 해석, 그 밖은 NULL.
 - `kpi_extra`: kg 환산은 `bas_item.attrs.capacity_kg`, 없으면 제외 + `note`. 일 근무시간 8h(정본 TD1) — `kpi_indicator(throughput_kg_per_h).attrs.work_hours_per_day` 가 있으면 그 값. 목표값은 시드에 없다(KPI-03 입력).
 
-### 코어 시드 순서 — 새 `mes_kimchi_db` 는 `seed_bootstrap.py` 로
+### 코어 시드 순서
 
-`seed_core.seed_pack()` 이 `process_params` → `inspection_items` → `seeds[]` 순이라 새 DB 에서는 공정 9 보다 측정값 19 가 먼저 들어가 `bas_process_param.process_id` NOT NULL 로 멈춘다(세 팩 공통). `MES_PACK=kimchi uv run python packs/kimchi/seed_bootstrap.py` 가 코어 함수만 순서를 바꿔 부른다(SQL 0). 공정이 있는 DB 에서는 `make db-seed` 그대로 · 2회 행 수 diff 0.
+회전 4 에서 코어 `seed_core` 가 공정 → 품목 → 설비 → `process_params` → `inspection_items` → 나머지 순으로 넣는다(아키텍트 `6c77eb9`). 임시 `seed_bootstrap.py` 는 지웠다 — 새 DB 도 `make pack-db NAME=kimchi`(또는 `MES_PACK=kimchi make db-seed`) 하나로. 빈 DB 에서 2회 실행 행 수 diff 0 · 팩 테스트 26 통과(2026-10-09 임시 DB 실측).
+`equipment_example.csv` 의 `equip_type` · `comm_type` · `collect_tags` · `processes.csv` 의 `ccp_yn` 은 헤더가 `attrs.` 접두가 아니라 DB 에 안 들어간다(시드가 경고) — `adapters/collect_tags.py` 가 CSV 를 직접 읽는다. 헤더를 `attrs.<키>` 로 바꾸는 것은 그 어댑터와 함께 다음 회전.
 
 ### 이 팩이 덮어쓴 코어 템플릿 (R10)
 

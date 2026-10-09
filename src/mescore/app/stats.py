@@ -234,6 +234,23 @@ def late_orders(*, today: date | None = None, limit: int = 20) -> list[dict]:
          limit %(limit)s""", {"today": day, "limit": limit})
 
 
+
+def shipment_due(shipment_ids: list[int]) -> dict[int, dict]:
+    """출하 행별 납기 대비 (SHP-03) — {shipment_id: {due_date, due_days, due_state}}. `due_days` = 출하일 − 수주 납기(일 · 양수 = 지남).
+    `due_state` 지연 / 당일 / 앞섬 · 수주 없음 또는 납기 없음 → None(화면 「-」). 읽기만."""
+    if not shipment_ids:
+        return {}
+    rows = conn.q("""
+        select s.id as shipment_id, o.due_date, (s.ship_date - o.due_date)::int as due_days
+          from shp_shipment s left join ord_order o on o.id = s.order_id
+         where s.id = any(%(ids)s)""", {"ids": list(shipment_ids)})
+    out: dict[int, dict] = {}
+    for r in rows:
+        d = r["due_days"]
+        r["due_state"] = None if d is None else ("지연" if d > 0 else "당일" if d == 0 else "앞섬")
+        out[r.pop("shipment_id")] = r
+    return out
+
 # ── 설비 ───────────────────────────────────────────────────────────────
 def equipment(frm: date, to: date) -> list[dict]:
     """설비 집계 — 설비마다 {equipment_id, code, name, collect_yn, run_seconds, stop_seconds, check_seconds, fault_seconds, logged_seconds,
@@ -567,7 +584,48 @@ def dashboard(today: date | None = None) -> dict:
                (select count(*)::int from qua_issue q where q.status <> '종결') as issues_open,
                (select count(*)::int from lot l where l.kind_base = 'PRODUCT' and l.made_at::date = %(d)s) as labels_today""", {"d": day}) or {}
     extra["late_orders"] = len(late_orders(today=day, limit=1000))
-    return {"today": {"date": day.isoformat(), **t}, "extra": extra}
+    return {"today": {"date": day.isoformat(), **t}, "extra": extra, "recent": recent_activity(limit=5)}
+
+
+def recent_activity(limit: int = 5) -> list[dict]:
+    """최근 변경 N건 (CMN-04 `recent[]`) — `sys_access_log` 의 change 행, 최신 순.
+    {logged_at, login_id, fn_id, screen_id, target, name(기능 이름 — detail.name)}. 비밀번호 · 세션 값은 로그에 없다(audit)."""
+    return conn.q("""
+        select l.logged_at, l.login_id, l.fn_id, l.screen_id, l.target, l.detail ->> 'name' as name
+          from sys_access_log l
+         where l.kind = 'change'
+         order by l.logged_at desc, l.id desc
+         limit %(limit)s""", {"limit": limit})
+
+
+#: 메인 카드 "오늘 건수" 출처 — 모듈 코드 → 무엇을 세는가 (home/main.html 디자이너3 가설 · trc 는 오늘 계보 연결)
+TODAY_COUNT_SOURCES: dict[str, str] = {
+    "bas": "오늘 기준정보 변경(F-BAS-* change 로그)", "ord": "오늘 납기 수주(취소 제외)", "job": "오늘 계획 작업지시(취소 제외)",
+    "mat": "오늘 입고", "pop": "오늘 시작 실적", "qua": "판정 대기 검사", "eqp": "고장 중 설비(미조치 고장)", "shp": "출하 대기(등록)",
+    "trc": "오늘 계보 연결", "kpi": "오늘 측정값 이탈", "sys": "오늘 로그인", "ifc": "오늘 수신 거부",
+}
+
+
+def today_counts(today: date | None = None) -> dict[str, int]:
+    """메인 카드(CMN-02) 모듈별 "오늘 건수" — {bas ord job mat pop qua eqp shp trc kpi sys ifc: int}. 출처는 `TODAY_COUNT_SOURCES`. 읽기만 · 0 도 숫자."""
+    day = today or date.today()
+    r = conn.q1("""
+        select (select count(*)::int from sys_access_log l where l.kind = 'change' and l.fn_id like 'F-BAS-%%'
+                  and l.logged_at >= %(d)s::date and l.logged_at < %(d)s::date + 1) as bas,
+               (select count(*)::int from ord_order o where o.due_date = %(d)s and o.status <> '취소') as ord,
+               (select count(*)::int from job_work_order w where w.plan_date = %(d)s and w.status <> '취소') as job,
+               (select count(*)::int from mat_receipt m where m.receipt_date = %(d)s) as mat,
+               (select count(*)::int from pop_work_result p where p.started_at >= %(d)s::date and p.started_at < %(d)s::date + 1) as pop,
+               (select count(*)::int from qua_inspection n where n.judgement is null) as qua,
+               (select count(distinct f.equipment_id)::int from eqp_fault f where f.fixed_at is null) as eqp,
+               (select count(*)::int from shp_shipment s where s.status = '등록') as shp,
+               (select count(*)::int from lot_genealogy g where g.linked_at >= %(d)s::date and g.linked_at < %(d)s::date + 1) as trc,
+               (select count(*)::int from pop_measure m where m.deviated and m.measured_at >= %(d)s::date and m.measured_at < %(d)s::date + 1) as kpi,
+               (select count(*)::int from sys_access_log l where l.kind = 'login_ok'
+                  and l.logged_at >= %(d)s::date and l.logged_at < %(d)s::date + 1) as sys,
+               (select count(*)::int from ifc_collect_raw c where c.rejected_reason is not null
+                  and c.received_at >= %(d)s::date and c.received_at < %(d)s::date + 1) as ifc""", {"d": day}) or {}
+    return {k: int(r.get(k) or 0) for k in TODAY_COUNT_SOURCES}
 
 
 @dataclass(frozen=True)

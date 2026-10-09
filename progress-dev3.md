@@ -19,8 +19,11 @@ stats.kpi_extra(frm, to, by=None) -> list[dict]                              # �
 stats.indicators(frm=None, to=None, *, values=None, today=None) -> list[dict] # kpi_indicator + 현재값 + status(good/warn/critical/None — D-602)
 stats.board(today=None) -> dict                                              # KPI-01 — 디자이너3 키 그대로(아래). kpi_snapshot(today) 가 있으면 지표 값은 그것 · source="스냅샷 HH:MM"
 stats.snapshot(cur, day) -> int                                              # 배치만: `uv run python -m mescore.app.stats snapshot [YYYY-MM-DD]` → kpi_snapshot 코어 5 + pack:<key>
-stats.dashboard(today=None) -> dict                                          # CMN-04: today{date work_orders results inspections_pending shipments_pending} + extra{deviated faults late_orders approvals_pending issues_open labels_today}
+stats.dashboard(today=None) -> dict                                          # CMN-04: today{date work_orders results inspections_pending shipments_pending} + extra{deviated faults late_orders approvals_pending issues_open labels_today} + recent[≤5] (회전 4)
+stats.recent_activity(limit=5) -> list[dict]                                 # 회전 4 · 최근 변경 — sys_access_log change 최신 순 {logged_at login_id fn_id screen_id target name}
+stats.shipment_due(shipment_ids) -> {id: {due_date, due_days, due_state}}    # 회전 4 · SHP-03 행별 납기 대비 — due_days = 출하일 − 수주 납기(양수 = 지남) · due_state 지연/당일/앞섬 · 수주 없음 None
 stats.summary(kind, frm, to, *, by=None, today=None) -> dict                 # KPI-02 한 탭 분 {kind, by, rows, total}
+stats.today_counts(today=None) -> dict[str, int]                          # 회전 4 · 메인 카드 c.today — 키 = 코어 모듈 코드 12. 출처 home/home.html 머리 주석(아래 §1 표). 값 int(0 도 숫자)
 stats.late_orders(*, today=None, limit=20) · stats.open_work_orders(limit=7) · stats.measure_keys() · stats.period(frm, to) · stats.parse_date() · stats.rate() · stats.status_of(value, target)
 ```
 
@@ -30,6 +33,9 @@ stats.late_orders(*, today=None, limit=20) · stats.open_work_orders(limit=7) ·
   equipment{run stop check fault items[]} work_orders_count work_orders[] measure{measured_count deviated_count} indicators[]`. 지표 `status` 는 서버 계산(값 ≥ 목표 good · ≥ 목표×95 % warn · 그 밖 critical · 목표 NULL → null).
   `actual_qty` = good + defect · `by_hour` 는 실적이 있는 첫 시간부터 23시까지 · `top_defects.share` = 1위 수량 대비 % · 조건부는 합격에 세지 않는다(D-302).
   → `docs/design/README.md` 디자이너3 §1 을 "확정" 으로 갱신했다.
+- **`today_counts()` 출처 (회전 4 · `stats.TODAY_COUNT_SOURCES`)** — 디자이너3 `home/main.html` 머리 주석 가설 그대로 + `trc` 는 오늘 계보 연결:
+  `bas` 오늘 F-BAS-* 변경(접근 로그 change) · `ord` 납기 = 오늘(취소 제외) · `job` 계획일 = 오늘(취소 제외) · `mat` 입고일 = 오늘 · `pop` 오늘 시작 실적 · `qua` 판정 대기 검사(날짜 무관) ·
+  `eqp` 미조치 고장 설비 수 · `shp` 등록(승인 대기) 출하 · `trc` 오늘 `lot_genealogy.linked_at` · `kpi` 오늘 이탈 측정값 · `sys` 오늘 `login_ok` · `ifc` 오늘 수신 거부(`rejected_reason`). 값은 전부 int(0 도 숫자). 개발1 `home.cards_for` 가 `aa9e22a` 에서 붙였다.
 - `GET /kpi/board` 는 `Accept` 에 `text/html` 이 없으면 **`stats.board()` 그대로**(폴링 — 접근 로그를 남기지 않는다), 브라우저면 `kpi/board.html`(base.html 을 쓰지 않는 벽걸이 전용 · `body.ch-board` · 5초 JSON 폴링 · 실패 시 마지막 값 유지).
 
 ### `app/erp.py` — 어댑터 501 + 큐 (D-02 · D-20 · G-C16)
@@ -91,6 +97,20 @@ migrate.main(argv) -> int                                                    # `
 | 모바일 | ORD-03 주 단위 details · SHP-03 · TRC-01/02/03 · KPI-02 카드(`m-card` · `details` · `min-width:0` · `overflow-wrap:anywhere`) · `?device=mobile` HTML 200 | `tests/test_*_api.py` 모바일 단언 4건 |
 | 시드 | `seed_dev3` 2회 실행 행 수 같음 — 수주 2 · 상세 2 · 계획 2(확정 1 · 계획 1) · 지표 4(목표 NULL) · ERP 큐 1 | `uv run python -m mescore.db.seed_dev3` ×2 |
 
+## §2-R4 실측 (회전 4 · 2026-10-09)
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| 1. D-29 include 중복 | `routers/kpi.py` 의 `from . import dashboard` · `include_router` 제거 → `/dashboard` 는 `main.py` 코어 15 만 등록 | `make check-routes` 56/56 · `GET /dashboard` 200 |
+| 2. `stats.today_counts` | 12 키 int — 실 DB 예 `{bas 1655 · ord 0 · job 1703 · mat 725 · pop 1746 · qua 80 · eqp 79 · shp 404 · trc 1380 · kpi 108 · sys 8102 · ifc 75}`(테스트 잔존 데이터) · `mat` · `ord` 손계산 대조 | `tests/test_stats.py::test_today_counts_modules_and_hand_count` |
+| 2. `dashboard.recent[]` | `stats.dashboard()["recent"]` ≤ 5 최신 순 · 라우터가 원형 키 `{at kind text href}` 로(권한 · 채널 밖 화면은 링크 없이 글자 · 기능명은 `t()`) · `dashboard/index.html` 「최근 변경」 박스(원형 `.recent` 모양 · 0건 `미수집`) | `tests/test_kpi_api.py::test_dashboard_recent_five_and_html_block` |
+| 2. SHP-03 행별 납기 대비 | `stats.shipment_due(ids)` → 행마다 `due_days` · `due_state` · 템플릿 `due_badge` 가 그 값을 쓴다(템플릿 날짜 계산 제거) | `tests/test_shp_api.py::test_shipment_status_today_week_and_mobile_cards` · `tests/test_stats.py::test_shipment_due_days_per_row` |
+| 3. ORD-01 `lines` 전부 | 행마다 `lines[]`(한 쿼리 `_lines_of`) · `orders.html` 모든 수주 아래 `tr.dtl`(실 DB 수주 277 → `tr.dtl` 550) | `tests/test_ord_api.py::test_order_list_filters_and_line_quantities` |
+| 3. `total` | ORD-01 · SHP-01 · SHP-03 — `count(*) over ()`(상한 `LIST_LIMIT` 300 앞에서 센 전체 건수) · 템플릿 「전체 N건 · 최근 M건만」 | 같은 테스트 |
+| 4. `test_migrate` 흔들림 | 멱등 기준 = 두 번째 `inserted == 0` + **이관 대상 테이블**(function-list B-MIG-0n)에서 이관이 만든 · 갱신한 행(`created_by`/`updated_by = migrate` · `attrs.migrated_from`) 수 diff 0. dry-run 은 대상 테이블 diff 0 + 그 폴더(`dir`)의 로그 +3. 다른 테스트를 같은 DB 에 동시에 돌리며 3회 연속 5 passed | `uv run pytest -q tests/test_migrate.py` × 3 (병행 `test_shp_api` · `test_pop_api`) |
+| 5. kimchi 우회 제거 | 아키텍트 `733074f`(packs 채널 코드/라벨 · 겹말 방지) 도착 → `pack.yaml` `screens[]` · `menus.add[]` 채널 **기획대로 코드**(`web/pop/mobile/board`) · `rename.trc` **`로트 추적`** 복원. `rename.qua` 는 `품질` 유지(§3-22). 아키텍트 `6c77eb9`(seed_core 순서 · CR-9) 도착 → **`seed_bootstrap.py` 삭제**(빈 임시 DB `mes_kimchi_r4tmp` 에 스키마 + schema_ext → `seed_core` 2회 행 수 diff 0 · 팩 테스트 26 통과 · DB 삭제) · 개발2 `make_product_lot(merge_parent_ids=)` 미커밋(HEAD 에 없음) → S1 은 10행 유지**(`gates.yaml` 그대로) | `git log -- src/mescore/db/seed_core.py` · `git show HEAD:src/mescore/app/lineage.py \| grep -c merge_parent_ids` → 0 · `MES_PACK=kimchi uv run pytest -q packs/kimchi/tests` **26 passed** · `MES_PACK=kimchi make pack-check` OK WARN [] |
+| 7. 검증 | 전체 **274 passed · 1 failed**(`test_arch_smoke::test_core_has_no_forbidden_terms` ← `packs.py:544 조리`(아키텍트) · `routers/qua.py:61 금속검출`(개발2) — 개발3 파일 아님) · `check-routes` PASS 56/56 · placeholder 0 · RBAC 위반 0 · `check-terms` FAIL 2(같은 두 줄) · `grep -iE "insert\|update\|delete" routers/{trc,kpi,dashboard}.py` → 지표 2(`kpi_indicator` insert · update) + `def update_indicator` 이름 + `trc.py:76 base.update(ctx)`(파이썬 dict) — SQL 쓰기 0 | 명령 그대로 |
+
 ## §3 요청
 
 1. **아키텍트 `tools/check_trace.py`** — 고아 라우트 제외에 D-601 `GET /shp/shipments/{}/label` 을 D-12 와 같이 넣어 달라(decisions D-601 "기능 수에 안 센다 — D-12 와 같은 취급"). 지금 G-C02 FAIL 1 의 유일한 원인.
@@ -115,6 +135,9 @@ migrate.main(argv) -> int                                                    # `
 19. **개발2 `routers/pop.py` F-POP-03** — 종료 폼에 "합병 부모 LOT" 옵션(기획 `pack.yaml` D-502 가 가정한 것). 지금 합병은 별도 API 가 새 LOT 을 만들어 혼합 배치가 양념 실적 LOT + 절임통 배치 N 의 합병(계보 10행)이 된다. 옵션이 있으면 기획의 9행(투입 + 혼합 한 LOT)이 된다.
 20. **아키텍트 `core_hash`** — 작업 폴더에 다른 담당의 미커밋 코어 변경(28 파일 · `static/app.js` · `pop/_layout.html` …)이 있어 G-P01 R1 이 FAIL 로 찍힌다. 개발3 은 `src/` 를 건드리지 않았다(`git diff HEAD -- src` 에 개발3 변경 0 · 커밋은 `packs/kimchi/**` · `progress-dev3.md` 만). 그 변경이 커밋되면 `make core-hash` 를 다시 찍어 달라.
 21. **개발1 `tests/test_job_work_orders.py`** — 코어 단독 `MES_PACK= uv run pytest -q tests/` 에서 `test_list_filters_and_progress_is_computed` · `test_status_board_today_week_and_drilldown` 2건이 실패한다(`progress == 진행 and status == 대기` 행 없음). 팩 무관(코어 DB · 팩 미로드) — 개발1 확인 요청.
+22. **아키텍트 `packs.translate`** (회전 4) — 겹말 방지는 치환값이 키를 품을 때(`추적` → `로트 추적`)만 막는다. kimchi 기획 `rename.qua: 품질이상` 은 `이상 → 품질 이슈` 로 `품질품질 이슈` 가 된다(붙여 쓴 합성어). **`menus.rename` 값은 팩이 업종어로 쓴 최종 이름이므로 `t()` 를 걸지 않는** 쪽이 맞다(`nav` 가 rename 된 메뉴 이름에 표지를 두고 `base.html` 이 그 이름은 그대로). 그때 kimchi 는 `품질이상` 으로 되돌린다.
+23. **아키텍트 · 코어 공통 `?sort=`** (디자이너1 이식 요청 「전 화면 표」) — 서버 정렬 `?sort=<열>&dir=asc|desc` 을 화면마다 따로 만들지 말고 공용 헬퍼(예: `util/http.sort_clause(sort, allowed: dict[str, sql_expr], default)` → 허용 열만 · SQL 주입 0)로 두자. 개발3 은 ORD-01 · SHP-01 · SHP-03 에 `total`(조건 전체 건수)을 먼저 넣었다 — 헬퍼가 생기면 세 목록의 `order by` 를 그것으로 바꾼다.
+24. ~~아키텍트 `seed_core.seed_pack` 순서~~ — `6c77eb9` 로 해결 · `seed_bootstrap.py` 지움(§3-12 닫힘). **개발2 `make_product_lot(merge_parent_ids=)`** 가 커밋되면 S1 을 기획 9행(혼합 한 LOT)으로 되돌리고 `gates.yaml` 과 맞춘다(지금 작업 폴더에만 있다).
 
 
 ## §4 웨이브 B — `kimchi` 참조 팩 (2026-10-09)
@@ -182,3 +205,56 @@ G-P06  착수 시간 — outputs/pack-timing.md ≤ 4h                  미검�
 ### 미확정 처리
 
 `(미확정)` 값은 전부 NULL 로 두고 판정하지 않는다 — 냉장 온 · 습도 상 · 하한(`bas_process_param`) · 염도 허용편차(`x_kimchi_item_std.tolerance`) · 중량 · CCP 수치(`qua_insp_plan`) · 센서 ↔ 절임통(`SENSOR_TO_TANK = {}` · 화면 `미확정 (D-206)`) · `run_state` 값 형식 · 숙성 품목별 기간(없으면 21 · 응답에 `aging_days_source: D-511`). 테스트는 픽스처가 임시로 넣고 되돌린다(S3). 정본 값(9 %/48 h · 13 %/24 h · 소독수 10 ppm · 목표 700 · 1.30)은 시드에 없다 — X-COND-01 · KPI-03 에서 입력.
+
+## §5 D-501 설비 알람 코어화 — 설계 표 (회전 4 · 개발3 제안 · 코드 0)
+
+근거: `decisions.md` D-501 설계(아키텍트) + kimchi `x_kimchi_env_alarm`/`alarm.py` 실측(D-512 합침 · 발생/확인/해제) + foodservice 냉장 · 냉동 이탈. 테이블 52 → 54 는 사람이 `spec.md` §2.2 · `goal.md` G-C04 를 고친 뒤(아키텍트).
+
+### 테이블 2
+
+| 테이블 | 모듈 · 쓰는 곳 | 컬럼 (공통 6 별도) | 제약 · 인덱스 | kimchi 에서 옮겨 오는 것 |
+|---|---|---|---|---|
+| `bas_equipment_param` | bas · BAS-05 하위 표(F-BAS-17~20 범위 · 기능 수 불변) | `equipment_id` FK · `tag`(수집 태그 = `eqp_collect.tag`) · `label` · `unit` · `min_value` · `max_value` · `seq` · `use_yn` | uq `(equipment_id, tag)` · min ≤ max CHECK · 범위 둘 다 NULL = 판정 안 함(`미확정`) | 지금 kimchi 는 `bas_process_param(설비 공정, collect_tag)` 의 min/max 를 빌려 쓴다 → 이 표로. 시드는 팩 `seeds[]` `equipment_params*.csv`(값 미확정이면 빈 칸) |
+| `eqp_alarm` | eqp · 쓰는 곳 `collect`(발생 · 합침 · 자동 해제) + `eqp`(확인 · 해제 — 기능 추가 시) | `alarm_no`(numbering `ALARM`) · `equipment_id` FK · `tag` · `param_id` FK(`bas_equipment_param`) · `first_value` · `last_value` · `min_value` · `max_value`(발생 당시 복사) · `count`(합친 이탈 수) · `status` 발생/확인/해제 · `first_at` · `last_at` · `acked_at/by` · `cleared_at/by` · `action_desc` · `collect_raw_id` FK(원문) · `lot_id` FK(선택) · `work_result_id` FK(선택) | uq `alarm_no` · **부분 uq `(equipment_id, tag) where status <> '해제'`**(열린 알람 하나) · idx `first_at desc` · status CHECK | `x_kimchi_env_alarm` 거의 그대로(`kind` → `attrs.kind` · `limit_text` → min/max 컬럼). `lot_id` · `work_result_id` 는 코어 컬럼으로 두되 채우는 규칙은 팩 훅 |
+
+### `collect.receive` 판정 (정제 뒤 · 같은 tx · `on_collect` 훅 **앞**)
+
+| 순서 | 동작 | 결과 |
+|---|---|---|
+| 1 | 정제된 값마다 `bas_equipment_param(equipment_id, tag, use_yn='Y')` 조회 — 없거나 min · max 둘 다 NULL 이면 건너뜀 | 판정 0 (조용한 기본값 없음) |
+| 2 | `value < min_value or value > max_value` → 이탈 | — |
+| 3 | 이탈 · 열린 알람 없음 → `eqp_alarm` 1행 `발생`(first=last=value · count 1 · 임계값 복사 · `collect_raw_id`) → 훅 `on_alarm_raised` | `ReceiveResult.alarms_raised += 1` |
+| 4 | 이탈 · 열린 알람 있음(발생/확인) → **합침**: `last_value` · `last_at` · `count + 1` (D-512 — 새 행 없음) | `alarms_merged += 1` |
+| 5 | 정상 · 열린 알람 있음 → 자동 해제 여부는 **설정**(`core.yaml: collect.auto_clear` 기본 false — kimchi 는 사람이 조치 내용 적고 해제). true 면 `해제` + `cleared_by='collect'` | 기본은 그대로 둔다 |
+| 6 | 그 다음 기존 `on_collect` 훅 (팩 집계 — 테이핑 등) | 변경 없음 |
+
+`eqp_collect` 에 컬럼을 더하지 않는다(이탈은 조회 때 `eqp_alarm` 과 잇는다 — D-501). 재전송(`resend`) 원문은 판정하지 않는다(멱등 — 같은 `(equip_code, ts, source)` 는 1회).
+
+### 훅 (`interfaces.md` §9 · `pack-contract.md` §5 에 추가)
+
+| 훅 | 서명 | 자리 | 팩이 하는 일 (kimchi 예) |
+|---|---|---|---|
+| `on_alarm_raised` | `(cur, alarm: dict, user=None) -> dict \| None` | 판정 3 직후 · 같은 tx. 돌려준 dict 의 `lot_id` · `work_result_id` · `attrs` 만 그 행에 반영 | 염도 센서 → 진행 중 절임통 배치의 `lot_id` · `work_result_id` 연결 · `attrs.kind`(ALARM_KIND 6종) |
+| `on_alarm_cleared` | `(cur, alarm, user)` | 해제 직후 · 같은 tx | (선택) `qua_issue` 종결 연동 |
+| `after_commit_alarm_raised` | `(payload)` | 커밋 뒤(D-20) | 외부 통보(1차 없음) |
+
+### EQP-05 (새 화면 — 기능 ID 는 사람 결정)
+
+| 항목 | 내용 |
+|---|---|
+| 경로 · 채널 | `GET /eqp/alarms` · web · pop · board (kimchi X-ALM-01 과 같은 채널) |
+| 조회(F-EQP-xx) | 설비 · 태그 · 상태 · 기간 · 열린 것만. 행: 알람 번호 · 설비 · 태그 · 첫 값/마지막 값 · 기준(min~max) · 횟수 · 첫/마지막 시각 · 상태 · LOT 링크(TRC) |
+| 확인(F-EQP-xx) | `POST /eqp/alarms/{id}/ack` 발생 → 확인 (FIELD · PROD · ADMIN 입력) |
+| 해제(F-EQP-xx) | `POST /eqp/alarms/{id}/clear` 조치 내용 필수 · 확인/발생 → 해제 |
+| 기능 수 | D-501 은 "1차 ack 없음 · 132 불변" 이었다. kimchi 실측은 **확인 · 해제가 업무에 쓰인다**(S3) — 조회 1 + 확인 1 + 해제 1 = **132 → 135** 안 · 또는 EQP-01 에 열린 알람 표시만(132 불변)하고 확인/해제는 팩에 남기는 안. 사람 결정 |
+| 다른 화면 | EQP-01 가동 현황 카드에 열린 알람 수 · 최신 1건 · `stats.board().equipment.alarms_open` · 메인 카드 `today_counts.eqp` 에 열린 알람 더하기는 그때 정의 |
+
+### 팩에 남는 것 (kimchi)
+
+| 남는 것 | 이유 |
+|---|---|
+| **LOT 연결 규칙**(염도 센서 → 진행 중 절임통 배치 · `SENSOR_TO_TANK` 미확정 D-206) | 업종 규칙 — `on_alarm_raised` 훅 안 |
+| 알람 종류 6종(`bas_code ALARM_KIND`) · `tag → kind` 표(`adapters/collect_tags.py`) | 업종어 · 시드 |
+| 수기 기록 이탈(F-X-WSH-01 소독수 수기 10 ppm 미달) | 수집이 아닌 수기 — 코어 `collect` 를 안 탄다. 팩이 `eqp_alarm` 에 쓰려면 코어 공개 함수 `alarm.raise_(cur, equipment_id, tag, value, *, source)` 가 필요(팩 write_scope 에 `eqp_alarm` 을 넣지 않는다) |
+| 품목별 범위(염도 허용편차 · D-509) | 설비 × 태그 임계값으로는 품목 축이 없다 — `x_kimchi_item_std` 유지 |
+| 지우는 것 | `x_kimchi_env_alarm` · `alarm.py` 의 `raise_env/ack/clear` · X-ALM-01 화면(→ EQP-05) · `on_collect` 안 범위 비교 코드 · numbering `ALARM` 팩 종류(코어로) |

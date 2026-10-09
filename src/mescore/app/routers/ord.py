@@ -84,15 +84,26 @@ def _order(order_id: int) -> dict:
 
 def _lines(order_id: int) -> list[dict]:
     """상세 + 지시 수량 · 출하 수량 (읽기 — job · shp 테이블을 읽어 계산한다)."""
-    return conn.q("""
-        select d.id, d.line_no, d.item_id, i.item_code, i.item_name, d.qty, d.unit, d.status,
+    return _lines_of([order_id]).get(order_id, [])
+
+
+def _lines_of(order_ids: list[int]) -> dict[int, list[dict]]:
+    """수주 여러 건의 상세를 한 번에 — {order_id: [상세…]} (ORD-01 목록의 모든 수주 · 상세 N줄 펼침)."""
+    if not order_ids:
+        return {}
+    rows = conn.q("""
+        select d.order_id, d.id, d.line_no, d.item_id, i.item_code, i.item_name, d.qty, d.unit, d.status,
                (select count(*)::int from job_work_order w where w.order_dtl_id = d.id and w.status <> '취소') as wo_count,
                (select sum(w.plan_qty) from job_work_order w where w.order_dtl_id = d.id and w.status <> '취소') as wo_qty,
                (select sum(g.qty) from lot_genealogy g join lot x on x.id = g.child_lot_id join lot p on p.id = g.parent_lot_id
                   join shp_shipment s on s.id = x.shipment_id
                  where g.relation_base = '출하' and s.order_id = d.order_id and s.status <> '취소' and p.item_id = d.item_id) as shipped_qty
           from ord_order_dtl d join bas_item i on i.id = d.item_id
-         where d.order_id = %s order by d.line_no""", (order_id,))
+         where d.order_id = any(%s) order by d.order_id, d.line_no""", (list(order_ids),))
+    out: dict[int, list[dict]] = {}
+    for r in rows:
+        out.setdefault(r["order_id"], []).append(r)
+    return out
 
 
 def _hist(cur, order_id: int, field: str, before, after, by: str) -> None:
@@ -127,13 +138,19 @@ def orders(request: Request, frm: str = "", to: str = "", partner: str = "", sta
                (select count(*)::int from ord_order_dtl d where d.order_id = o.id) as line_count,
                (select sum(d.qty) from ord_order_dtl d where d.order_id = o.id) as qty,
                (select count(*)::int from job_work_order w where w.order_dtl_id in (select id from ord_order_dtl where order_id = o.id) and w.status <> '취소') as wo_count,
-               (select count(*)::int from shp_shipment s where s.order_id = o.id and s.status = '승인') as shipped_count
+               (select count(*)::int from shp_shipment s where s.order_id = o.id and s.status = '승인') as shipped_count,
+               count(*) over ()::int as total_count
           from ord_order o join bas_partner p on p.id = o.partner_id
          where (%(d1)s::date is null or o.order_date >= %(d1)s::date) and (%(d2)s::date is null or o.order_date <= %(d2)s::date)
            and (%(partner)s::text is null or p.partner_code ilike '%%' || %(partner)s::text || '%%' or p.partner_name ilike '%%' || %(partner)s::text || '%%')
            and (%(status)s::text is null or o.status = %(status)s::text)
          order by o.order_date desc, o.id desc limit {LIST_LIMIT}""",
                   {"d1": d1, "d2": d2, "partner": partner.strip() or None, "status": status or None})
+    total = rows[0]["total_count"] if rows else 0                                   # 조건에 맞는 전체 건수 (상한 LIST_LIMIT 밖 포함)
+    by_order = _lines_of([r["id"] for r in rows])
+    for r in rows:
+        r.pop("total_count", None)
+        r["lines"] = by_order.get(r["id"], [])                                       # 모든 수주의 상세 N줄 (디자이너1 원형 tr.dtl)
     opened, lines = None, []
     if id.strip():
         if not id.strip().isdigit():
@@ -143,7 +160,7 @@ def orders(request: Request, frm: str = "", to: str = "", partner: str = "", sta
     partners = conn.q("select partner_code, partner_name from bas_partner where use_yn = 'Y' order by partner_code")
     items = conn.q("select item_code, item_name, unit from bas_item where use_yn = 'Y' order by item_code")
     return templating.render(request, "ord/orders.html", {
-        "rows": rows, "limit": LIST_LIMIT, "opened": opened, "lines": lines, "partners": partners, "items": items, "statuses": ORDER_STATUSES,
+        "rows": rows, "total": total, "limit": LIST_LIMIT, "opened": opened, "lines": lines, "partners": partners, "items": items, "statuses": ORDER_STATUSES,
         "today": date.today(), "attr_specs": packs.attrs_of("ord_order"),
         "q": {"frm": frm, "to": to, "partner": partner, "status": status},
     }, screen_id="ORD-01")

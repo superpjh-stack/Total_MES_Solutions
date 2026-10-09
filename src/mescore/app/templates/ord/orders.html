@@ -1,6 +1,6 @@
 {# ORD-01 수주 (개발3 · 디자이너1 docs/design/web/screens/ord_orders.html 이식) — 조회(F-ORD-04) · 등록(F-ORD-01 헤더 + 상세 N줄 한 tx) · 수정(F-ORD-02) · 취소(F-ORD-03 인라인 확인).
    헤더 행 + 열린 수주의 상세 행(tr.dtl 들여쓰기). 완료 · 취소 건은 취소 버튼 비활성 + 이유. 상세별 지시 · 출하 수량은 계산값(저장 안 함).
-   라우터 ctx: rows · limit · opened · lines · partners · items · statuses · today · attr_specs · q{frm to partner status}. 폼 name 그대로(partner_code · order_date · due_date · note · item_code[] · qty[] · unit[] · dtl_id[]). #}
+   라우터 ctx: rows(각 수주 lines[] 포함) · total(조건 전체 건수) · limit · opened · lines · partners · items · statuses · today · attr_specs · q{frm to partner status}. 폼 name 그대로(partner_code · order_date · due_date · note · item_code[] · qty[] · unit[] · dtl_id[]). #}
 {% extends "base.html" %}
 {% import "home/_macros.html" as ui with context %}
 {% set path = nav.path_of('ORD-01') %}
@@ -15,7 +15,7 @@
 {% endblock %}
 
 {% block grid %}
-<h2 id="h-grid">{{ t('수주') }} {{ t('목록') }} <small>{{ rows|length }}{{ t('건') }}{% if rows|length >= limit %} · {{ t('최근') }} {{ limit }}{{ t('건만') }}{% endif %}</small>
+<h2 id="h-grid">{{ t('수주') }} {{ t('목록') }} <small>{{ total if total is defined else rows|length }}{{ t('건') }}{% if total is defined and total > rows|length %} · {{ t('최근') }} {{ rows|length }}{{ t('건만') }}{% endif %}</small>
   <span class="right"><small>{{ t('번호를 누르면 상세 N줄이 열린다 · 지시 · 출하 수량은 계산값') }}</small></span></h2>
 <table class="grid cardify">
   <thead><tr><th>{{ t('수주 번호') }}</th><th>{{ t('거래처') }}</th><th>{{ t('수주일') }}</th><th>{{ t('납기') }}</th><th>{{ t('상태') }}</th><th>{{ t('품목') }}</th><th class="num">{{ t('수주 수량') }}</th><th class="num">{{ t('작업지시') }}</th><th class="num">{{ t('출하') }}</th><th>{{ t('상세 상태') }}</th><th>{{ t('동작') }}</th></tr></thead>
@@ -40,8 +40,7 @@
         <a class="btn btn-sm" href="{{ nav.path_of('ORD-02') }}?order_no={{ r.order_no }}">{{ t('이력') }}</a>
       </td>
     </tr>
-    {% if is_open %}
-    {% for ln in lines %}
+    {% for ln in (r.lines if r.lines is defined else (lines if is_open else [])) %}
     <tr class="dtl">
       <td class="lead" data-l="#" colspan="5">#{{ ln.line_no }}</td>
       <td data-l="{{ t('품목') }}">{{ ln.item_name }} <small>{{ ln.item_code }}</small></td>
@@ -52,7 +51,6 @@
       <td></td>
     </tr>
     {% endfor %}
-    {% endif %}
   {% else %}
     {{ ui.empty_row(11, hint='조회 조건에 맞는 수주가 없다') }}
   {% endfor %}

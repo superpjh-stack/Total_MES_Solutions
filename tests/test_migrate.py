@@ -1,4 +1,8 @@
-"""migrate — B-MIG-01~04. 2회 실행 행 수 diff 0 · 오류 줄 리포트 · 계보 10행(lineage.link 경유) · dry-run 은 쓰지 않는다 · sys_migration_log. 개발3."""
+"""migrate — B-MIG-01~04. 2회 실행 행 수 diff 0 · 오류 줄 리포트 · 계보 10행(lineage.link 경유) · dry-run 은 쓰지 않는다 · sys_migration_log. 개발3.
+
+멱등 기준(회전 4): 두 번째 실행 `inserted == 0` + **이관 대상 테이블**(function-list B-MIG-0n 의 쓰는 테이블)에서 **이관이 만든 · 갱신한 행**(`created_by`/`updated_by = 'migrate'` · `attrs.migrated_from`)
+수가 1회 · 2회 뒤 같다. 같은 DB 에 다른 테스트 · 담당이 동시에 쓰는 행(`created_by` 가 migrate 가 아님)은 세지 않는다 — DB 전체 행 수 diff 가 흔들리던 원인.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from mescore import migrate
+from mescore.app import contracts
 from mescore.db import conn
 
 from _dev3_helpers import EXAMPLES
@@ -15,18 +20,36 @@ from _dev3_helpers import EXAMPLES
 LOT_NOS = ["M-EX-0001", "M-EX-0002", "P-EX-0001", "P-EX-0002", "P-EX-0003", "P-EX-0004", "P-EX-0005", "P-EX-0006", "X-EX-0001"]
 
 
+BATCH_OF = {"basics": "B-MIG-01", "orders": "B-MIG-02", "lots": "B-MIG-03", "history": "B-MIG-04"}
+
+
+def _targets(command: str) -> tuple[str, ...]:
+    """그 명령이 쓰는 테이블 — function-list.md 의 B-MIG 행(sys_migration_log 제외)."""
+    fn = next(f for f in contracts.batch_functions() if f.id == BATCH_OF[command])
+    return tuple(t for t in fn.tables if t != "sys_migration_log")
+
+
+def _migrated_counts(command: str) -> dict[str, int]:
+    """이관 대상 테이블별 이관이 만들거나 갱신한 행 수 — `created_by`/`updated_by = 'migrate'` 또는 `attrs.migrated_from`(키가 이미 있던 행은
+    갱신만 된다 · 다른 담당이 뒤에 고쳐도 표지는 남는다). 다른 프로세스의 동시 쓰기를 타지 않는다."""
+    by = migrate.importer.LOADED_BY
+    return {t: conn.q1(f"""select count(*)::int as n from "{t}" where created_by = %s or updated_by = %s or attrs ? 'migrated_from'""", (by, by))["n"]
+            for t in _targets(command)}
+
+
 def _run_twice(command: str) -> tuple[migrate.MigrateReport, migrate.MigrateReport, dict, dict]:
     first = migrate.run(command, EXAMPLES, run_by="test")
-    c1 = conn.table_counts()
+    c1 = _migrated_counts(command)
     second = migrate.run(command, EXAMPLES, run_by="test")
-    c2 = conn.table_counts()
+    c2 = _migrated_counts(command)
     return first, second, c1, c2
 
 
 def _assert_idempotent(first, second, c1, c2):
     assert first.ok and second.ok, first.text() + "\n" + second.text()
     assert second.totals()["inserted"] == 0, second.text()
-    diff = {k: (c1.get(k), c2.get(k)) for k in set(c1) | set(c2) if c1.get(k) != c2.get(k) and k != "sys_migration_log"}
+    assert all(v > 0 for v in c1.values()), c1                                               # 대상 테이블마다 이관 행이 있다
+    diff = {k: (c1.get(k), c2.get(k)) for k in set(c1) | set(c2) if c1.get(k) != c2.get(k)}
     assert diff == {}, diff
 
 
@@ -86,12 +109,13 @@ def test_error_rows_reported_exit_code_1_and_dry_run_writes_nothing(tmp_path: Pa
     shutil.copy(EXAMPLES / "01_items.csv", d / "01_items.csv")
     (d / "02_partners.csv").write_text("partner_code,partner_name,partner_type\nBAD-EX-01,거래처 (예시),모르는구분\nBAD-EX-02,,고객\nBAD-EX-03,중복 (예시),고객\nBAD-EX-03,중복 (예시),고객\n", encoding="utf-8")
     (d / "05_equipment.csv").write_text("equip_code,equip_name,process_code\nBAD-EQ-01,설비 (예시),PRC-NOPE\n", encoding="utf-8")
-    before = conn.table_counts()
+    logs = lambda: conn.q1("select count(*)::int as n from sys_migration_log where dir = %s", (str(d),))["n"]   # noqa: E731 — 이 폴더의 로그만
+    before, log_before = _migrated_counts("basics"), logs()
     dry = migrate.run("basics", d, dry_run=True, run_by="test")
     assert dry.exit_code == 1 and dry.dry_run
-    after = conn.table_counts()
-    assert {k: v for k, v in before.items() if k != "sys_migration_log"} == {k: v for k, v in after.items() if k != "sys_migration_log"}   # dry-run 은 쓰지 않는다
-    assert after["sys_migration_log"] == before["sys_migration_log"] + 3                     # 있는 파일 3 → 로그 3 (dry_run=true)
+    assert _migrated_counts("basics") == before                                             # dry-run 은 쓰지 않는다 (이관 대상 테이블)
+    assert conn.q1("select 1 from bas_partner where partner_code like 'BAD-EX-%%'") is None
+    assert logs() == log_before + 3                                                         # 있는 파일 3 → 로그 3 (dry_run=true)
     rep = {f.file: f for f in dry.files}
     assert rep["02_partners.csv"].error_count == 3 and rep["02_partners.csv"].inserted == 1  # 구분 · 필수 · 중복 — 좋은 줄 1은 "적재될" 것으로 센다(되돌림)
     assert [e.line for e in rep["02_partners.csv"].errors] == [2, 3, 5]

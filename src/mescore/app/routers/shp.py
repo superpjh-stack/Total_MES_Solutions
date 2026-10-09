@@ -65,6 +65,17 @@ _SHIPMENT_SQL = """
       left join lot x on x.shipment_id = s.id and x.kind_base = 'SHIPMENT'
 """
 
+#: 목록 조회 — 출하 한 건 SQL + 조건에 맞는 전체 건수(`total_count` · 상한 LIST_LIMIT 앞에서 센다)
+_SEARCH_SQL = _SHIPMENT_SQL.replace(" as document_count\n", " as document_count,\n           count(*) over ()::int as total_count\n", 1)
+
+
+def _total(rows: list[dict]) -> int:
+    """`_search` 결과의 전체 건수를 꺼내고 행에서는 지운다."""
+    total = rows[0]["total_count"] if rows else 0
+    for r in rows:
+        r.pop("total_count", None)
+    return total
+
 
 def _date(text: str | None, label: str, *, required: bool = False) -> date | None:
     try:
@@ -163,7 +174,7 @@ def _summary(lots: list[dict]) -> dict:
 def _search(no: str, partner: str, status: str, d1: date | None, d2: date | None, *, statuses: tuple[str, ...] | None = None) -> list[dict]:
     if status and status not in STATUSES:
         raise http.validation_error(t("상태가 올바르지 않습니다"), fields=[{"name": "status", "label": t("상태"), "reason": status}])
-    return conn.q(_SHIPMENT_SQL + f"""
+    return conn.q(_SEARCH_SQL + f"""
          where (%(no)s::text is null or s.shipment_no ilike '%%' || %(no)s::text || '%%' or o.order_no ilike '%%' || %(no)s::text || '%%')
            and (%(partner)s::text is null or p.partner_code ilike '%%' || %(partner)s::text || '%%' or p.partner_name ilike '%%' || %(partner)s::text || '%%')
            and (%(status)s::text is null or s.status = %(status)s::text)
@@ -188,6 +199,7 @@ def shipments(request: Request, no: str = "", partner: str = "", status: str = "
               user: rbac.User = rbac.require_fn("F-SHP-04")):
     d1, d2 = _date(frm, "frm"), _date(to, "to")
     rows = _search(no, partner, status, d1, d2)
+    total = _total(rows)
     opened, lots = None, []
     if id.strip():
         if not id.strip().isdigit():
@@ -197,7 +209,7 @@ def shipments(request: Request, no: str = "", partner: str = "", status: str = "
     partners = conn.q("select partner_code, partner_name from bas_partner where use_yn = 'Y' order by partner_code")
     orders = conn.q("select order_no, due_date from ord_order where status in ('등록', '진행') order by due_date nulls last, order_no limit 100")
     return templating.render(request, "shp/shipments.html", {
-        "rows": rows, "limit": LIST_LIMIT, "opened": opened, "lots": lots, "summary": _summary(lots), "partners": partners, "orders": orders,
+        "rows": rows, "total": total, "limit": LIST_LIMIT, "opened": opened, "lots": lots, "summary": _summary(lots), "partners": partners, "orders": orders,
         "statuses": STATUSES, "today": date.today(), "attr_specs": packs.attrs_of("shp_shipment"),
         "q": {"no": no, "partner": partner, "status": status, "frm": frm, "to": to},
     }, screen_id="SHP-01")
@@ -300,6 +312,7 @@ def scan_screen(request: Request, no: str = "", id: str = "", user: rbac.User = 
     if opened is not None:
         lots = _lots(opened["id"])
     waiting = _search("", "", REGISTERED, None, None)[:50]
+    _total(waiting)
     return templating.render(request, "shp/scan.html", {
         "opened": opened, "lots": lots, "summary": _summary(lots), "scan_error": scan_error, "waiting": waiting,
         "can_approve": user.can("F-SHP-07"), "can_scan": user.can("F-SHP-05"),
@@ -380,12 +393,16 @@ def shipment_status(request: Request, frm: str = "", to: str = "", user: rbac.Us
     d1 = _date(frm, "frm") or week_start
     d2 = _date(to, "to") or (week_start + timedelta(days=6))
     rows = _search("", "", "", d1, d2)
+    total = _total(rows)
+    due = stats.shipment_due([r["id"] for r in rows])                                       # 행별 납기 대비 — 집계는 stats 만
     for r in rows:
         r["lots"] = _lots(r["id"]) if r["lot_count"] else []
+        d = due.get(r["id"]) or {}
+        r["due_days"], r["due_state"] = d.get("due_days"), d.get("due_state")
     today_rows = [r for r in rows if r["ship_date"] == today]
     delivery = stats.delivery(d1, d2, by="day", today=today)                                 # 납기 대비 — 집계는 stats 만
     return templating.render(request, "shp/status.html", {
-        "rows": rows, "today_rows": today_rows, "frm": d1, "to": d2, "today": today,
+        "rows": rows, "total": total, "limit": LIST_LIMIT, "today_rows": today_rows, "frm": d1, "to": d2, "today": today,
         "stat": {"today_count": len(today_rows), "today_approved": sum(1 for r in today_rows if r["status"] == APPROVED),
                  "week_count": len(rows), "week_approved": sum(1 for r in rows if r["status"] == APPROVED),
                  "week_lots": sum(r["lot_count"] for r in rows)},
@@ -436,6 +453,7 @@ def documents(request: Request, no: str = "", frm: str = "", to: str = "", user:
            and (%(d1)s::date is null or d.issued_at::date >= %(d1)s::date) and (%(d2)s::date is null or d.issued_at::date <= %(d2)s::date)
          order by d.issued_at desc, d.id desc limit {LIST_LIMIT}""", {"no": no.strip() or None, "d1": d1, "d2": d2})
     approved = _search("", "", APPROVED, None, None)[:100]
+    _total(approved)
     return templating.render(request, "shp/documents.html", {
         "rows": rows, "limit": LIST_LIMIT, "approved": approved, "doc_types": DOC_TYPES, "can_issue": user.can("F-SHP-09"),
         "q": {"no": no, "frm": frm, "to": to},

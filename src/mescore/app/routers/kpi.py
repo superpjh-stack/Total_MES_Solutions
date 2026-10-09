@@ -4,7 +4,7 @@
 (`uv run python -m mescore.app.stats snapshot` — Makefile `kpi-snapshot` 요청은 progress-dev3.md §3). 집계 결과를 저장하는 테이블은 없다.
 현황판(KPI-01)은 같은 경로가 `Accept: application/json` 이면 **`stats.board()` 그대로**(JSON 폴링 · 접근 로그를 남기지 않는다), 브라우저면 템플릿.
 `?device=board` 가 현황판 채널 — 5초 폴링 + 마지막 갱신 시각 · 폴링 실패에도 마지막 값 유지 (api-contract.md §2 · D-602).
-CMN-04 대시보드(`routers/dashboard.py`)는 `home` 라우터 목록(13)에 없어 여기서 include 한다 — 읽기만.
+CMN-04 대시보드(`routers/dashboard.py`)는 코어 라우터 15 에 들어 `main.py` 가 직접 include 한다(D-29) — 여기서 include 하지 않는다.
 
   KPI-01 현황판   GET /kpi/board                 F-KPI-01  stats.board
   KPI-02 집계     GET /kpi/summary?kind=         F-KPI-02 production · 03 quality · 04 delivery · 05 equipment (모바일 390px)
@@ -23,10 +23,8 @@ from ...db import conn
 from .. import nav, packs, rbac, stats, templating
 from ..packs import t
 from ..util import audit, http
-from . import dashboard
 
 router = APIRouter()
-router.include_router(dashboard.router)
 
 CALC_PREFIXES = ("core:", "pack:")
 

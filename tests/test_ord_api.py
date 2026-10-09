@@ -94,6 +94,9 @@ def test_order_list_filters_and_line_quantities():
     r = c.get("/ord/orders", params={"frm": TODAY.isoformat(), "to": TODAY.isoformat(), "partner": "CUST-EX-01"})
     assert r.status_code == 200
     row = next(x for x in r.json()["rows"] if x["order_no"] == no)
+    assert r.json()["total"] >= len(r.json()["rows"]) >= 1
+    assert [l["line_no"] for l in row["lines"]] == [1, 2]                                  # 모든 수주의 상세 N줄 (열지 않아도)
+    assert all(len(x["lines"]) == x["line_count"] for x in r.json()["rows"])
     assert row["line_count"] == 2 and row["qty"] == 15.0 and row["wo_count"] == 0 and row["shipped_count"] == 0
     oid = row["id"]
     body = c.get("/ord/orders", params={"id": str(oid)}).json()
