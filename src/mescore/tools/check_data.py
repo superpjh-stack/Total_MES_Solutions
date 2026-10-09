@@ -14,6 +14,7 @@
   5. 측정값 선언 3행(BAS API) → POP 폼 · 422 · 이탈 · collect(IFC API) · 선언 변경 즉시 반영     → G-C24
   6. 뷰 검산(부분 투입 · 취소 투입 · 반제품 투입) · 집계 재료(검사 · 불량 · 수주 · 설비 로그)      → G-C04 뷰 · G-C10 집계 재계산
      + 잔량 공격(회전 6): 종료 합병 옵션 · 열린 투입으로 잔량 0 인 LOT 재사용 · 동시 트랜잭션 · inherit_insp · 부분 분할   → G-C04 (gate 는 안 읽음)
+     + 회전 8: 부분 분할 뒤 잔량 공격 · 동시성 4쌍 + 역순 합병 · 공격 뒤 DB 전체 불변식(잔량 음수 · 상태/잔량 불일치 · 통째 소비 뒤 또 쓰기)
   7. 정적 스캔(라우터 · 공용 모듈 쓰기 SQL) + 채워진 DB 에서 조회 화면 전부 전후 diff           → G-C05 · G-C08 채번 · G-C12
 
   uv run python src/mescore/tools/check_data.py                 # 코어 (gate 가 부르는 모양 · --run-seeds 는 받기만 — 시드는 늘 돈다)
@@ -59,7 +60,7 @@ VERBOSE = False
 def emit(gid: str, item: str, status: str | bool, actual: str) -> None:
     st = status if isinstance(status, str) else (PASS if status else FAIL)
     item = re.sub(r"\s{2,}", " ", item)
-    actual = re.sub(r"\s+", " ", str(actual))[:700]
+    actual = re.sub(r"\s+", " ", str(actual))[:2400]
     ROWS.append((gid, item, st, actual))
     print(f"{gid}  {item}  {st}  {actual}", flush=True)
 
@@ -924,13 +925,12 @@ class Core:
             v["ok"] = False
             emit("G-C04", "뷰 검산 재료 만들기 (API)", FAIL, f"단계 실패 — {exc}")
 
-    def views(self) -> None:
-        v = self.ctx.get("view", {})
-        # 1) 뷰 3 전 행 = 내 SQL
+    def my_lot_view(self) -> tuple[list[str], list[str], int, int, dict]:
+        """v_lot_stock · v_lot_state 전 행을 §3.4 문장(내 SQL)으로 다시 계산해 대조 — (잔량 불일치 · 상태 불일치 · 행 수 2 · 내 값 {id: (kind, qty, 잔량, 상태)})."""
         mine = {r["id"]: r for r in self.conn.q(SQL_MY_STOCK)}
         stock = {r["lot_id"]: r for r in self.conn.q("select * from v_lot_stock")}
         state = {r["lot_id"]: r["state"] for r in self.conn.q("select lot_id, state from v_lot_state")}
-        bad_stock, bad_state = [], []
+        bad_stock, bad_state, my = [], [], {}
         for lid, r in mine.items():
             consumed = r["input_qty"] if r["kind_base"] == "MATERIAL" else (r["child_qty"] + r["open_input_qty"] if r["kind_base"] == "PRODUCT" else 0)   # §3.4 회전 5
             remain = (r["qty"] or 0) - consumed
@@ -954,6 +954,15 @@ class Core:
                 st = "재고"
             if state.get(lid) != st:
                 bad_state.append(f"{lid}: 뷰 {state.get(lid)} ≠ 내 {st}")
+            my[lid] = (r["kind_base"], dnum(r["qty"]), dnum(remain), st)
+        return bad_stock, bad_state, len(stock), len(state), my
+
+    def views(self) -> None:
+        v = self.ctx.get("view", {})
+        # 1) 뷰 3 전 행 = 내 SQL
+        bad_stock, bad_state, n_stock, n_state, _ = self.my_lot_view()
+        stock = {r["lot_id"]: r for r in self.conn.q("select * from v_lot_stock")}
+        state = {r["lot_id"]: r["state"] for r in self.conn.q("select lot_id, state from v_lot_state")}
         wo_mine = {r["id"]: r for r in self.conn.q(SQL_MY_WO)}
         bad_wo = []
         for r in self.conn.q("select * from v_work_order_progress"):
@@ -962,7 +971,7 @@ class Core:
                     or r["open_count"] != m["n_open"] or not close(r["good_qty"], m["good"]) or not close(r["defect_qty"], m["defect"]):
                 bad_wo.append(f"wo {r['work_order_id']}")
         emit("G-C04", "뷰 3 = 내 SQL (전 행)", not (bad_stock or bad_state or bad_wo),
-             f"v_lot_stock {len(stock)}행 불일치 {bad_stock[:3] or 0} · v_lot_state {len(state)}행 불일치 {bad_state[:3] or 0} · v_work_order_progress {len(wo_mine)}행 불일치 {bad_wo[:3] or 0}")
+             f"v_lot_stock {n_stock}행 불일치 {bad_stock[:3] or 0} · v_lot_state {n_state}행 불일치 {bad_state[:3] or 0} · v_work_order_progress {len(wo_mine)}행 불일치 {bad_wo[:3] or 0}")
         if not v.get("ok"):
             return
         lid, exp_remain, exp_cons = v["m3"]
@@ -1019,9 +1028,11 @@ class Core:
         prod.post(P["POP-03"], {"work_result_id": ra, "barcode": a["lot_no"], "qty": "15"})
         r1 = prod.c.post(f"{P['POP-02']}/{ra}/end", data={"good_qty": "35", "merge_lot_ids": a["lot_no"]})
         s1 = stock(a["lot_id"])
+        why1 = "" if r1.status_code == 200 else ((r1.json().get("fields") or [{}])[0].get("reason") or "") + " " + (r1.json().get("message") or "")[:40]
+        ended1 = self.conn.q1("select ended_at is not null as e, product_lot_id from pop_work_result where id = %s", (ra,))
         emit("G-C04", "종료 합병 옵션 — 자기 실적 투입 LOT 을 merge_lot_ids 로", r1.status_code == 422 or (s1[1] is not None and s1[1] >= 0),
-             f"생산 LOT 20 을 실적에 15 투입 → 같은 실적 종료에 merge_lot_ids=그 LOT → {r1.status_code} · v_lot_stock 소비 {s1[0]} · 잔량 {s1[1]} · 상태 {s1[2]} · "
-             f"자식 계보 {kids(a['lot_id'])} (기대 422 또는 잔량 ≥ 0 — make_product_lot 이 ended_at 을 먼저 쓴 뒤 합병 부모 잔량을 읽어 자기 열린 투입이 빠진다)")
+             f"생산 LOT 20 을 실적에 15 투입 → 같은 실적 종료에 merge_lot_ids=그 LOT → {r1.status_code}({why1.strip()}) · 실적 종료됨 {ended1['e']} · 생산 LOT {ended1['product_lot_id']} · v_lot_stock 소비 {s1[0]} · 잔량 {s1[1]} · 상태 {s1[2]} · "
+             f"자식 계보 {kids(a['lot_id'])} (기대 422 또는 잔량 ≥ 0 — 회전 6 원인: ended_at 을 먼저 쓴 뒤 합병 부모 잔량을 읽어 자기 열린 투입이 빠졌다 · 회전 7 은 종료 전에 판정)")
 
         # A2 — 열린 투입으로 잔량 0 인데 상태는 재고(§3.4 「열린 투입은 상태를 바꾸지 않는다」) → 다른 경로가 이 LOT 을 또 쓰는가
         res = {}
@@ -1067,6 +1078,7 @@ class Core:
 
         def race(first, second) -> tuple:
             x = lot("20")
+            x["y"] = lot("10")                                                       # 합병 쌍의 두 번째 부모
             rid = start()
             ca = psycopg.connect(dsn, row_factory=dict_row)
             cb = psycopg.connect(dsn, row_factory=dict_row)
@@ -1095,7 +1107,7 @@ class Core:
                 ca.close()
                 cb.close()
             prod.c.post(f"{P['POP-02']}/{rid}/end", data={"good_qty": "1"})
-            return out, stock(x["lot_id"]), kids(x["lot_id"])
+            return out, stock(x["lot_id"]), kids(x["lot_id"]), stock(x["y"]["lot_id"]), kids(x["y"]["lot_id"])
 
         def consume15(cur, x, rid):
             lineage.consume_material(cur, work_result_id=rid, material_lot_id=x["lot_id"], qty=15, by="qa2")
@@ -1107,11 +1119,20 @@ class Core:
             s2 = prod.post(P["SHP-01"], {"partner_code": "CUST-EX-01", "ship_date": str(today)})
             lineage.ship(cur, shipment_id=s2["id"], lot_id=x["lot_id"], by="qa2")
 
-        races = {"투입 15 ‖ 분할 10+10": race(consume15, split1010), "분할 ‖ 분할": race(split1010, split1010), "투입 15 ‖ 출하 스캔": race(consume15, ship_)}
-        bad = {k: v for k, v in races.items() if (v[1][1] is not None and v[1][1] < 0) or sum(n for b, n in v[2].items() if b != "투입") > (2 if "분할" in k else 1)
-               or (len(v[2]) > 1)}
-        emit("G-C04", "동시성 — 열린 트랜잭션 투입/분할 ‖ 분할/출하 (잔량 음수 · 이중 소진)", not bad,
-             " / ".join(f"{k}: B {v[0]['b']} (A 커밋 전 끝남 {v[0]['b_done_before_a_commit']}) → (소비 · 잔량 · 상태) {v[1]} · 자식 {v[2]}" for k, v in races.items())
+        def merge_xy(cur, x, rid):
+            lineage.merge(cur, parent_ids=[x["lot_id"], x["y"]["lot_id"]], by="qa2")
+
+        def merge_yx(cur, x, rid):
+            lineage.merge(cur, parent_ids=[x["y"]["lot_id"], x["lot_id"]], by="qa2")
+
+        races = {"투입 15 ‖ 분할 10+10": race(consume15, split1010), "분할 ‖ 분할": race(split1010, split1010), "투입 15 ‖ 출하 스캔": race(consume15, ship_),
+                 "투입 15 ‖ 합병": race(consume15, merge_xy), "합병 x,y ‖ 합병 y,x (역순 · 교착)": race(merge_xy, merge_yx)}
+        bad = {k: v for k, v in races.items() if (v[1][1] is not None and v[1][1] < 0) or (v[3][1] is not None and v[3][1] < 0)
+               or sum(n for b, n in v[2].items() if b != "투입") > (2 if "분할" in k else 1) or (len(v[2]) > 1) or sum(v[4].values()) > 1
+               or "Deadlock" in str(v[0]["b"])}
+        emit("G-C04", "동시성 — 열린 트랜잭션 투입/분할/합병 ‖ 분할/출하/합병 (잔량 음수 · 이중 소진 · 교착)", not bad,
+             " / ".join(f"{k}: B {v[0]['b']} (A 커밋 전 끝남 {v[0]['b_done_before_a_commit']}) → x (소비 · 잔량 · 상태) {v[1]} · 자식 {v[2]}"
+                        + (f" · y {v[3]} {v[4]}" if "합병" in k else "") for k, v in races.items())
              + f" — 어긋남 {sorted(bad) or 0} (기대: 뒤 트랜잭션이 LOT 행 잠금에서 기다렸다 잔량으로 다시 판정 → 422 · 잔량 ≥ 0)")
 
         # A4 — inherit_insp (interfaces.md §4: 전부 합격 → 합격 · 불합격 하나라도 → 불합격 · 미검사 하나라도 → 미검사 · 그 밖 → 조건부 · 부모 하나면 그 값)
@@ -1154,9 +1175,13 @@ class Core:
         launder = self.conn.q1("select insp_status from lot where id = %s", (rm.json()["lot_id"],))["insp_status"] if rm.status_code == 200 else None
         emit("G-C04", "분할 · 합병 자식 insp_status = inherit_insp 규칙 (API)", not wrong,
              f"경우 {len(cases)} {seen} · 규칙과 다른 것 {wrong or 0}")
-        info("G-C04 불합격 생산 LOT → 종료 합병 옵션", WARN if rm.status_code == 200 else PASS,
-             f"불합격 LOT 을 merge_lot_ids 로 → {rm.status_code} · 새 LOT insp_status {launder} — interfaces.md §4 「make_product_lot 의 새 LOT 은 늘 미검사」 대로지만 "
-             f"lineage.merge 로 합치면 불합격을 잇고 출하 422 인 것과 달리, 이 길로는 불합격 이력이 자식 판정에서 사라진다(코어 출하 검사는 자기 LOT 만 본다)")
+        ship_bad = None
+        if rm.status_code == 200:                                                  # 새 LOT 이 불합격을 이었다면 출하도 막혀야 한다
+            shb = prod.post(P["SHP-01"], {"partner_code": "CUST-EX-01", "ship_date": str(today)})
+            ship_bad = prod.c.post(P["SHP-02"], data={"shipment_no": shb["shipment_no"], "barcode": rm.json()["lot_no"]}).status_code
+        info("G-C04 불합격 생산 LOT → 종료 합병 옵션 → 새 LOT insp_status", PASS if rm.status_code == 422 or (launder == "불합격" and ship_bad == 422) else WARN,
+             f"불합격 LOT 을 merge_lot_ids 로 → {rm.status_code} · 새 LOT insp_status {launder} · 새 LOT 출하 스캔 {ship_bad} — 기대: 새 LOT 불합격(출하 422) 또는 종료 422 "
+             f"(interfaces.md §4 회전 7 「합병 · 생산 부모 중 불합격이 하나라도 있으면 불합격」 = lineage.merge 의 inherit_insp 와 같은 쪽 · 응답 코드가 아니라 결과 LOT 의 판정으로 본다)")
 
         # A5 — 분할 수량 합 < 잔량: 부분 분할은 부모에 잔량을 남기고 재고(D-43 · §3.4 회전 8). 잔량 10 · 재고가 아니면 WARN
         y = lot("20")
@@ -1164,6 +1189,161 @@ class Core:
         sy = stock(y["lot_id"])
         info("G-C04 부분 분할 — 남는 수량", PASS if rp.status_code == 200 and sy[2] == "재고" and close(sy[1] or 0, 10) else WARN,
              f"LOT 20 → 분할 5+5 → {rp.status_code} · v_lot_stock 잔량 {sy[1]} · 상태 {sy[2]} — 기대 잔량 10 · 재고(D-43 — 수량을 모두 준 분할은 잔량으로 판정)")
+
+    def partial_attack(self) -> None:
+        """회전 8 — 부분 분할(D-43) 뒤 남은 잔량을 다른 경로가 넘지 않는가 · 열린 투입 취소 뒤 상태 복원. gate 는 안 읽는다(G-C04 근거 행).
+        기대: db-schema.md §3.4 회전 8 · interfaces.md §4 (잔량 > 0 · 수량 없는 투입 = 잔량 전부 · 통째 쓰기는 열린 투입 422 · 수량을 모두 준 분할은 잔량 안에서)."""
+        from mescore.app import nav
+        prod, qa = self.api("prod"), self.api("qa")
+        P = {s: nav.path_of(s) for s in ("POP-02", "POP-03", "JOB-01", "QUA-02", "SHP-01", "SHP-02")}
+        c, today = self.ctx, date.today()
+
+        def start() -> int:
+            w = prod.post(P["JOB-01"], {"item_id": c["item_prd"], "process_id": c["proc"], "equipment_id": c["eq"], "plan_qty": "50", "plan_date": str(today)})["id"]
+            return prod.post(f"{P['POP-02']}/start", {"work_order_id": w})["id"]
+
+        def st(lid: int) -> tuple:
+            r = self.conn.q1("select s.remain_qty, t.state from v_lot_stock s join v_lot_state t on t.lot_id = s.lot_id where s.lot_id = %s", (lid,))
+            return dnum(r["remain_qty"]), r["state"]
+
+        def kids(lid: int) -> dict:
+            return dict(Counter(r["relation_base"] for r in self.conn.q("select relation_base from lot_genealogy where parent_lot_id = %s", (lid,))))
+
+        def code(r) -> str:
+            if r.status_code == 200:
+                return "200"
+            j = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            return f"{r.status_code}({((j.get('fields') or [{}])[0].get('reason') or j.get('message') or '')[:30]})"
+
+        def base(passed: bool = False) -> dict:
+            """생산 LOT 20 → (합격 판정) → 분할 5+5 → 부모 잔량 10 · 재고(D-43)."""
+            x = prod.post(f"{P['POP-02']}/{start()}/end", {"good_qty": "20"})
+            if passed:
+                ins = qa.post(P["QUA-02"], {"insp_type": "최종", "lot_no": x["lot_no"]})
+                qa.post(f"{P['QUA-02']}/{ins['id']}/judge", {"judgement": "합격"})
+            prod.post(f"{P['POP-02']}/{start()}/split", {"count": "2", "lot_id": str(x["lot_id"]), "qtys": "5,5"})
+            return x
+
+        out, bad = [], []
+
+        def check(label: str, got: str, want: str, x: dict, exp: tuple) -> None:
+            s = st(x["lot_id"])
+            ok = got.split("(")[0] == want and close(s[0], exp[0]) and s[1] == exp[1]
+            out.append(f"{label} → {got} · 잔량 {s[0]} · {s[1]} · 자식 {kids(x['lot_id'])}")
+            if not ok:
+                bad.append(f"{label}: {got}/{s} ≠ 기대 {want}/{exp}")
+
+        # P1 투입 — 잔량 10 을 넘는 15 는 422 · 수량 없는 투입은 잔량 10 전부 → 열린 투입으로 소진 → 취소하면 재고 10 복원
+        x = base()
+        r = start()
+        check("투입 15", code(prod.c.post(P["POP-03"], data={"work_result_id": r, "barcode": x["lot_no"], "qty": "15"})), "422", x, (10, "재고"))
+        ri = prod.c.post(P["POP-03"], data={"work_result_id": r, "barcode": x["lot_no"]})
+        q = self.conn.q1("select qty from pop_input where id = %s", (ri.json()["id"],))["qty"] if ri.status_code == 200 else None
+        check(f"수량 없는 투입(pop_input.qty {dnum(q)})", code(ri), "200", x, (0, "소진"))
+        if ri.status_code == 200:
+            check("그 투입 취소", code(prod.c.post(f"{P['POP-03']}/{ri.json()['id']}/cancel")), "200", x, (10, "재고"))
+            check("취소 뒤 다시 투입 10", code(prod.c.post(P["POP-03"], data={"work_result_id": r, "barcode": x["lot_no"], "qty": "10"})), "200", x, (0, "소진"))
+            prod.c.post(f"{P['POP-02']}/{r}/end", data={"good_qty": "10"})
+            check("실적 종료 뒤", "200", "200", x, (0, "소진"))
+
+        # P2 재분할 — 6+6 > 10 은 422 · 5+5 = 10 은 받고 잔량 0 소진 · 그 뒤 1+1 은 422
+        x = base()
+        check("재분할 6+6", code(prod.c.post(f"{P['POP-02']}/{start()}/split", data={"count": "2", "lot_id": str(x["lot_id"]), "qtys": "6,6"})), "422", x, (10, "재고"))
+        check("재분할 5+5", code(prod.c.post(f"{P['POP-02']}/{start()}/split", data={"count": "2", "lot_id": str(x["lot_id"]), "qtys": "5,5"})), "200", x, (0, "소진"))
+        check("또 분할 1+1", code(prod.c.post(f"{P['POP-02']}/{start()}/split", data={"count": "2", "lot_id": str(x["lot_id"]), "qtys": "1,1"})), "422", x, (0, "소진"))
+
+        # P3 출하 — 화살표 = 잔량 10 · 출하 · 잔량 0 · 다른 출하에 또 담기 422
+        x = base(passed=True)
+        sh1 = prod.post(P["SHP-01"], {"partner_code": "CUST-EX-01", "ship_date": str(today)})
+        check("출하 스캔", code(prod.c.post(P["SHP-02"], data={"shipment_no": sh1["shipment_no"], "barcode": x["lot_no"]})), "200", x, (0, "출하"))
+        arrow = self.conn.q1("select qty from lot_genealogy where parent_lot_id = %s and relation_base = '출하'", (x["lot_id"],))
+        out.append(f"출하 화살표 qty {arrow and dnum(arrow['qty'])}")
+        if not arrow or not close(arrow["qty"], 10):
+            bad.append(f"출하 화살표 qty {arrow and dnum(arrow['qty'])} ≠ 10")
+        sh2 = prod.post(P["SHP-01"], {"partner_code": "CUST-EX-01", "ship_date": str(today)})
+        check("다른 출하에 또", code(prod.c.post(P["SHP-02"], data={"shipment_no": sh2["shipment_no"], "barcode": x["lot_no"]})), "422", x, (0, "출하"))
+
+        # P4 합병 — 화살표 = 잔량 10 · 새 LOT = 10 + 5 · 부모 소진 0
+        x = base()
+        o = prod.post(f"{P['POP-02']}/{start()}/end", {"good_qty": "5"})
+        rm = prod.c.post(f"{P['POP-02']}/{start()}/merge", data={"lot_ids": f"{x['lot_no']},{o['lot_no']}"})
+        check("합병(+LOT 5)", code(rm), "200", x, (0, "소진"))
+        if rm.status_code == 200:
+            ch = self.conn.q1("select qty from lot where id = %s", (rm.json()["id"],))
+            ar = self.conn.q1("select qty from lot_genealogy where parent_lot_id = %s and relation_base = '합병'", (x["lot_id"],))
+            out.append(f"합병 화살표 {dnum(ar['qty'])} · 새 LOT {dnum(ch['qty'])}")
+            if not (close(ar["qty"], 10) and close(ch["qty"], 15)):
+                bad.append(f"합병 화살표 {dnum(ar['qty'])}(기대 10) · 새 LOT {dnum(ch['qty'])}(기대 15)")
+
+        # P4b 합병에 qty 를 주면 — 화살표는 잔량(10 + 5)인데 새 LOT 수량은 준 값 그대로인가(관찰 · interfaces.md §4 「수량은 qty → 부모 잔량 합」)
+        x = base()
+        o2 = prod.post(f"{P['POP-02']}/{start()}/end", {"good_qty": "5"})
+        rq = prod.c.post(f"{P['POP-02']}/{start()}/merge", data={"lot_ids": f"{x['lot_no']},{o2['lot_no']}", "qty": "1000"})
+        mq = None
+        if rq.status_code == 200:
+            mq = (dnum(self.conn.q1("select qty from lot where id = %s", (rq.json()["id"],))["qty"]),
+                  dnum(self.conn.q1("select sum(qty) as s from lot_genealogy where child_lot_id = %s", (rq.json()["id"],))["s"]))
+        info("G-C04 합병 qty 지정 — 새 LOT 수량 > 부모 화살표 합", WARN if mq and mq[0] > mq[1] + 1e-6 else PASS,
+             f"부분 분할 부모(잔량 10) + LOT 5 → 합병 qty=1000 → {code(rq)} · (새 LOT 수량 · 부모 화살표 합) {mq} — 부모 잔량은 넘지 않는다(화살표 = 잔량). "
+             f"새 LOT 수량은 계약대로 준 값이지만 상한이 없어 부모 합보다 큰 LOT 이 생긴다(물량 수지 · 설계 확인)")
+
+        # P5 종료 합병 옵션 — 화살표 = 잔량 10
+        x = base()
+        re5 = prod.c.post(f"{P['POP-02']}/{start()}/end", data={"good_qty": "10", "merge_lot_ids": x["lot_no"]})
+        check("종료 합병 옵션", code(re5), "200", x, (0, "소진"))
+
+        # P6 열린 투입 4(잔량 6) — 통째 쓰기(합병 · 출하 · 수량 없는 분할 · 종료 합병)는 422 · 수량을 모두 준 분할 3+3 은 받는다 → 취소하면 잔량 4 재고
+        x = base(passed=True)
+        r6 = start()
+        i6 = prod.post(P["POP-03"], {"work_result_id": r6, "barcode": x["lot_no"], "qty": "4"})
+        o6 = prod.post(f"{P['POP-02']}/{start()}/end", {"good_qty": "5"})
+        sh6 = prod.post(P["SHP-01"], {"partner_code": "CUST-EX-01", "ship_date": str(today)})
+        check("열린 투입 4 + 합병", code(prod.c.post(f"{P['POP-02']}/{start()}/merge", data={"lot_ids": f"{x['lot_no']},{o6['lot_no']}"})), "422", x, (6, "재고"))
+        check("열린 투입 4 + 출하", code(prod.c.post(P["SHP-02"], data={"shipment_no": sh6["shipment_no"], "barcode": x["lot_no"]})), "422", x, (6, "재고"))
+        check("열린 투입 4 + 수량 없는 분할", code(prod.c.post(f"{P['POP-02']}/{start()}/split", data={"count": "2", "lot_id": str(x["lot_id"])})), "422", x, (6, "재고"))
+        check("열린 투입 4 + 종료 합병", code(prod.c.post(f"{P['POP-02']}/{start()}/end", data={"good_qty": "6", "merge_lot_ids": x["lot_no"]})), "422", x, (6, "재고"))
+        check("열린 투입 4 + 분할 4+3", code(prod.c.post(f"{P['POP-02']}/{start()}/split", data={"count": "2", "lot_id": str(x["lot_id"]), "qtys": "4,3"})), "422", x, (6, "재고"))
+        check("열린 투입 4 + 분할 3+3", code(prod.c.post(f"{P['POP-02']}/{start()}/split", data={"count": "2", "lot_id": str(x["lot_id"]), "qtys": "3,3"})), "200", x, (0, "소진"))
+        check("열린 투입 4 취소", code(prod.c.post(f"{P['POP-03']}/{i6['id']}/cancel")), "200", x, (4, "재고"))
+        check("취소 뒤 투입 5", code(prod.c.post(P["POP-03"], data={"work_result_id": r6, "barcode": x["lot_no"], "qty": "5"})), "422", x, (4, "재고"))
+        prod.c.post(f"{P['POP-02']}/{r6}/end", data={"good_qty": "1"})
+        check("투입 없이 실적 종료 뒤", "200", "200", x, (4, "재고"))
+
+        # P7 부분 분할 뒤 수량 없는 분할 — 통째 소진(D-43). 잔량 10 이 v_lot_stock 에 그대로 남는가(상태 · 잔량 불일치 관찰)
+        x = base()
+        r7 = prod.c.post(f"{P['POP-02']}/{start()}/split", data={"count": "2", "lot_id": str(x["lot_id"])})
+        s7 = st(x["lot_id"])
+        out.append(f"부분 분할 뒤 수량 없는 분할 → {code(r7)} · 잔량 {s7[0]} · {s7[1]} · 자식 {kids(x['lot_id'])}")
+        self.ctx["qtyless_split_after_partial"] = (code(r7), s7)
+
+        emit("G-C04", "부분 분할(20 → 5+5 · 잔량 10) 뒤 투입 · 출하 · 재분할 · 합병 · 열린 투입 취소", not bad,
+             " / ".join(out) + f" — 기대와 다른 것 {bad or 0}")
+
+    def invariants(self) -> None:
+        """모든 공격이 끝난 DB 전체 — 뷰 = 내 SQL 재대조 · 잔량 음수 · 상태와 잔량 불일치 · 통째 소비(합병 · 생산 · 수량 없는 분할 · 출하) 뒤에 생긴 화살표/투입."""
+        bad_stock, bad_state, n_stock, n_state, my = self.my_lot_view()
+        neg = [lid for lid, v in my.items() if v[0] != "SHIPMENT" and v[1] is not None and v[2] < -1e-6]
+        stock0 = [lid for lid, v in my.items() if v[3] == "재고" and v[1] is not None and v[2] <= 1e-6]
+        qtyless = {r["parent_lot_id"] for r in self.conn.q("select distinct parent_lot_id from lot_genealogy where relation_base = '분할' and qty is null")}
+        cons_pos = [lid for lid, v in my.items() if v[0] == "PRODUCT" and v[3] == "소진" and v[1] is not None and v[2] > 1e-6]
+        cons_pos_other = [lid for lid in cons_pos if lid not in qtyless]
+        after = self.conn.q("""
+            with w as (select parent_lot_id as lid, min(linked_at) as t from lot_genealogy
+                        where relation_base in ('합병', '생산', '출하') or (relation_base = '분할' and qty is null) group by parent_lot_id)
+            select w.lid,
+                   (select count(*) from lot_genealogy g where g.parent_lot_id = w.lid and g.linked_at > w.t) as later_arrows,
+                   (select count(*) from pop_input i where i.material_lot_id = w.lid and i.canceled_yn = 'N' and i.created_at > w.t) as later_inputs
+              from w""")
+        dbl = [r["lid"] for r in after if r["later_arrows"] or r["later_inputs"]]
+        ok = not (bad_stock or bad_state or neg or stock0 or cons_pos_other or dbl)
+        emit("G-C04", "공격 뒤 DB 전체 — 뷰 = 내 SQL · 잔량 음수 · 재고인데 잔량 0 · 소진인데 잔량 > 0 · 통째 소비 뒤 또 쓰기", ok,
+             f"LOT {len(my)} · v_lot_stock {n_stock}행 불일치 {bad_stock[:3] or 0} · v_lot_state {n_state}행 불일치 {bad_state[:3] or 0} · 잔량 음수 {neg[:5] or 0} · "
+             f"재고인데 잔량 ≤ 0 {stock0[:5] or 0} · 소진인데 잔량 > 0 (수량 없는 분할 부모 제외) {cons_pos_other[:5] or 0} · "
+             f"통째 소비 뒤 화살표/투입 {dbl[:5] or 0} (통째 소비 부모 {len(after)})")
+        qp = [lid for lid in cons_pos if lid in qtyless]
+        info("G-C04 수량 없는 분할 부모 — 소진인데 v_lot_stock 잔량 > 0", WARN if qp else PASS,
+             f"수량 없는 분할의 부모 {len(qtyless)} 중 소진 · 잔량 > 0 {len(qp)} (예 {[(lid, my[lid][2]) for lid in qp[:4]]}) · 부분 분할 뒤 수량 없는 분할 {self.ctx.get('qtyless_split_after_partial')} — "
+             f"합병 · 생산 · 출하 화살표는 잠근 잔량을 qty 로 적어 잔량 0 이 되지만 수량 없는 분할은 화살표 qty NULL 이라 v_lot_stock 이 소비 0 · 잔량 = LOT 수량으로 남는다(§3.4 문장대로 · 상태는 소진)")
 
     # ── G-C10 집계 재계산 ─────────────────────────────────────────────
     def stats_recalc(self) -> None:
@@ -1794,23 +1974,27 @@ def pack_scenarios(pack: str, conn, label: str) -> None:
                 tank_results = conn.q("select work_result_id from lot where id = any(%s)", (tanks,))
                 sal = conn.q1("select count(*) as n from pop_measure where param_key = 'salinity_pct' and work_result_id = any(%s)", ([r["work_result_id"] for r in tank_results],))["n"]
                 p1 = conn.q("select distinct g.parent_lot_id as id from lot_genealogy g where g.child_lot_id = any(%s) and g.relation_base = '투입'", (tanks,))
-                p1s = [conn.q1("select s.remain_qty, t.state from v_lot_stock s join v_lot_state t on t.lot_id = s.lot_id where s.lot_id = %s", (r["id"],)) for r in p1]
+                p1s = [conn.q1("select l.qty, s.remain_qty, t.state from lot l join v_lot_stock s on s.lot_id = l.id join v_lot_state t on t.lot_id = l.id where l.id = %s",
+                               (r["id"],)) for r in p1]
                 ids = set(up) | {r["id"] for r in p1}
                 n_rows = conn.q1("select count(*) as n from lot_genealogy where parent_lot_id = any(%(i)s) and child_lot_id = any(%(i)s)", {"i": list(ids)})["n"]
-                hit += (sal, n_rows, [(dnum(x["remain_qty"]), x["state"]) for x in p1s])
+                hit += (sal, n_rows, [(dnum(x["remain_qty"]), x["state"]) for x in p1s], [dnum(x["qty"]) for x in p1s])
                 break
         if hit is None:
             emit("G-P04", f"[kimchi] S1 계보 · 역추적 (내 SQL · {label})", FAIL, "원재료 3 · TANK 2 에 닿는 출하 LOT 없음")
         else:
-            no, ne, nm, d, nt, tst, rel, sal, n_rows, p1 = hit
+            no, ne, nm, d, nt, tst, rel, sal, n_rows, p1, p1q = hit
+            E1 = S.get("S1", {})
+            want1 = [(float(E1.get("p1_remain_qty", -1)), E1.get("p1_state"))]
+            ok1 = n_rows == E1.get("genealogy_rows") and p1 == want1
             ok = nm == 3 and d == 5 and nt == 2 and tst == ["소진"] and sal == 2
             emit("G-P04", f"[kimchi] S1 계보 · 역추적 (내 SQL · {label})", ok,
                  f"출하 LOT {no} — 역방향 화살표 {ne} {dict(rel)} · 원재료 {nm} · 최대 깊이 {d} · TANK {nt} 상태 {tst} · salinity_pct 측정값 {sal} "
                  f"(gates.yaml: backward_materials 3 · backward_depth 5 · tank_lots 2 · tank_state 소진 · salinity_measure_rows 2)")
-            emit("G-P04", f"[kimchi] S1 행 수 · P1 잔량 = gates.yaml (내 SQL · {label})", n_rows == 9 and p1 == [(150.0, "재고")],
-                 f"시나리오 LOT 사이 lot_genealogy {n_rows}행(gates.yaml genealogy_rows 9) · 전처리 P1 잔량/상태 {p1}(gates.yaml p1_remain_qty 150 · 재고)"
-                 + ("" if n_rows == 9 and p1 == [(150.0, "재고")] else " — 기대값 출처(gates.yaml)와 재현이 다르다"))
-        # S4 AGING 배치 — gates.yaml S4.expect (genealogy_delta 2 · aging_lot_kind AGING · k1_remain_qty 400) 를 내 SQL 로
+            emit("G-P04", f"[kimchi] S1 행 수 · P1 잔량 = gates.yaml (내 SQL · {label})", ok1,
+                 f"시나리오 LOT 사이 lot_genealogy {n_rows}행(gates.yaml genealogy_rows {E1.get('genealogy_rows')}) · 전처리 P1 수량 {p1q} · 잔량/상태 {p1}"
+                 f"(gates.yaml p1_remain_qty {E1.get('p1_remain_qty')} · {E1.get('p1_state')})" + ("" if ok1 else " — 기대값 출처(gates.yaml)와 재현이 다르다"))
+        # S4 AGING 배치 — gates.yaml S4.expect (회전 8: K1 재고 잔량 400 · K1 자식 계보 1 · AGING 600) 를 내 SQL 로
         g = conn.q1("""select g.parent_lot_id as k1 from lot_genealogy g join lot a on a.id = g.child_lot_id
                         where g.relation_base = '분할' and a.kind = 'AGING' and g.qty = 600 order by g.id desc limit 1""")
         if g is None:
@@ -1819,11 +2003,21 @@ def pack_scenarios(pack: str, conn, label: str) -> None:
             k1 = conn.q1("select l.lot_no, l.qty, s.remain_qty, t.state from lot l join v_lot_stock s on s.lot_id = l.id join v_lot_state t on t.lot_id = l.id where l.id = %s", (g["k1"],))
             ch = conn.q("""select a.kind, a.kind_base, a.insp_status, g.relation, g.qty from lot_genealogy g join lot a on a.id = g.child_lot_id
                             where g.parent_lot_id = %s order by g.id""", (g["k1"],))
-            age = [r for r in ch if r["kind"] == "AGING"]
-            ok4 = len(ch) == 2 and age and all(r["kind_base"] == "PRODUCT" for r in age) and close(k1["remain_qty"], 400)
+            E4 = S.get("S4", {})
+            age = [r for r in ch if r["kind"] == E4.get("aging_lot_kind")]
+            # 남는 양 = K1 자신의 잔량(재고) + K1 의 분할 자식 중 kind PRODUCT 인 재고 LOT 잔량 (gates.yaml k1_leftover_qty 정의)
+            left = conn.q("""select l.lot_no, s.remain_qty, t.state from lot_genealogy g join lot l on l.id = g.child_lot_id
+                               join v_lot_stock s on s.lot_id = l.id join v_lot_state t on t.lot_id = l.id
+                              where g.parent_lot_id = %s and g.relation_base = '분할' and l.kind = 'PRODUCT'""", (g["k1"],))
+            left_qty = (dnum(k1["remain_qty"]) if k1["state"] == "재고" else 0) + sum(dnum(r["remain_qty"]) or 0 for r in left if r["state"] == "재고")
+            ok4 = (len(ch) == E4.get("genealogy_delta") and len(age) == 1 and age[0]["kind_base"] == E4.get("aging_lot_kind_base")
+                   and close(age[0]["qty"], E4.get("aging_qty")) and k1["state"] == E4.get("k1_state") and close(left_qty, E4.get("k1_leftover_qty"))
+                   and (E4.get("k1_leftover_lot") != "K1" or (close(k1["remain_qty"], E4.get("k1_leftover_qty")) and not left)))
             emit("G-P04", f"[kimchi] S4 AGING — K1 잔량 · 자식 (내 SQL · {label})", ok4,
                  f"K1 {k1['lot_no']} qty {dnum(k1['qty'])} · v_lot_stock 잔량 {dnum(k1['remain_qty'])} · 상태 {k1['state']} · 자식 계보 {len(ch)} "
-                 f"{[(r['relation'], r['kind'], dnum(r['qty']), r['insp_status']) for r in ch]} (gates.yaml S4: genealogy_delta 2 · aging_lot_kind AGING · base PRODUCT · k1_remain_qty 400)")
+                 f"{[(r['relation'], r['kind'], dnum(r['qty']), r['insp_status']) for r in ch]} · 남는 양 {left_qty} (K1 분할 자식 PRODUCT {[(r['lot_no'], dnum(r['remain_qty']), r['state']) for r in left]}) "
+                 f"(gates.yaml S4: genealogy_delta {E4.get('genealogy_delta')}(K1 자식 · 출하 전) · aging {E4.get('aging_lot_kind')}/{E4.get('aging_lot_kind_base')} {E4.get('aging_qty')} · "
+                 f"k1_state {E4.get('k1_state')} · k1_leftover_qty {E4.get('k1_leftover_qty')} {E4.get('k1_leftover_state')} · k1_leftover_lot {E4.get('k1_leftover_lot')})")
         if _has_table(conn, "x_kimchi_env_alarm"):
             al = conn.q("select * from x_kimchi_env_alarm order by id")
             cnt = [r.get("count") or r.get("alarm_count") or r.get("occur_count") for r in al]
@@ -1917,6 +2111,8 @@ def main() -> int:
             step("G-C04", "뷰 검산 재료", core.view_material)
             step("G-C04", "뷰 검산", core.views)
             step("G-C04", "잔량 공격 (회전 5 새 경로)", core.stock_attack)
+            step("G-C04", "부분 분할 잔량 공격 (회전 8)", core.partial_attack)
+            step("G-C04", "공격 뒤 DB 전체 불변식", core.invariants)
             step("G-C10", "집계 재계산", core.stats_recalc)
             step("G-C05", "쓰기 경계 정적 스캔", core.write_boundary)
             step("G-C05", "조회 전후 diff (채워진 DB)", core.read_diff, "채워진 DB")
