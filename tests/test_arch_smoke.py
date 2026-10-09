@@ -245,3 +245,17 @@ def test_422_form_post_keeps_values_in_flash_and_asset_version_tracks_static():
         assert int(templating.asset_version()) >= before + 99
     finally:
         probe.unlink(missing_ok=True)
+
+
+def test_sort_clause_allows_only_declared_columns():
+    from fastapi import HTTPException
+
+    from mescore.app.util import http as h
+
+    allowed = {"no": "w.work_order_no", "date": "w.plan_date"}
+    assert h.sort_clause(None, allowed, "w.id desc") == "w.id desc" and h.sort_clause(" ", allowed, "w.id desc") == "w.id desc"
+    assert h.sort_clause("-date,no", allowed, "x") == "w.plan_date desc, w.work_order_no asc"
+    assert h.sort_clause("item_code", ["item_code"], "id") == "item_code asc"
+    with pytest.raises(HTTPException) as exc:
+        h.sort_clause("id;drop table lot", allowed, "x")
+    assert exc.value.status_code == 422 and exc.value.detail["code"] == "validation_error"

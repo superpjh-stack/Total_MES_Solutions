@@ -172,6 +172,32 @@ def validation_error(message: str | None = None, *, fields: list[dict] | None = 
     return _by_code("validation_error", message, fields=fields or [], values=clean_values(values) if values else None)
 
 
+def sort_clause(sort: str | None, allowed: dict[str, str] | list[str] | tuple[str, ...], default: str) -> str:
+    """목록 화면 `?sort=` 의 공용 해석 — **허용한 열만** SQL `order by` 본문으로(D-37). `sort` = `열` · `-열`(내림) · 쉼표로 여럿.
+    `allowed` = {공개 이름: SQL 식} 또는 이름 목록(이름 = 식). 비면 `default`(라우터가 쓴 SQL 그대로). 모르는 열 → 422(조용히 무시하지 않는다).
+
+        order = http.sort_clause(sort, {"no": "w.work_order_no", "date": "w.plan_date"}, "w.id desc")
+        conn.q(f"select … order by {order} limit %s", …)
+    """
+    if not sort or not sort.strip():
+        return default
+    table = dict(allowed) if isinstance(allowed, dict) else {a: a for a in allowed}
+    parts, bad = [], []
+    for raw in sort.split(","):
+        name = raw.strip()
+        if not name:
+            continue
+        desc = name.startswith("-")
+        name = name.lstrip("+-").strip()
+        if name not in table:
+            bad.append(name)
+            continue
+        parts.append(f"{table[name]} {'desc' if desc else 'asc'}")
+    if bad:
+        raise validation_error("정렬할 수 없는 열입니다", fields=[{"name": "sort", "label": "정렬", "reason": f"{bad} — 허용 {sorted(table)}"}])
+    return ", ".join(parts) or default
+
+
 def hook_rejected(exc: HookError) -> HTTPException:
     return _by_code("hook_rejected", exc.message, fields=exc.fields)
 

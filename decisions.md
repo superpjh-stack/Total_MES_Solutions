@@ -169,6 +169,11 @@
 - 판정: `check_pack` R9 — `MES_PACK=<팩> pytest tests/test_arch_*.py`(G-P01 에 들어간다 · `--no-r9` 로 건너뜀). `tests/test_arch_packs.py` 의 임시 팩 픽스처는 끝나고 **그 실행의 팩**(`MES_PACK`)으로 되돌린다(전엔 코어 단독으로 돌려 같은 실행의 뒤 테스트가 팩 DB 를 코어 병합본으로 보았다).
 - 게이트를 낮춘 것이 아니다 — 코어 단독 전건은 그대로이고, 팩에서 무엇을 보는지를 확장 지점과 맞췄다. 바뀌면 고칠 곳: `contracts/pack-contract.md` §4 R9 · `tools/check_pack.py` · `tests/test_arch_*.py`.
 
+
+## D-37 목록 정렬 `?sort=` 는 공용 헬퍼 `http.sort_clause` 하나로 · 상태: 가설
+- 개발3 요청(회전 4). 화면마다 `?sort=` 를 따로 해석하면 SQL 주입 · 열 이름 노출 · 화면마다 다른 문법이 생긴다. `util/http.sort_clause(sort, allowed, default)` — `sort` = `열` · `-열`(내림) · 쉼표로 여럿, `allowed` = {공개 이름: SQL 식}(허용 열만), 비면 `default`(지금 라우터의 order by 그대로), **모르는 열은 422**(조용히 기본 정렬로 바꾸지 않는다). 라우터 적용은 각 담당이 목록 화면에 `sort: str | None = None` 을 더할 때 — 강제하지 않는다(정렬이 필요한 화면부터). `interfaces.md` §8.
+- 바뀌면 고칠 곳: `app/util/http.py: sort_clause` · `tests/test_arch_smoke.py::test_sort_clause_allows_only_declared_columns`.
+
 ---
 
 ## 개발1 (웨이브 A R1·R2 · 2026-10-09 — `progress-dev1.md` §2 「계약과 달라진 점」 을 아키텍트가 옮겼다 · D-101 은 개발3 의견으로 바꿨다)
