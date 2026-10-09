@@ -176,6 +176,14 @@
 
 ---
 
+## D-38 팩 문구의 용어 치환 범위 — `menus.rename` 값은 그대로 · 속성 라벨은 `t()` · 상태: 가설
+- 회전 5 아키텍트(DEF-QA1-003 · G-P05). ① `menus.rename` 값은 **팩이 쓴 최종 이름**(`pack.verbatim`) — `t()` 를 걸지 않는다(회전 4 결정 유지 · 값이 terms 키와 똑같을 때만 치환). 그래서 rename 값은 terms 키를 담지 않게 **최종 꼴로** 쓴다(foodservice `실적 (POP)` → `조리 실적 (POP)` 처럼). `check_terms --pack` 은 rename 값을 노출로 세지 않는다. ② 팩 `attrs` 라벨은 `packs.attrs_of()` 가 **`t()` 를 거친 라벨**을 준다 — 팩은 라벨을 terms 키(중립어)로 쓴다(`공정구분` → `조리 공정구분`). 선택지(`choices`)는 저장 값이라 바꾸지 않는다. ③ 판정 단위는 화면 글 조각(태그 사이 글 · title/placeholder/aria-label) — 표 본문 · 선택지 · 숫자/`(예시)` 가 든 조각(DB 값)은 뺀다(QA1 `check_screens` 와 같은 규칙).
+- 바뀌면 고칠 곳: `app/packs.py`(`t` · `attrs_of`) · `tools/check_terms.py`.
+
+## D-39 출하 승인 뒤 ERP 큐는 코어 기본 훅이 넣는다 · 상태: 가설
+- 회전 5 아키텍트(DEF-QA1-007). F-SHP-07 계약 문장 "after_commit 으로 ERP 큐" 를 맞춘다: `after_commit_shipment_approved` 를 팩이 선언하지 않으면 **코어 기본 구현**(`packs.CORE_DEFAULT_HOOKS` → `erp.enqueue("shipment_approved", payload)`)이 돈다. 팩이 같은 훅을 두면 팩 것이 대신한다(팩 훅이 큐를 원하면 스스로 `erp.enqueue`). D-20(트랜잭션 밖 · 실패 시 `ifc_outbox` 실패 행)은 그대로.
+- 바뀌면 고칠 곳: `app/packs.py`(`hook`) · `contracts/function-list.md` F-SHP-07 · `interfaces.md` §9.
+
 ## 개발1 (웨이브 A R1·R2 · 2026-10-09 — `progress-dev1.md` §2 「계약과 달라진 점」 을 아키텍트가 옮겼다 · D-101 은 개발3 의견으로 바꿨다)
 
 ## D-101 작업지시 등록(F-JOB-01)과 계획 · 수주 상세 상태 · 상태: 가설 (개발1 안을 **개발3 안으로 바꿈** — 개발1 다음 회전 수정)

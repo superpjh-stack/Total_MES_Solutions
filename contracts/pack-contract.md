@@ -39,7 +39,7 @@ packs/<팩>/
 | `permissions` | | `seed/permissions.csv` 경로. 열 `menu_code,role_code,level,scopes`(scopes 는 `일반·승인` 처럼 `·` 또는 `,` 구분). 코어 + 팩 메뉴 × 역할 **전 칸** 있어야 한다(빈 칸 → `PackError`). 주지 않으면 코어 칸은 `core.yaml` 기본값, 팩 모듈 칸은 전부 `없음`(`pack.warnings`) |
 | `numbering` | | `{KIND: {prefix, date, digits}}`. 코어 종류는 형식만 바꾼다. 새 종류 추가 가능 |
 | `channels` | | `{pop: [...], mobile: [...], board: [...]}` 화면 ID. 주면 코어 기본을 **대체**. 키도 코드 · 라벨 둘 다(`현장 POP:` = `pop:`) — 병합본은 코드 키 |
-| `attrs` | E2 | `{테이블: [{key, label, type(number|text|bool|date|select), required, choices[]}]}`. 코어 테이블만. `ui.attrs_fields` 가 폼(`attr_<key>`)을 만들고 `packs.read_attrs(form 또는 request, 테이블)` 가 읽는다 — 폼 이름 `attr_<key>` · `attrs.<key>` 둘 다. `Request` 를 넘기면 동기 라우터에서 `request.form()` 을 읽는다 |
+| `attrs` | E2 | `{테이블: [{key, label, type(number|text|bool|date|select), required, choices[]}]}`. 코어 테이블만. `ui.attrs_fields` 가 폼(`attr_<key>`)을 만들고 `packs.read_attrs(form 또는 request, 테이블)` 가 읽는다 — 폼 이름 `attr_<key>` · `attrs.<key>` 둘 다. `Request` 를 넘기면 동기 라우터에서 `request.form()` 을 읽는다. **`label` 은 terms 키(중립어)로 쓴다 — `packs.attrs_of()` 가 `t()` 를 거친 라벨을 준다**(D-38 · `공정구분` → `조리 공정구분`). `choices` 는 저장 값이라 치환하지 않는다 |
 | `process_params` · `inspection_items` | E3 | CSV 경로(`migration-files.md` §2 의 `04_process_params.csv` 형식 · 검사 항목은 `qua_insp_plan` 시드) |
 | `lineage.lot_kinds[]` | E6 | `{kind, base(MATERIAL|PRODUCT|SHIPMENT), label}` |
 | `lineage.relations[]` | E6 | `{name, base(투입|생산|분할|합병|출하)}` |

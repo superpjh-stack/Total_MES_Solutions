@@ -209,3 +209,17 @@ def test_seed_entries_string_or_table_spec(temp_pack):
     with pytest.raises(packs.PackError) as exc:
         packs.load(bad)
     assert "sys_user" in str(exc.value) and "셋 다" in str(exc.value)
+
+
+def test_attr_labels_pass_through_terms(temp_pack):
+    """D-38 · DEF-QA1-003 — `attrs_of()` 의 라벨은 t() 를 거친 값. 선택지(저장 값)와 원문 선언(`current().attrs`)은 그대로."""
+    name = temp_pack("_t_attr_terms", terms={"공정": "조리 공정", "설비": "설비·탱크"},
+                     attrs={"bas_item": [{"key": "kind", "label": "공정구분", "type": "select", "choices": ["공정A", "공정B"]}],
+                            "bas_equipment": [{"key": "grp", "label": "설비구분", "type": "text", "required": True}]})
+    packs.load(name)
+    a = packs.attrs_of("bas_item")[0]
+    assert a.label == "조리 공정구분" and a.choices == ("공정A", "공정B")
+    assert packs.current().attrs["bas_item"][0].label == "공정구분"
+    assert packs.attrs_of("bas_equipment")[0].label == "설비·탱크구분"
+    with pytest.raises(ValueError, match="설비·탱크구분 은"):
+        packs.read_attrs({}, "bas_equipment")

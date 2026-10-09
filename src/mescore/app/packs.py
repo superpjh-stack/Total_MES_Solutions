@@ -19,7 +19,7 @@ import importlib
 import re
 import sys
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -580,7 +580,9 @@ def has_hook(name: str) -> bool:
 
 
 def attrs_of(table: str) -> list[AttrSpec]:
-    return list(current().attrs.get(table, []))
+    """팩 속성 선언 — **라벨은 `t()` 를 거친 값**(DEF-QA1-003 · 회전 5). 라벨은 terms 키(중립어)로 쓴다: `공정구분` → `조리 공정구분`.
+    선택지(`choices`)는 저장되는 값이라 바꾸지 않는다. 원문 선언은 `current().attrs`."""
+    return [replace(a, label=t(a.label)) for a in current().attrs.get(table, [])]
 
 
 def _is_request(obj: Any) -> bool:
@@ -608,7 +610,7 @@ def read_attrs(form: Mapping[str, Any] | Any, table: str) -> dict[str, Any]:
             raw = form.get(f"attrs.{spec.key}")
         if raw is None or str(raw).strip() == "":
             if spec.required:
-                raise ValueError(f"{t(spec.label)} 은(는) 필수입니다")
+                raise ValueError(f"{spec.label} 은(는) 필수입니다")
             continue
         if spec.type == "number":
             out[spec.key] = float(raw)

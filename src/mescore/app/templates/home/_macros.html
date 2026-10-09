@@ -149,7 +149,7 @@
 {% endmacro %}
 
 {# 팩 속성 폼 (E2 · D-05) — pack.yaml: attrs[테이블] 선언대로 `attr_<key>` 입력칸을 만든다. 라우터는 packs.read_attrs 로 읽는다.
-   specs = packs.attrs_of('bas_item') · values = 기존 행의 attrs dict. 선언이 없으면 묶음이 통째로 안 그려진다. 라벨은 팩이 준 글자 그대로. #}
+   specs = packs.attrs_of('bas_item') · values = 기존 행의 attrs dict. 선언이 없으면 묶음이 통째로 안 그려진다. 라벨은 packs.attrs_of 가 t() 를 거쳐 준 값(회전 5 — 팩은 중립어로 적는다). #}
 {% macro attrs_fields(specs, values={}) %}
 {% if specs %}
 <fieldset class="attrs">
