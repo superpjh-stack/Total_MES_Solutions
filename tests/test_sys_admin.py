@@ -328,3 +328,13 @@ def test_backup_screen_migrate_dir_undecided_has_decision_no(admin, monkeypatch)
     finally:
         monkeypatch.undo()
         st.reset_cache()
+
+
+def test_users_list_sort(admin):
+    from mescore.app.routers import sys as sys_router
+
+    for col in sys_router.USER_SORT:
+        assert admin.get(f"/sys/users?sort=-{col}").status_code == 200, col
+    ids = [r["login_id"] for r in admin.get("/sys/users?sort=-login_id").json()["rows"]]
+    assert ids == [x["l"] for x in conn.q("select login_id as l from sys_user order by login_id desc, id limit %s", (len(ids),))]
+    assert admin.get("/sys/users?sort=password_hash").status_code == 422

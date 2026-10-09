@@ -82,8 +82,11 @@ def password_of(form: FormData, label: str, *, required: bool) -> str | None:
     return value
 
 
+USER_SORT = {"login_id": "u.login_id", "user_name": "u.user_name", "role_code": "r.role_code", "status": "u.status", "last_login_at": "u.last_login_at", "created_at": "u.created_at"}
+
+
 @router.get(USERS, response_class=HTMLResponse)                                                 # F-SYS-04 사용자 조회 = 화면 GET
-def users(request: Request, q: str = "", role_id: str = "", status: str = "", edit: str = "", user: rbac.User = rbac.require_fn("F-SYS-04")) -> HTMLResponse:
+def users(request: Request, q: str = "", role_id: str = "", status: str = "", edit: str = "", sort: str = "", user: rbac.User = rbac.require_fn("F-SYS-04")) -> HTMLResponse:
     where, params = ["true"], []
     if q.strip():
         where.append(f"({contains('u.login_id')} or {contains('u.user_name')})")
@@ -98,9 +101,9 @@ def users(request: Request, q: str = "", role_id: str = "", status: str = "", ed
             raise bad("입력값을 확인해 주세요", "status", f"{' · '.join(USER_STATUSES)} 중 하나: {status}", "상태")
         where.append("u.status = %s")
         params.append(status)
-    rows = conn.q(f"select {USER_COLUMNS} {USER_FROM} where {' and '.join(where)} order by u.login_id limit {USER_LIMIT}", params)
+    rows = conn.q(f"select {USER_COLUMNS} {USER_FROM} where {' and '.join(where)} order by {http.sort_clause(sort, USER_SORT, 'u.login_id')}, u.id limit {USER_LIMIT}", params)   # D-37
     return templating.render(request, "sys/users.html", {
-        "rows": rows, "f": {"q": q, "role_id": role_id, "status": status, "edit": edit}, "editing": user_of_path(edit) if edit else None,
+        "rows": rows, "f": {"q": q, "role_id": role_id, "status": status, "edit": edit, "sort": sort}, "editing": user_of_path(edit) if edit else None,
         "options": {"role_id": role_options(), "status": [(s, s) for s in USER_STATUSES],
                     "worker_id": [(str(r["id"]), f"{r['worker_code']} {r['worker_name']}") for r in conn.q(
                         "select id, worker_code, worker_name from bas_worker where use_yn = 'Y' order by worker_code")]},

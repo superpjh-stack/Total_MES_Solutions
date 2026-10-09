@@ -365,9 +365,17 @@ def _list_rows(m: Master, request: Request) -> tuple[list[dict], dict[str, str]]
             else:
                 where.append(f"x.{col} = %s")
                 params.append(v)
+    f["sort"] = (qp.get("sort") or "").strip()
+    order = http.sort_clause(f["sort"], sort_columns(m), m.order_by)                                    # D-37 — 허용 열만 · 모르는 열 422
     rows = conn.q(f"select x.*{', ' + m.extra_select if m.extra_select else ''} from {m.table} x {m.joins} "
-                  f"where {' and '.join(where)} order by {m.order_by} limit {LIST_LIMIT}", params)
+                  f"where {' and '.join(where)} order by {order}, x.id limit {LIST_LIMIT}", params)
     return rows, f
+
+
+def sort_columns(m: Master) -> dict[str, str]:
+    """`?sort=` 허용 열 — 코드 · 화면 칸(목록형 · 코드 묶음 칸 제외) · 등록/수정 시각."""
+    cols = [m.code.name] + [fd.name for fd in m.fields if fd.kind not in ("list", "codes")] + ["created_at", "updated_at"]
+    return {c: f"x.{c}" for c in dict.fromkeys(cols)}
 
 
 def register(m: Master) -> None:
@@ -611,8 +619,11 @@ def _save_bom_lines(cur, bom_id: int, lines: list[dict], user: rbac.User) -> Non
         packs.hook("after_save_bas_bom_dtl")(cur, row, user)
 
 
+BOM_SORT = {"item_code": "i.item_code", "item_name": "i.item_name", "version": "b.version", "use_yn": "b.use_yn", "created_at": "b.created_at", "updated_at": "b.updated_at"}
+
+
 @router.get(BOM, response_class=HTMLResponse)                                                   # F-BAS-08 BOM 조회 = 화면 GET
-def bom_list(request: Request, item_id: str = "", q: str = "", edit: str = "", user: rbac.User = rbac.require_fn("F-BAS-08")) -> HTMLResponse:
+def bom_list(request: Request, item_id: str = "", q: str = "", edit: str = "", sort: str = "", user: rbac.User = rbac.require_fn("F-BAS-08")) -> HTMLResponse:
     where, params = ["true"], []
     if item_id.strip():
         if not item_id.strip().isdigit():
@@ -622,7 +633,7 @@ def bom_list(request: Request, item_id: str = "", q: str = "", edit: str = "", u
     if q.strip():
         where.append(f"({contains('i.item_code')} or {contains('i.item_name')})")
         params += [q.strip(), q.strip()]
-    boms = conn.q(_BOM_SQL + f" where {' and '.join(where)} order by i.item_code, b.version limit {LIST_LIMIT}", params)
+    boms = conn.q(_BOM_SQL + f" where {' and '.join(where)} order by {http.sort_clause(sort, BOM_SORT, 'i.item_code, b.version')}, b.id limit {LIST_LIMIT}", params)   # D-37
     dtls = conn.q(_BOM_DTL_SQL, ([b["id"] for b in boms],)) if boms else []
     for b in boms:
         b["lines"] = [d for d in dtls if d["bom_id"] == b["id"]]

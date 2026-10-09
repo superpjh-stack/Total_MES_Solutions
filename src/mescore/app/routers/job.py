@@ -63,6 +63,8 @@ select w.id, w.work_order_no, w.item_id, w.process_id, w.equipment_id, w.plan_id
   left join bas_partner pt on pt.id = oo.partner_id
   join v_work_order_progress v on v.work_order_id = w.id
 """
+WO_SORT = {"work_order_no": "w.work_order_no", "plan_date": "w.plan_date", "item_code": "i.item_code", "process_code": "p.process_code",
+           "plan_qty": "w.plan_qty", "status": "w.status", "created_at": "w.created_at"}
 JOB_LOT_SELECT = """
 select jl.id, jl.work_order_id, jl.item_id, jl.required_qty, jl.unit, jl.lot_id, i.item_code, i.item_name, l.lot_no
   from job_lot jl join bas_item i on i.id = jl.item_id left join lot l on l.id = jl.lot_id
@@ -160,7 +162,7 @@ def options() -> dict[str, list[tuple[str, str]]]:
 # ── JOB-01 작업지시 ───────────────────────────────────────────────────────
 @router.get(WORK_ORDERS, response_class=HTMLResponse)                                              # F-JOB-05 작업지시 조회 = 화면 GET
 def work_orders(request: Request, date_from: str = "", date_to: str = "", item_id: str = "", process_id: str = "", status: str = "",
-                no: str = "", edit: str = "", user: rbac.User = rbac.require_fn("F-JOB-05")) -> HTMLResponse:
+                no: str = "", edit: str = "", sort: str = "", user: rbac.User = rbac.require_fn("F-JOB-05")) -> HTMLResponse:
     where, params = ["true"], []
     for key, val in (("date_from", date_from), ("date_to", date_to)):
         if val.strip():
@@ -189,7 +191,8 @@ def work_orders(request: Request, date_from: str = "", date_to: str = "", item_i
     if no.strip():
         where.append(contains("w.work_order_no"))
         params.append(no.strip())
-    rows = conn.q(WO_SELECT + f" where {' and '.join(where)} order by w.id desc limit {LIST_LIMIT}", params)          # 최신 등록 우선
+    order = http.sort_clause(sort, WO_SORT, "w.id desc")                                                          # D-37 — 기본은 최신 등록 우선
+    rows = conn.q(WO_SELECT + f" where {' and '.join(where)} order by {order}, w.id desc limit {LIST_LIMIT}", params)
     for r in rows:
         r["progress"] = ST_RUN if (r["status"] == ST_WAIT and r["started"]) else r["status"]
     editing = wo_of_path(edit) if edit else None

@@ -445,3 +445,24 @@ def test_code_delete_core_refused(admin):
     mine = conn.q1("select id from bas_code where group_code = 'ITEM_TYPE' and code = %s", (f"T{SFX}",))
     assert admin.post(f"/bas/codes/{mine['id']}/delete").status_code == 200
     assert admin.get(f"/bas/codes?group_code=T_GRP_{SFX}").json()["rows"] == []
+
+
+def test_list_sort_allowed_columns_only(admin):
+    """D-37 — 목록 `?sort=` 는 허용 열만(`http.sort_clause`) · 내림(`-열`) · 모르는 열 422. 마스터 8 + BOM 전부."""
+    from mescore.app import nav
+    from mescore.app.routers import bas
+
+    for m in (bas.ITEMS, bas.PROCESSES, bas.PROCESS_PARAMS, bas.EQUIPMENT, bas.PARTNERS, bas.WORKERS, bas.DEFECT_CODES, bas.CODES):
+        path = nav.path_of(m.screen_id)
+        for col in bas.sort_columns(m):
+            for s in (col, "-" + col):
+                assert admin.get(f"{path}?sort={s}").status_code == 200, (m.screen_id, s)
+        r = admin.get(f"{path}?sort=-{m.code.name}").json()["rows"]
+        codes = [x[m.code.name] for x in r]
+        want = [x["c"] for x in conn.q(f"select {m.code.name} as c from {m.table} order by {m.code.name} desc, id limit %s", (len(codes),))]
+        assert codes == want, m.screen_id                                                                  # DB 정렬(콜레이션) 그대로
+        bad = admin.get(f"{path}?sort=password_hash;drop")
+        assert bad.status_code == 422 and bad.json()["fields"][0]["name"] == "sort"
+    for col in bas.BOM_SORT:
+        assert admin.get(f"/bas/bom?sort=-{col}").status_code == 200
+    assert admin.get("/bas/bom?sort=nope").status_code == 422

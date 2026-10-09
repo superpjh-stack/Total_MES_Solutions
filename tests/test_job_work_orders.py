@@ -246,3 +246,14 @@ def test_create_from_confirmed_plan_inherits_order_and_date(admin, base):
     conn.x("delete from ord_plan where id = %s", (p["id"],))
     conn.x("delete from ord_order_dtl where order_id = %s", (o["id"],))
     conn.x("delete from ord_order where id = %s", (o["id"],))
+
+
+def test_list_sort(admin):
+    from mescore.app.routers import job
+
+    for col in job.WO_SORT:
+        assert admin.get(f"/job/work-orders?sort=-{col}").status_code == 200, col
+    rows = admin.get("/job/work-orders?sort=work_order_no").json()["rows"]
+    nos = [r["work_order_no"] for r in rows]
+    assert nos == [x["n"] for x in conn.q("select work_order_no as n from job_work_order order by work_order_no, id desc limit %s", (len(nos),))]
+    assert admin.get("/job/work-orders?sort=w.id").status_code == 422                                     # SQL 식은 이름이 아니다

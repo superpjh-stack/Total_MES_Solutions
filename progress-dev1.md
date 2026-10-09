@@ -154,3 +154,23 @@ DB `mes_foodservice_db` · 포트 8041 · 명령은 전부 `MES_PACK=foodservice
 - **디자이너3 `home/main.html`**: 카드 ctx 에 `today_label`(예 `검사 대기` · `고장 중`) · `today_source`(출처 문장)를 더했다 — `t('오늘')` 고정 대신 `t(c.today_label)` · `title=c.today_source` 로.
 - **아키텍트 `main._login_page`**: `POST /login` 실패(401) 재렌더는 아직 main 이라 `role_summary` 가 없다 — `from .routers.home import role_summary` 한 줄로 ctx 에 넣거나, `POST /login` 도 home 으로 넘길지 결정. `check_trace` G-P03 은 이제 `import_design.py --pack <팩>` 을 subprocess 로 돌려 마지막 줄을 그대로 쓰면 된다(종료코드 0 PASS · 1 FAIL · 2 미검증). `packs.py:530` 의 `조리` 가 G-C23 에 걸린다. `seed_core` CR-9 가 들어오면 foodservice `seed_pack.py` 우회를 지운다.
 - **개발2**: 시드 `field` 계정에 작업자 `WK-EX-02` 가 연결됐다 — POP-02 `worker_id_default`(디자이너2 요청 5) 는 `sys_user.worker_id` 로 채우면 된다. BAS-07 작업자 화면의 `bas_worker.user_id` 와 `sys_user.worker_id` 는 서로 동기화하지 않는다(쓰는 테이블 계약 그대로) — 기준은 `sys_user.worker_id`.
+
+## §6 회전 5 (2026-10-09) — 개발1 · QA 결함 수정
+
+| 결함 | 결과 | 검증 방법 |
+|---|---|---|
+| QA1-001 · QA3-001 `POST /login/as` | `home.dev_login_allowed(request)` = 아키텍트 `settings.dev_login_allowed`(MES_ENV=dev + 루프백 주소) **그리고** 프록시 전달 헤더(`X-Forwarded-For` · `Forwarded`) 없음 — 아니면 404. `GET /login` ctx 에 `dev_login`(bool) | `test_sys_home.py` — prod · 빈 값 · staging 404 / dev 비루프백(testclient · 10.x · 192.168.x) 404 / dev 루프백 + XFF 404 / dev 루프백 200 |
+| QA3-002 확정 계획 → 지시 | 폼이 비면 계획의 `order_dtl_id` · `plan_date` 를 가져온다 · 폼 수주 상세가 계획과 다르면 422(`order_dtl_id`) → 작업지시서 수주 번호 · 납기 표시 · 수주 상세 `지시` | `test_job_work_orders.py::test_create_from_confirmed_plan_inherits_order_and_date` |
+| QA2-002 JOB-02 `?wo=` | id 또는 지시 번호(`job.wo_of_key` · JOB-03 `?id=` 도) · 경로 `{id}` 는 숫자만. **D-604 확정**(decisions.md). 드릴다운에 실적별 측정값 `results[].measures`(개발2 measure — 선언 + 기록만 남은 키 · 미수집 · 범위 이탈) | `test_status_board_today_week_and_drilldown` |
+| QA2-003 SYS-06 | `미확정 (D-109)`(새 결정 D-109 이관 실행 폴더 · 가설) — 라벨 `sys.migrate_dir_label` · 버튼 사유도 같은 문구 | `test_sys_admin.py::test_backup_screen_migrate_dir_undecided_has_decision_no` |
+| 백업(아키텍트 DEF-QA1-008 여파) | `backup.latest_dump(db)` 새 서명에 맞춤 · 예상 밖 오류도 이력 `ok=false` 로 끝맺음(전에는 NULL 로 남았다) | `test_backup_run_writes_history` |
+| D-37 정렬 | `?sort=` — BAS 마스터 8(코드 · 화면 칸 · 시각) · BOM · JOB-01 · SYS-01, 모르는 열 422 | `test_list_sort*` 3 |
+| foodservice CR-9 | `seed_pack.py` 삭제 → `seeds[]` 6(`attrs.<키>` 헤더 · kpi_indicators 포함) + ext CSV 3(`{file, table, key}`) · 역할 6 계정 = seed_core. 레시피는 seeds[] 가 BOM 을 안 받아 `seed_dev1.seed_pack_boms` 가 실행 팩의 `seed/bom*.csv` 를 F-BAS-05 순서(validate → 저장 → after_save 훅)로. 새 DB `mes_foodservice_r5dev1_db` 에서 `make db-schema db-seed` ×2 행 수 diff 0 · 팩 테스트 19 passed. `kpi_extra` 기준값 · 산식은 DB `kpi_indicator.attrs` 에서 | `MES_PACK=foodservice MES_PG_DSN=postgresql:///mes_foodservice_r5dev1_db make db-seed` ×2 · pytest |
+| foodservice G-P05 | rename `조리 실적 (POP)` · `배치 추적`(최종 이름) · attrs 라벨 중립어(`공정구분` · `연결 설비고장` · `고장유형` — D-38) · 메인/로그인 권한 표기 `t()` → **노출 0** (QA1 check_screens 61 → 0 · check_terms --pack 0) | `MES_PACK=foodservice uv run python src/mescore/tools/check_screens.py` · `check_terms.py --pack` |
+| 기획 `test_hooks_unit::test_after_save_ord_order…` | 실패 원인 = 「마지막 수주」 가 S1 이 만든 ext 있는 수주라 롤백 뒤 `is None` 단언이 틀림 → ext 없는 수주를 고르게 고침 | 팩 테스트 2회 연속 19 passed |
+| pytest | 코어 단독 **301 passed** · foodservice 19 passed · check-routes G-C03 56/56 · check-terms G-C23 PASS · G-P03 foodservice PASS | `uv run pytest -q` 등 |
+
+### §6 요청
+- **아키텍트**: ① `seed_core` 에 `bom*` 로더(헤더 + 구성품 · `attrs.<키>` · validate/after_save 훅) — 들어오면 `seed_dev1.seed_pack_boms` 를 지운다. ② seeds[] 로 들어온 코어 행에 팩 `after_save_<table>` 훅을 돌리는 옵션이 있으면 ext CSV 중복(attrs ↔ ext)이 사라진다.
+- **QA1**: `check_screens` G-C03 「인증 없이 열리는 경로」 가 `POST /login/as → 404` 를 위반으로 센다 — 이제 404 가 계약(D-605)이다.
+- **디자이너1**: `login.html` 의 개발용 역할 버튼 조건을 `settings.env == 'dev'` 대신 ctx `dev_login` 으로(비루프백 dev 에서 버튼이 보이지만 404).
