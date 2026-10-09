@@ -70,6 +70,8 @@
 |---|---|---|---|---|
 | CMN-01 | 로그인 | `/login` | 아키텍트 → 개발1 | `device` 선택(web · pop · mobile · board). 실패 401 재렌더 |
 | CMN-02 | 메인 (IA) | `/` | 개발1 | 모듈 카드를 **일하는 순서**로. 팩 `menus.order` 반영 |
+| CMN-02 › 기능표 | 메인 하위 탭 | `/main/functions` | 개발1 | 기능 132 + 이관 4 를 모듈별 표로 · 지금 역할 사용 가능 여부 (D-45) |
+| CMN-02 › 업무 프로세스 | 메인 하위 탭 | `/main/processes` | 개발1 | 화면을 엮은 업무 흐름 10 유형 · 단계별 화면 링크 · 담당 역할 · 남는 데이터 (D-45 · `app/guide.py`) |
 | CMN-03 | 오류 | `/error` · `_error.html` | 아키텍트 | 상태코드별. 현황판 채널은 자동 새로고침 유지 |
 | CMN-04 | 대시보드 | `/dashboard` | 개발3 | 로그인 직후 역할별 요약(지시 · 실적 · 검사 · 출하 건수). `kpi` 집계를 읽기만. Phase 0 은 placeholder(D-21) — 개발3 이 `routers/home.py`(또는 kpi) 에 `/dashboard` 를 등록하면 빠진다 |
 | CMN-05 | 팝업 | `/popup/{kind}` | 아키텍트 | 품목 · 거래처 · 설비 · LOT · 작업자 찾기 공용 팝업 — `routers/popup.py` + `home/_popup.html`(회전 3). `kind` = item · partner · equipment · lot · worker(`core.yaml: common[CMN-05].kinds` — 그 밖은 404). `?q=`(코드 · 이름 부분 일치 · LOT 은 `lineage.search`) · `?limit=`(≤ 200). JSON(`kind q columns rows count pick`)은 `Accept` 에 `text/html` 이 없을 때(D-18). 행의 `data-pick` · `data-pick-id` 를 부모 화면에 돌려주는 동작은 `static/app.js`(디자이너2). 검사 도구는 `/popup/item` 으로 연다(`probe`) |

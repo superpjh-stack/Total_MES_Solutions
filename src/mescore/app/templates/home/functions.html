@@ -1,0 +1,82 @@
+{# 메인 › 기능표 — routers/home.py main_functions. ctx: groups[{module name rows n_write n_can}] batch module q module_options n_rows n_can.
+   기능 한 줄 = contracts/function-list.md 한 줄. "내 권한" 은 지금 로그인한 역할이 그 기능을 쓸 수 있는지(user.can). 읽기 전용 화면. #}
+{% extends "base.html" %}
+{% block head %}
+<style>
+.fn-top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px 24px;flex-wrap:wrap;margin-bottom:12px}
+.fn-top h2{margin:0;font-size:var(--fs-xl)}.fn-top p{margin:4px 0 0;color:var(--c-ink-2);font-size:var(--fs-sm)}
+.fn-filter{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.fn-filter select,.fn-filter input{padding:6px 8px;border:var(--bw) solid var(--c-line);border-radius:var(--r-sm);background:var(--c-surface);color:var(--c-ink);font-size:var(--fs-sm)}
+.fn-group{margin:0 0 18px}
+.fn-group h3{margin:0 0 6px;font-size:var(--fs-lg);display:flex;gap:10px;align-items:baseline}
+.fn-group h3 code{font-size:var(--fs-xs);color:var(--c-ink-3);font-family:var(--font-mono);font-weight:400}
+.fn-group h3 small{font-weight:400;color:var(--c-ink-3);font-size:var(--fs-sm)}
+.fn-wrap{overflow-x:auto;border:var(--bw) solid var(--c-line);border-radius:var(--r-md);background:var(--c-surface)}
+.fn-wrap table.grid td.txt{white-space:normal;min-width:280px;color:var(--c-ink-2)}
+.fn-wrap table.grid td code{font-family:var(--font-mono);font-size:var(--fs-xs);color:var(--c-ink-2)}
+.fn-kind{display:inline-block;padding:0 7px;border-radius:999px;font-size:var(--fs-xs);border:var(--bw) solid var(--c-line);color:var(--c-ink-2)}
+.fn-kind.w{border-color:var(--c-accent);color:var(--c-accent)}
+.fn-can{font-size:var(--fs-xs);font-weight:600}.fn-can.y{color:var(--c-ok)}.fn-can.n{color:var(--c-ink-3);font-weight:400}
+</style>
+{% endblock %}
+{% block body %}
+{% include "home/_main_tabs.html" %}
+<section class="panel">
+  <div class="fn-top">
+    <div>
+      <h2>{{ t('기능표') }}</h2>
+      <p>{{ t('화면 기능') }} {{ n_rows }} · {{ t('지금 역할로 쓸 수 있는 기능') }} {{ n_can }} · {{ t('이관 배치') }} {{ batch|length }} — {{ t('화면 이름을 누르면 그 화면으로 간다') }}</p>
+    </div>
+    <form class="fn-filter" method="get" action="/main/functions">
+      <select name="module" aria-label="{{ t('모듈') }}">
+        <option value="">{{ t('전체 모듈') }}</option>
+        {% for code, name in module_options %}<option value="{{ code }}"{% if code == module %} selected{% endif %}>{{ t(name) }}</option>{% endfor %}
+      </select>
+      <input type="search" name="q" value="{{ q }}" placeholder="{{ t('기능 ID · 이름 · 설명') }}" aria-label="{{ t('검색') }}">
+      <button type="submit" class="btn">{{ t('조회') }}</button>
+    </form>
+  </div>
+
+  {% for g in groups %}
+  <div class="fn-group">
+    <h3>{{ t(g.name) }} <code>{{ g.module }}</code> <small>{{ t('기능') }} {{ g.rows|length }} · {{ t('쓰기') }} {{ g.n_write }} · {{ t('내 권한') }} {{ g.n_can }}</small></h3>
+    <div class="fn-wrap">
+      <table class="grid plain">
+        <thead><tr>
+          <th>{{ t('기능 ID') }}</th><th>{{ t('화면') }}</th><th>{{ t('기능') }}</th><th>{{ t('유형') }}</th><th>{{ t('채널') }}</th>
+          <th>{{ t('입력 역할') }}</th><th>{{ t('내 권한') }}</th><th>{{ t('설명') }}</th>
+        </tr></thead>
+        <tbody>
+        {% for r in g.rows %}
+          <tr>
+            <td><code>{{ r.id }}</code></td>
+            <td>{% if r.path %}<a href="{{ r.path }}">{{ t(r.screen) }}</a>{% else %}{{ t(r.screen) }}{% endif %} <code>{{ r.screen_id }}</code></td>
+            <td>{{ t(r.name) }}</td>
+            <td><span class="fn-kind{% if r.write %} w{% endif %}">{{ t(r.kind) }}</span></td>
+            <td>{{ r.channels|map('t')|join(' · ') }}</td>
+            <td>{% if r.write %}{{ r.roles|map('t')|join(' · ') or '—' }}{% if r.scope and r.scope not in ('-', '일반') %} ({{ t(r.scope) }}){% endif %}{% else %}{{ t('조회 이상') }}{% endif %}</td>
+            <td><span class="fn-can {{ 'y' if r.can else 'n' }}">{{ t('가능') if r.can else t('없음') }}</span></td>
+            <td class="txt">{{ t(r.text) }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <p class="empty">{{ t('조건에 맞는 기능이 없다') }}</p>
+  {% endfor %}
+
+  {% if not module and not q %}
+  <div class="fn-group">
+    <h3>{{ t('이관 배치') }} <small>{{ t('화면 없이 명령으로 돈다') }} — SYS-06</small></h3>
+    <div class="fn-wrap">
+      <table class="grid plain">
+        <thead><tr><th>{{ t('기능 ID') }}</th><th>{{ t('기능') }}</th><th>{{ t('명령') }}</th><th>{{ t('설명') }}</th></tr></thead>
+        <tbody>{% for b in batch %}<tr><td><code>{{ b.id }}</code></td><td>{{ t(b.name) }}</td><td><code>{{ b.api }}</code></td><td class="txt">{{ t(b.text) }}</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

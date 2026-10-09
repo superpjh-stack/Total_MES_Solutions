@@ -4,7 +4,7 @@
 # 이 파일은 아키텍트만 고친다 (CLAUDE.md).
 
 core_version: 0.1.0
-system_name: MES 표준플랫폼
+system_name: Rodem MES Solution
 env_prefix: MES_
 
 # ── 채널 4 (spec.md §6.2) — device 코드 → 화면 표기 ──

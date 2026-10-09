@@ -174,7 +174,15 @@
 <div class="shell{% if not show_side %} no-side{% endif %}{% if not show_desc %} no-desc{% endif %}">
   {% if show_side %}
   <nav class="side" id="side-menu" aria-label="{{ t('메뉴') }}">
-    <div class="mg menu-group{% if screen_id == 'CMN-02' %} on{% endif %}"><a class="mg-h" href="/"><span>{{ t('메인') }}</span></a></div>
+    {% set main_path = request.url.path if request is defined else '/' %}
+    <div class="mg menu-group{% if screen_id == 'CMN-02' %} on{% endif %}" data-menu="main">
+      <button type="button" class="mg-h menu-head" aria-expanded="{{ 'true' if screen_id == 'CMN-02' else 'false' }}"><span>{{ t('메인') }}</span><small>3</small></button>
+      <ul>
+        {% for href, label in (('/', '모듈 지도'), ('/main/functions', '기능표'), ('/main/processes', '업무 프로세스')) %}
+        <li><a href="{{ href }}"{% if screen_id == 'CMN-02' and main_path == href %} class="cur" aria-current="page"{% endif %}>{{ t(label) }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
     {% for m in menus %}
     <div class="mg menu-group{% if m.code == active_menu %} on{% endif %}" data-menu="{{ m.code }}">
       <button type="button" class="mg-h menu-head" aria-expanded="{{ 'true' if m.code == active_menu else 'false' }}"><span>{{ t(m.name) }}{% if m.is_pack %} <i class="tag">{{ t('팩') }}</i>{% endif %}</span><small>{{ m.screens|length }}</small></button>

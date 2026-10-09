@@ -1,0 +1,12 @@
+{# 메인(IA) 하위 메뉴 탭 — 모듈 지도(/) · 기능표 · 업무 프로세스. tabs = routers/home.py MAIN_TABS, tab = 현재 경로 #}
+<style>
+.main-tabs{display:flex;gap:4px;border-bottom:var(--bw) solid var(--c-line);margin:0 0 14px;flex-wrap:wrap}
+.main-tabs a{padding:8px 16px;font-size:var(--fs-md);color:var(--c-ink-2);border:var(--bw) solid transparent;border-bottom:none;border-radius:var(--r-md) var(--r-md) 0 0;margin-bottom:calc(-1 * var(--bw));text-decoration:none}
+.main-tabs a:hover{color:var(--c-ink);background:var(--c-surface-2)}
+.main-tabs a[aria-current="page"]{color:var(--c-ink);font-weight:700;background:var(--c-surface);border-color:var(--c-line)}
+</style>
+<nav class="main-tabs" aria-label="{{ t('메인') }}">
+  {% for href, label in (tabs or (('/', '모듈 지도'), ('/main/functions', '기능표'), ('/main/processes', '업무 프로세스'))) %}
+  <a href="{{ href }}"{% if (tab or '/') == href %} aria-current="page"{% endif %}>{{ t(label) }}</a>
+  {% endfor %}
+</nav>

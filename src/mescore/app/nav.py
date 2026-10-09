@@ -55,7 +55,7 @@ class Menu:
     seq: int = 0
 
 
-SYSTEM_NAME = "MES 표준플랫폼"
+SYSTEM_NAME = "Rodem MES Solution"
 MENUS: list[Menu] = []
 ALL_MENUS: list[Menu] = []
 SCREENS: list[Screen] = []

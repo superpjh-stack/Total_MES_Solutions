@@ -67,7 +67,7 @@ def create_app() -> FastAPI:
     pack = packs.current()                 # 병합 규칙 위반이면 여기서 PackError — 조용히 기동하지 않는다
     contracts.functions()                  # 계약 표가 깨졌으면 여기서 실패한다
     contracts.pack_functions()
-    app = FastAPI(title=nav.SYSTEM_NAME, description="MES 표준플랫폼 — 코어 + 업종 팩", version=pack.core_version,
+    app = FastAPI(title=nav.SYSTEM_NAME, description="Rodem MES Solution — 코어 + 업종 팩", version=pack.core_version,
                   docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.middleware("http")

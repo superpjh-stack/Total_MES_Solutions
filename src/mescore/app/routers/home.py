@@ -17,7 +17,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from .. import auth, contracts, nav, packs, rbac, stats, templating
+from .. import auth, contracts, guide, nav, packs, rbac, stats, templating
 from ..settings import get_settings
 from ..util import http
 
@@ -67,6 +67,79 @@ def main_page(request: Request, user: rbac.User = Depends(rbac.require_login)) -
         "cards": cards, "n_allowed": sum(1 for c in cards if c["allowed"]), "n_menus": len(nav.MENUS), "n_screens": len(nav.SCREENS),
         "n_functions": sum(1 for f in contracts.all_functions() if not f.is_batch), "n_batch": len(contracts.batch_functions()),
         "lineage": packs.current().lineage, "numbering": packs.current().numbering, "pack": packs.current(),
+    }, screen_id="CMN-02")
+
+
+# ── 메인(IA) 하위 메뉴 — 기능표 · 업무 프로세스 (읽기 전용 안내 · 어떤 테이블에도 쓰지 않는다) ──
+MAIN_TABS = (("/", "모듈 지도"), ("/main/functions", "기능표"), ("/main/processes", "업무 프로세스"))
+
+
+def _screen_link(screen_id: str, user: rbac.User) -> dict:
+    """화면 ID → 이름 · 경로 · 열 수 있는지(권한 칸 + 채널). 팩이 숨긴 화면은 open=False."""
+    try:
+        s = nav.by_id(screen_id)
+    except KeyError:
+        return {"screen_id": screen_id, "name": screen_id, "path": None, "open": False, "menu": None}
+    m = nav.menu_of_screen(screen_id)
+    visible = m is not None and any(x.code == m.code for x in nav.MENUS)
+    return {"screen_id": screen_id, "name": s.name, "path": s.path, "menu": m.name if m else None,
+            "open": bool(visible and rbac.can_read_menu(user.role_code, m.code))}
+
+
+@router.get("/main/functions", include_in_schema=False)
+def main_functions(request: Request, module: str = "", q: str = "", user: rbac.User = Depends(rbac.require_login)) -> HTMLResponse:
+    """메인 › 기능표 — contracts/function-list.md 의 기능을 모듈 · 화면별로. 현재 역할이 할 수 있는지(`user.can`)를 함께 보인다."""
+    menus = [m for m in nav.MENUS]
+    order = {m.module: i for i, m in enumerate(menus)}
+    rows = []
+    for f in contracts.all_functions():
+        if f.is_batch:
+            continue
+        if f.module not in order:                       # 팩이 숨긴 모듈의 기능은 보이지 않는다
+            continue
+        if module and f.module != module:
+            continue
+        if q and q not in f.id and q not in f.name and q not in f.text:
+            continue
+        link = _screen_link(f.screen_id, user)
+        rows.append({"id": f.id, "module": f.module, "screen_id": f.screen_id, "screen": link["name"], "path": link["path"] if link["open"] else None,
+                     "name": f.name, "kind": f.kind, "write": f.is_write, "api": f.api, "channels": list(f.channels),
+                     "roles": list(f.roles), "scope": f.scope, "text": f.text, "can": user.can(f.id)})
+    rows.sort(key=lambda r: (order.get(r["module"], 99), r["id"]))
+    by_module = []
+    for m in menus:
+        fs = [r for r in rows if r["module"] == m.module]
+        if fs:
+            by_module.append({"module": m.module, "name": m.name, "rows": fs,
+                              "n_write": sum(1 for r in fs if r["write"]), "n_can": sum(1 for r in fs if r["can"])})
+    batch = [{"id": f.id, "name": f.name, "api": f.api, "text": f.text} for f in contracts.batch_functions()]
+    return templating.render(request, "home/functions.html", {
+        "tabs": MAIN_TABS, "tab": "/main/functions", "groups": by_module, "batch": batch, "module": module, "q": q,
+        "module_options": [(m.module, m.name) for m in menus], "n_rows": len(rows), "n_can": sum(1 for r in rows if r["can"]),
+    }, screen_id="CMN-02")
+
+
+@router.get("/main/processes", include_in_schema=False)
+def main_processes(request: Request, code: str = "", user: rbac.User = Depends(rbac.require_login)) -> HTMLResponse:
+    """메인 › 업무 프로세스 — 화면들을 엮어 쓰는 업무 흐름 유형(app/guide.py). 단계마다 화면 링크 · 담당 역할 · 남는 데이터."""
+    roles = {r.code: r.name for r in rbac.roles()}
+    items = []
+    for p in guide.processes():
+        steps = []
+        for i, st in enumerate(p.steps, 1):
+            link = _screen_link(st.screen_id, user)
+            steps.append({"no": i, **link, "role": st.role, "role_name": roles.get(st.role, st.role), "mine": st.role == user.role_code,
+                          "action": st.action, "output": st.output})
+        items.append({"code": p.code, "name": p.name, "kind": p.kind, "when": p.when, "goal": p.goal, "steps": steps,
+                      "checks": list(p.checks), "measures": list(p.measures),
+                      "screens": len({s["screen_id"] for s in steps}), "n_open": sum(1 for s in steps if s["open"])})
+    kinds = []
+    for p in items:
+        if p["kind"] not in kinds:
+            kinds.append(p["kind"])
+    current = next((p for p in items if p["code"] == code), None)
+    return templating.render(request, "home/processes.html", {
+        "tabs": MAIN_TABS, "tab": "/main/processes", "processes": items, "kinds": kinds, "current": current, "code": code,
     }, screen_id="CMN-02")
 
 

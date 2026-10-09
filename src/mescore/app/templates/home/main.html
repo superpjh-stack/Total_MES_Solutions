@@ -61,6 +61,7 @@
 {% block body %}{% if device == 'mobile' %}{{ self.mobile_body() }}{% else %}
 {% set ns = namespace(w=0, r=0, n=0) %}
 {% for c in cards %}{% if c.level.startswith('입력') %}{% set ns.w = ns.w + 1 %}{% elif c.allowed %}{% set ns.r = ns.r + 1 %}{% else %}{% set ns.n = ns.n + 1 %}{% endif %}{% endfor %}
+{% include "home/_main_tabs.html" %}
 <section class="panel ia-top">
   <div class="intro">
     <h2>{{ t('메인') }} <small>{{ t('일하는 순서대로 — 왼쪽 위부터') }}</small></h2>
