@@ -192,6 +192,7 @@ collect.latest(equip_id) -> dict | None          # EQP-01 가동 현황
 collect.series(equip_id, tag, frm, to) -> list   # EQP-04 수집값 조회
 collect.aggregate(equip_id, tag, frm, to, agg) -> float | None   # on_result_closed 가 측정값 collect 소스를 채울 때 (agg = last|avg|max|min)
 collect.counts(frm=None, to=None) -> {total rejected resent last_at}   # IFC-01 수신 현황. None · '' 경계는 조건에서 뺀다(전체) · 정수
+measure.params_with_recorded(process_id, values, cur=None) -> list[dict]   # 화면 · 조회용 — 지금 선언(use_yn=Y) + 꺼졌거나 지워졌어도 pop_measure 기록이 있는 키(recorded_only=True · 입력 칸 없음 · measure_table/JSON 에만) — DEF-QA2-004 · 개발2
 ```
 - `equip_code` ↔ `bas_equipment` 1:1 검증. 태그 이름은 `bas_process_param.param_key`(source=collect) 와 같게 두면 실적 측정값으로 이어진다.
 - 제어 명령은 없다. 쓰기 방향 엔드포인트를 만들지 않는다.

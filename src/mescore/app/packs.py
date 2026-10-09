@@ -580,7 +580,7 @@ def has_hook(name: str) -> bool:
 
 
 def attrs_of(table: str) -> list[AttrSpec]:
-    """팩 속성 선언 — **라벨은 `t()` 를 거친 값**(DEF-QA1-003 · 회전 5). 라벨은 terms 키(중립어)로 쓴다: `공정구분` → `조리 공정구분`.
+    """팩 속성 선언 — **라벨은 `t()` 를 거친 값**(DEF-QA1-003 · 회전 5). 라벨은 terms 키(중립어)로 쓴다: `공정구분` → (terms `공정: X 공정`) `X 공정구분`.
     선택지(`choices`)는 저장되는 값이라 바꾸지 않는다. 원문 선언은 `current().attrs`."""
     return [replace(a, label=t(a.label)) for a in current().attrs.get(table, [])]
 
