@@ -729,8 +729,9 @@ def core_functions() -> dict:
     n_ob1 = (q1("select count(*) n from ifc_outbox") or {}).get("n", 0)
     srow = q1("select status, approved_at, approved_by from shp_shipment where id = %s", (sid,)) or {}
     R.chk("F-SHP-07", "status=승인 · approved_at/by", srow.get("status") == "승인" and srow.get("approved_at") is not None and srow.get("approved_by") == "admin", str(srow.get("status")))
-    if n_ob1 == n_ob0:
-        R.notes.append("F-SHP-07 승인 뒤 ifc_outbox 행 0 — 코어 단독은 after_commit_shipment_approved 훅이 없어 ERP 큐가 생기지 않는다(계약 문장 「after_commit 으로 ERP 큐」와 차이 · DEF 경미)")
+    ob = q1("select event, status from ifc_outbox order by id desc limit 1") or {}
+    R.chk("F-SHP-07", "승인 뒤 ERP 큐 — 코어 기본 훅 ifc_outbox `대기` 1행 (D-39 · DEF-QA1-007)",
+          n_ob1 == n_ob0 + 1 and ob.get("event") == "shipment_approved" and ob.get("status") == "대기", f"행 {n_ob0} → {n_ob1} · 마지막 {ob}")
     expect("F-SHP-07", "이미 승인 → 422", a.post(f"/shp/shipments/{sid}/approve"), 422)
     path_404("F-SHP-07", a, "POST", "/shp/shipments/{id}/approve")
     unauth("F-SHP-07", "POST", f"/shp/shipments/{sid}/approve")
@@ -1167,7 +1168,8 @@ def pack_terms_runtime(c: TestClient) -> tuple[list[str], int, int]:
             if re.search(r"\d|\(예시\)", node):
                 continue
             vis = node
-            # menus.rename 값은 팩이 쓴 최종 이름 — 노출로 세지 않는다 (D-38 · check_terms --pack 과 같은 규칙 · 아키텍트 회전 5 수정 — QA1 검토)
+            # menus.rename 값은 팩이 쓴 최종 이름 — 화면 글에서는 노출로 세지 않는다(D-38 ③ · check_terms --pack 과 같은 규칙 · 아키텍트 회전 5 수정).
+            # QA1 회전 6 검토: 이 면제만 두면 rename 값 자체에 든 terms 키(D-38 ① 「최종 꼴로 쓴다」 위반)가 사라진다 → rename_values_terms() 가 따로 센다.
             for v in sorted(set(getattr(P, "verbatim", set()) or set()) | set(terms.values()), key=len, reverse=True):
                 vis = vis.replace(v, " ")
             for k in sorted(keys, key=len, reverse=True):
@@ -1175,6 +1177,23 @@ def pack_terms_runtime(c: TestClient) -> tuple[list[str], int, int]:
                     bad.append(f"{key} `{k}`→`{terms[k]}` «{node[:40]}»")
                     vis = vis.replace(k, " ")
     return bad, len(pages), len(keys)
+
+
+def rename_values_terms() -> tuple[list[str], int]:
+    """D-38 ① — `menus.rename` 값(pack.verbatim)은 t() 를 거치지 않는 최종 이름이므로 **값 자체에** terms 키가 치환 안 된 채 들면 안 된다
+    (키 `X` 를 담은 이름이면 그 팩의 치환어 꼴로 쓴다). 치환 결과(terms 값)를 먼저 지우고 남은 글에서 키를 찾는다 — 화면 글 규칙과 같다."""
+    terms = {k: v for k, v in P.terms.items() if k != v}
+    vals = sorted(getattr(P, "verbatim", set()) or set())
+    bad = []
+    for name in vals:
+        vis = name
+        for v in sorted(set(terms.values()), key=len, reverse=True):
+            vis = vis.replace(v, " ")
+        for k in sorted(terms, key=len, reverse=True):
+            if k in vis:
+                bad.append(f"`{name}` 에 `{k}`(→`{terms[k]}`)")
+                vis = vis.replace(k, " ")
+    return bad, len(vals)
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -1227,8 +1246,8 @@ def shapes(ctx: dict) -> list[tuple[str, bool, str]]:
         url = re.sub(r"\{kind\}", "item", re.sub(r"\{[^}]+\}", "1", p))
         r = ANON.request(m, url, data={})
         n += 1
-        if (m, p) == ("POST", "/login/as") and r.status_code == 404:   # D-605 확정 — dev + 루프백이 아니면 경로가 없다(404) · 아키텍트 회전 5 수정(QA1 검토)
-            continue
+        if (m, p) == ("POST", "/login/as") and r.status_code == 404:   # D-605 확정 — dev + 루프백이 아니면 경로가 없다(404) · 아키텍트 회전 5 수정
+            continue                                                   # QA1 회전 6 검토: api-contract §2 와 같다 · dev/루프백 조합은 round5_contracts() 가 따로 본다
         if r.status_code != 401:
             leaks.append(f"{m} {url} → {r.status_code}")
     add(f"인증 없이 열리는 경로 = 계약 5종뿐 (라우트 {n} 전수 401)", not leaks, f"{leaks[:6]}")
@@ -1302,6 +1321,156 @@ def shapes(ctx: dict) -> list[tuple[str, bool, str]]:
     add("화면 GET JSON — ctx + screen_id · user · functions · template", r.status_code == 200 and all(k in b for k in ("screen_id", "user", "functions", "template")),
         f"없는 키 {[k for k in ('screen_id', 'user', 'functions', 'template') if k not in b]}")
     return res
+
+
+# ════════════════════════════════════════════════════════════════════════
+# ⑥ 회전 5 에 새로 생긴 계약 — ?sort= (D-37) · JOB-02 ?wo= (D-604) · 422 입력값 유지 · POST /logout · 로그인 dev_login/role_summary (D-605)
+# ════════════════════════════════════════════════════════════════════════
+def _sort_routes() -> list[str]:
+    """`sort` 쿼리를 선언한 GET 라우트 + 화면 GET 중 `?sort=` 모르는 열에 422(fields name=sort)를 주는 곳(BAS 마스터처럼 공용 해석기)."""
+    from fastapi.routing import APIRoute
+
+    def walk(routes, prefix=""):
+        for rt in routes:
+            inner = getattr(rt, "original_router", None)
+            if inner is not None:
+                ctx = getattr(rt, "include_context", None)
+                yield from walk(inner.routes, prefix + (getattr(ctx, "prefix", "") or ""))
+                continue
+            if isinstance(rt, APIRoute) and "GET" in rt.methods and "{" not in rt.path and any(q.name == "sort" for q in rt.dependant.query_params):
+                yield prefix + rt.path
+    return sorted(set(walk(app.routes)))
+
+
+def round5_contracts() -> tuple[list[tuple[str, bool, str]], list[tuple[str, bool, str]]]:
+    """(G-C02 행들, G-C03 행들). 쓰기 없음 — 팩 DB 에서도 돈다(422 · 404 · GET · 로그아웃만)."""
+    import ast
+    f2: list[tuple[str, bool, str]] = []
+    f3: list[tuple[str, bool, str]] = []
+    a = login("admin")
+    # ── ?sort= (D-37 · interfaces §8) ─────────────────────────────────
+    declared = _sort_routes()
+    found, nosort = {}, []
+    for s in nav.SCREENS:
+        if nav.menu(s.menu_code).hidden or "?" in (s.probe or s.path):
+            continue
+        r = a.get(s.path, params={"sort": "__qa1_nope"})
+        fl = (js(r).get("fields") or [{}])[0] if r.status_code == 422 else {}
+        if r.status_code == 422 and fl.get("name") == "sort":
+            m = re.search(r"허용 (\[.*\])", fl.get("reason", ""))
+            found[s.path] = ast.literal_eval(m.group(1)) if m else []
+    hidden_paths = {s.path for s in nav.SCREENS if nav.menu(s.menu_code).hidden}      # 팩이 숨긴 메뉴의 화면은 403 이라 정렬을 볼 수 없다(채널 · G-C17 이 본다)
+    missing = [p for p in declared if p not in found and p not in hidden_paths]
+    f2.append(("?sort= 모르는 열 → 422 JSON {fields[name=sort]} — sort 를 받는 목록 전부", not missing and bool(found),
+               f"목록 {len(found)} {sorted(found)} · 선언했는데 422 아님 {missing}"))
+    bad = []
+    n = 0
+    for path, cols in found.items():
+        for col in cols:
+            for sv in (col, "-" + col):
+                n += 1
+                r = a.get(path, params={"sort": sv})
+                if r.status_code != 200:
+                    bad.append(f"{path}?sort={sv} → {r.status_code}")
+        if len(cols) >= 2:
+            n += 1
+            r = a.get(path, params={"sort": f"{cols[0]},-{cols[1]}"})
+            if r.status_code != 200:
+                bad.append(f"{path}?sort={cols[0]},-{cols[1]} → {r.status_code}")
+        for sv in (f"{cols[0] if cols else 'id'};drop table x", f"{cols[0] if cols else 'id'} desc", "(select 1)", "1"):
+            n += 1
+            r = a.get(path, params={"sort": sv})
+            if r.status_code != 422:
+                bad.append(f"{path}?sort={sv!r} → {r.status_code} (기대 422)")
+    f2.append(("?sort= 허용 열만 — 허용 열 오름 · 내림 · 여럿 200 · 허용 밖(SQL 조각 포함) 422", not bad and n > 0, f"호출 {n} · 어긋남 {len(bad)} {bad[:4]}"))
+    r = a.get("/sys/users", params={"sort": "__qa1_nope"}, headers=HTML)
+    f2.append(("?sort= 모르는 열 (브라우저) → 422 오류 화면 (api-contract §2 「그 밖 브라우저 GET」)", r.status_code == 422 and "text/html" in r.headers.get("content-type", ""), f"{r.status_code}"))
+    if "/sys/users" in found and "login_id" in found["/sys/users"]:
+        up = [x.get("login_id") for x in js(a.get("/sys/users", params={"sort": "login_id"})).get("rows") or []]
+        dn = [x.get("login_id") for x in js(a.get("/sys/users", params={"sort": "-login_id"})).get("rows") or []]
+        f2.append(("?sort= 실제 순서 — SYS-01 login_id 오름 · 내림", len(up) >= 2 and up == sorted(up) and dn == sorted(dn, reverse=True), f"오름 {up[:3]} · 내림 {dn[:3]}"))
+    # ── JOB-02 ?wo= (D-604) ───────────────────────────────────────────
+    wo = q1("select w.id, w.work_order_no from job_work_order w where exists (select 1 from pop_work_result r where r.work_order_id = w.id) order by w.id desc limit 1")
+    if wo:
+        n_res = (q1("select count(*) n from pop_work_result where work_order_id = %s", (wo["id"],)) or {}).get("n")
+        got = {}
+        for k in (str(wo["id"]), wo["work_order_no"]):
+            b = js(a.get("/job/status", params={"wo": k}))
+            res = b.get("results") or []
+            got[k] = ((b.get("detail") or {}).get("id"), len(res), all(isinstance(x.get("measures"), list) for x in res))
+        ok = all(v == (wo["id"], n_res, True) for v in got.values())
+        f2.append(("JOB-02 ?wo= 지시 id · 지시 번호 둘 다 같은 지시 + 실적 전부 + 실적별 measures (D-604)", ok, f"{wo['work_order_no']} 실적 {n_res} · {got}"))
+        codes = [a.get("/job/status", params={"wo": k}).status_code for k in ("QA1-NOPE-W", NOPE_ID)]
+        f2.append(("JOB-02 ?wo= 없는 번호 · 없는 id → 404 (D-604)", codes == [404, 404], f"{codes}"))
+        meas = [m for x in (js(a.get("/job/status", params={"wo": wo["id"]})).get("results") or []) for m in x.get("measures") or []]
+        keys_ok = all({"param_key", "label", "value", "deviated", "recorded"} <= set(m) for m in meas)
+        unrec_ok = all(m.get("value") == packs.t("미수집") for m in meas if not m.get("recorded"))
+        f2.append(("JOB-02 측정값 — 키 · 범위 이탈 표시 · 기록 없는 선언 키 `미수집` (D-604 · G-C24 표기)", keys_ok and unrec_ok, f"측정값 {len(meas)} · 이탈 {sum(1 for m in meas if m.get('deviated'))} · 미수집 {sum(1 for m in meas if not m.get('recorded'))}"))
+    else:
+        f2.append(("JOB-02 ?wo= 드릴다운 (D-604)", False, "실적 있는 지시 없음 — 미검증"))
+    # ── 422 입력값 유지 (api-contract §2) ────────────────────────────
+    secret = "QaEcho-" + uuid.uuid4().hex[:10]
+    lid = "qa1echo" + uuid.uuid4().hex[:6]
+    form = {"login_id": lid, "user_name": "QA 입력값", "password": secret, "role_code": "QA1_NOPE_ROLE"}
+    c = login("admin", fresh=True)
+    r = c.post("/sys/users", data=form, headers={**HTML, "referer": "http://testserver/sys/users"}, follow_redirects=False)
+    ck = r.headers.get("set-cookie", "")
+    g = c.get(r.headers.get("location") or "/sys/users", headers=HTML)
+    pw_inputs = re.findall(r'<input[^>]*name="password"[^>]*>', g.text)
+    f3.append(("422 폼 POST → 303 · 다시 그린 폼에 입력값 (login_id · 이름)", r.status_code == 303 and f'value="{lid}"' in g.text and "QA 입력값" in g.text, f"{r.status_code} · login_id {f'value={chr(34)}{lid}' in g.text}"))
+    f3.append(("422 입력값 유지 — 비밀번호 칸은 비움 · 비밀 값이 화면 · 쿠키 어디에도 없음", secret not in g.text and secret not in ck and all('value=""' in x or "value=" not in x for x in pw_inputs),
+               f"화면 {secret in g.text} · 쿠키 {secret in ck} · password 칸 {pw_inputs[:1]}"))
+    g2 = c.get("/sys/users", headers=HTML)
+    f3.append(("422 입력값은 알림 한 번만 (다음 GET 에 없음)", lid not in g2.text, f"{lid in g2.text}"))
+    rj = c.post("/sys/users", data=form)
+    f3.append(("422 JSON 에는 입력값 · 비밀 값 없음", rj.status_code == 422 and "values" not in js(rj) and secret not in rj.text, f"{rj.status_code} 키 {sorted(js(rj))}"))
+    if (q1("select count(*) n from sys_user where login_id = %s", (lid,)) or {}).get("n"):
+        f3.append(("422 입력값 검사가 행을 만들지 않음", False, f"{lid} 생김"))
+    # ── POST /logout 전용 (api-contract §2 · DEF-QA3-007) ─────────────
+    c = login("admin", fresh=True)
+    r1 = c.get("/logout", follow_redirects=False)
+    s1 = c.get("/sys/users").status_code
+    r2 = c.post("/logout", headers=HTML, follow_redirects=False)
+    s2 = c.get("/sys/users").status_code
+    f3.append(("로그아웃 GET 405 (세션 유지) · POST 303 → 그 세션 401", (r1.status_code, s1, r2.status_code, s2) == (405, 200, 303, 401), f"GET {r1.status_code} → {s1} · POST {r2.status_code} {r2.headers.get('location')} → {s2}"))
+    # ── 로그인 화면 dev_login · /login/as 조합 · 쿠키 (D-605) ─────────
+    from mescore.app.settings import reset_cache
+    old_env = os.environ.get("MES_ENV")
+    combos = []
+    try:
+        for env, host, want in (("dev", "127.0.0.1", 200), ("dev", "::1", 200), ("dev", "10.1.2.3", 404), ("dev", "testclient", 404), ("prod", "127.0.0.1", 404), ("", "127.0.0.1", 404)):
+            os.environ["MES_ENV"] = env
+            reset_cache()
+            cl = TestClient(app, raise_server_exceptions=False, client=(host, 50000))
+            page = cl.get("/login", headers=HTML).text
+            r = cl.post("/login/as", data={"role": "ADMIN"})
+            combos.append((env or "(빈 값)", host, r.status_code, "/login/as" in page, want))
+        os.environ["MES_ENV"] = "prod"
+        reset_cache()
+        from mescore.app.main import create_app                       # 세션 미들웨어 Secure 는 앱을 만들 때 정해진다 — prod 로 새로 만든다
+        cl = TestClient(create_app(), raise_server_exceptions=False)
+        ck_prod = cl.post("/login", data={"login_id": "admin", "password": PW}).headers.get("set-cookie", "").lower()
+    finally:
+        if old_env is None:
+            os.environ.pop("MES_ENV", None)
+        else:
+            os.environ["MES_ENV"] = old_env
+        reset_cache()
+    wrong = [x for x in combos if x[2] != x[4] or x[3] != (x[4] == 200)]
+    f3.append(("POST /login/as = MES_ENV=dev 그리고 루프백 주소일 때만 · 로그인 화면 개발용 버튼도 같은 조건 (D-605)", not wrong,
+               f"(env 주소 응답 버튼 기대) {combos}"))
+    f3.append(("세션 쿠키 prod — HttpOnly · SameSite=Lax · Secure", all(x in ck_prod for x in ("httponly", "samesite=lax", "secure")), ck_prod.split(";", 1)[-1][:80]))
+    # role_summary — DB 권한 표 그대로 · 비밀 없음
+    rs = js(ANON.get("/login")).get("role_summary")
+    if isinstance(rs, list):
+        want = {r.code: sorted(m.code for m in nav.MENUS if rbac.cell(r.code, m.code).level == rbac.LEVEL_WRITE) for r in rbac.roles()}
+        got = {x.get("code"): sorted(w.get("code") for w in x.get("write_menus") or []) for x in rs}
+        txt = json.dumps(rs, ensure_ascii=False)
+        f3.append(("로그인 role_summary = DB 역할 · 입력 칸 메뉴 그대로 · 비밀 없음", got == want and PW not in txt and "password" not in txt,
+                   f"역할 {len(rs)} · 어긋남 {[k for k in set(want) | set(got) if want.get(k) != got.get(k)]}"))
+    else:
+        f3.append(("로그인 role_summary (GET /login JSON)", False, f"role_summary 없음 {type(rs).__name__}"))
+    return f2, f3
 
 
 def channels_check() -> tuple[list[str], int]:
@@ -1405,6 +1574,11 @@ def main() -> int:
     sh = shapes(ctx)
     bad_sh = [f"{n}: {m}" for n, ok, m in sh if not ok]
     R.row("G-C03", "응답 모양 · 인증 없는 경로 · 503 (api-contract §2)", "PASS" if not bad_sh else "FAIL", f"{tag}검사 {len(sh)} · 통과 못한 {len(bad_sh)} {bad_sh[:4]}")
+    r2, r3 = round5_contracts()
+    for rows_, gid, title in ((r2, "G-C02", "회전 5 계약 — ?sort= (D-37) · JOB-02 ?wo= (D-604)"), (r3, "G-C03", "회전 5 계약 — 422 입력값 유지 · POST /logout · /login/as · role_summary")):
+        b_ = [f"{n}: {m}" for n, ok, m in rows_ if not ok]
+        R.row(gid, title, "PASS" if not b_ else "FAIL", f"{tag}검사 {len(rows_)} · 통과 못한 {len(b_)} {b_[:3]}")
+    sh = sh + r2 + r3
     # ⑤ 채널
     chb, chn = channels_check()
     R.row("G-C13", "채널 밖 화면 403 (core.yaml: channels)", "PASS" if not chb else "FAIL", f"{tag}호출 {chn} · 위반 {len(chb)} {chb[:5]}")
@@ -1436,6 +1610,8 @@ def main() -> int:
         mbad = [f"{fid} `{','.join(unreplaced(m + ' ' + ' '.join(ls)))}` «{(m + ' ' + ' '.join(ls))[:50]}»" for fid, m, ls in MSGS if unreplaced(m + ' ' + ' '.join(ls))]
         R.row("G-P05", "팩 용어 — JSON 오류 message · fields.label 치환", "PASS" if not mbad else "FAIL", f"{tag}오류 응답 {len(MSGS)} · 치환 안 된 {len(mbad)} {mbad[:4]}")
         R.row("G-P05", "팩 용어 — 치환 안 된 terms 키 노출 0 (화면 글)", "PASS" if not bad else "FAIL", f"{tag}화면 {n} · 바뀌는 키 {nk} · 노출 {len(bad)} {bad[:4]}")
+        rb, nr = rename_values_terms()
+        R.row("G-P05", "팩 용어 — menus.rename 값에 치환 안 된 terms 키 0 (D-38 ①)", "PASS" if not rb else "FAIL", f"{tag}rename 값 {nr} · 키 든 값 {len(rb)} {rb[:4]}")
         pages = screen_html(a)
         fh = forbidden_runtime(pages)
         R.row("G-C23", "팩 배포 화면의 금지어 (참고 — 팩 용어는 허용)", "WARN" if fh else "PASS", f"{tag}{len(fh)} (팩 terms · 팩 화면이 내는 업종어는 정상)")

@@ -1,4 +1,100 @@
-# QA1 리포트 — 기능 · 계약 · 용어 (회전 4 · 2026-10-09)
+# QA1 리포트 — 기능 · 계약 · 용어 (회전 6 재판정 · 2026-10-09)
+
+> 담당 QA1. 회전 6 은 **재판정** — 회전 4 결함 10건을 그 재현 절차 그대로 다시 돌리고, 코어 단독 + 팩 3 으로 검사기를 다시 돌리고, 회전 5 새 기능을 계약에 대조했다. **고치지 않았다** — 고친 것은 내 검사기 `src/mescore/tools/check_screens.py` 와 이 리포트뿐.
+> 기준 커밋 **`967021f`** (gate-full 42/42 PASS · `outputs/gate-r5-final.txt`). DB `mes_qa_db`(쓰기) · 팩은 `mes_<팩>_db` 읽기 · 호출만 · 서버 포트 8051(재현 때만 띄우고 내렸다).
+
+## 회전 6 재판정
+
+### R6-1. 결함 표 (회전 4 의 10건 + 새 1건)
+
+| ID | 등급(회전 4) | 판정 | 고친 커밋 | 실측 (회전 6) | 검증 명령 |
+|---|---|---|---|---|---|
+| DEF-QA1-001 `POST /login/as` 비밀번호 없는 로그인 | 중대 | **해결** | `de9feba` · `f6afe88` · `02d6d16` | 8051 서버(.env `MES_ENV=dev`): 루프백 `curl localhost` → 200 · 그 세션 `/sys/users` 200 (**D-605 확정 · api-contract §2 44행이 허용한 조합**) / 같은 서버를 LAN 주소 `192.168.219.101` 로 → **404** · `/sys/users` 401 / `MES_ENV=prod` → 루프백도 **404**. `MES_ENV=` (빈 값) → `prod`. TestClient 6조합(dev×127.0.0.1 · ::1 = 200 · dev×10.1.2.3 · dev×`testclient` · prod · 빈 값 = 404) 전부 계약대로 · 로그인 화면 개발용 버튼도 같은 조건 | `MES_ENV=dev\|prod … uvicorn … --host 0.0.0.0 --port 8051` → `curl -X POST <주소>:8051/login/as -d role=ADMIN` · `check_screens` ⑥ |
+| DEF-QA1-002 `check_terms --pack` 거짓 PASS | 중대 | **해결** | `b2761d4` | `scan_pack` 이 화면 글 조각 · 키마다 판정(`exposed_keys`) — 덮어쓰기 버그 없음. 3팩 `check_terms --pack` PASS 와 `check_screens` G-P05(화면 글) PASS 가 일치(kimchi 64 · foodservice 56 · printfilm 59 화면 노출 0). 단 두 도구 모두 rename 값을 통째로 빼므로 rename 값 안의 키는 못 본다 → 새 행으로 보강(R6-3 · DEF-QA1-011) | `MES_PACK=<팩> uv run python src/mescore/tools/check_terms.py --pack` |
+| DEF-QA1-003 G-P05 FAIL 3팩 (rename · attrs 라벨) | 중대 | **부분** | `9dda6ac` · `8e5710c`(printfilm) · `c547a59`(foodservice) · `3c01d38`(kimchi) | 화면 글 노출 **3팩 0** (회전 4: printfilm 180 · foodservice 61 · kimchi 1) · attrs 라벨 `t()` 정상(`설비구분` · `조리공정구분` 사라짐). printfilm rename `Job 관리` · `작업 실적 (POP)` · `작업 실적 현황` · foodservice `조리 실적 (POP)` 최종 꼴. **남은 것**: kimchi `menus.rename.qua = 품질이상` 이 terms 키 `이상`(→`품질 이슈`)을 담는다 — D-38 ① 위반, 사이드바 64 화면 전부 → **DEF-QA1-011 로 분리** | `MES_PACK=<팩> uv run python src/mescore/tools/check_screens.py` |
+| DEF-QA1-004 숫자 아닌 경로 키 422 | 경미 | **해결** | `e484766` | 기능 136 **136/136 PASS**(회전 4: 115 · FAIL 21) · 8051 서버 관리자 `POST /ord/orders/abc` → **404** `{"code":"not_found"}` · `GET /mat/lots/abc/label` → 404. 팩 3 도 FAIL 0 (kimchi F-X-AGE-04 포함) | `check_screens --reset-db` · `curl -b jar -X POST localhost:8051/ord/orders/abc` |
+| DEF-QA1-005 채널 배지 `현황판` t() 누락 | 경미 | **해결** | `d7f91b6` · `02d6d16` · `9de6316` | 용어 표지 치환 뒤 화면 60 날것 중립어 **0** (회전 4: 58 화면 `현황판`) · 정적 템플릿 스캔 0 · `check_terms` `템플릿 t() 누락 0 PASS` | `check_screens` ③ · `uv run python src/mescore/tools/check_terms.py` |
+| DEF-QA1-006 코어 금지어 (QA 도구) | 중대 | **해결** | (QA2 `5d9c581` · QA3 `f5a19b7` 상태) | `check_terms.py` → `G-C23 코어 금지어 0 PASS 파일 160 · 위반 0` · check_screens 정적 행도 0 | `uv run python src/mescore/tools/check_terms.py` |
+| DEF-QA1-007 F-SHP-07 코어 단독 ERP 큐 0 | 경미 | **해결** | `2d051e5` (D-39) | 승인 전후 `ifc_outbox` **1 → 2**, 마지막 행 `shipment_approved · 대기`. 검사기의 메모를 **검사 항목으로 올렸다**(F-SHP-07 9 항목 PASS) | `check_screens --reset-db` (F-SHP-07) · `psql -d mes_qa_db -c "select event,status,count(*) from ifc_outbox group by 1,2"` |
+| DEF-QA1-008 `make db-schema` 가 DSN 무시 | 중대 | **해결** | `14bd28f` | `MES_PG_DSN=postgresql:///mes_qa_db make -n db-schema` → `db-schema → mes_qa_db (drop schema public cascade)` · `psql -d "dbname=mes_qa_db …"` — `mes_core_db` 안 건드림. `db-create` · `backup` 도 같은 DB | `MES_PG_DSN=postgresql:///mes_qa_db make -n db-schema db-create backup` |
+| DEF-QA1-009 printfilm 지표 정의 쓸 역할 0 | 경미 | **해결** | `8e5710c` | `packs/printfilm/seed/permissions.csv:46` `kpi,ADMIN,입력,지표` · `check_screens` printfilm G-C17 60/60 칸 · DB = 병합본 | `MES_PACK=printfilm … check_screens.py` |
+| DEF-QA1-010 gate 가 QA1 의 G-C13 · G-C23 · 팩 G-P05 를 안 읽음 | 경미 | **해결** | `b2761d4` | `gate.py:623` `check_screens` → G-C02 · G-C03 · G-C13 · G-C17 · G-C23 (나쁜 쪽 우선) · `gate.py:700` 팩 G-P05 를 `check_screens` 행과 합침. 남은 틈: 팩 게이트는 check_screens 의 **G-P05 만** 읽는다(팩 G-C02 · G-C03 행은 판정표에 안 들어감 — 지금 모두 PASS라 영향 없음 · 참고) | `grep -n check_screens src/mescore/tools/gate.py` |
+| **DEF-QA1-011 (새)** kimchi rename `품질이상` 에 terms 키 `이상` | **경미** | **미해결(새)** | — | `packs/kimchi/pack.yaml:49` `qua: 품질이상` · `:32` `이상: 품질 이슈`. rename 값은 `t()` 를 거치지 않으므로(D-38 ①) 사이드바 · 메뉴 이름에 `이상` 이 그대로 — 다른 화면은 `품질 이슈`. 회전 4 에 없던 값(`3c01d38` 개발3 「rename.qua 품질이상」). 화면 글 G-P05 는 rename 값을 빼서(아키텍트 `0fdfde7`) 이것을 못 봤다 | `MES_PACK=kimchi uv run python src/mescore/tools/check_screens.py` → `G-P05 팩 용어 — menus.rename 값에 치환 안 된 terms 키 0 (D-38 ①) FAIL [kimchi] rename 값 10 · 키 든 값 1 ['`품질이상` 에 `이상`(→`품질 이슈`)']` |
+
+- **기대(DEF-QA1-011)**: D-38 ① "rename 값은 terms 키를 담지 않게 **최종 꼴로** 쓴다" — kimchi 는 치환어를 쓴 최종 꼴(예: `품질 이슈`)로 쓰거나, 아키텍트가 D-38(가설)에 "붙여 쓴 합성어는 예외" 를 적는다. 담당: 개발3(kimchi `pack.yaml`) · 아키텍트(D-38 판정).
+
+**남은 수 — 치명 0 · 중대 0 · 경미 1** (DEF-QA1-011). 회전 4 결함 10건: 해결 9 · 부분 1(003 — 남은 몫을 011 로 분리).
+
+### R6-2. 아키텍트의 검사기 수정 2곳 검토 (`git show 0fdfde7 e3819c5 -- src/mescore/tools/check_screens.py`)
+
+| 커밋 | 바꾼 것 | 계약 대조 | 결론 |
+|---|---|---|---|
+| `e3819c5` G-C03 | 인증 없는 경로 전수에서 `POST /login/as → 404` 를 위반으로 세지 않음 | `api-contract.md` §2 44행 · D-605(확정): dev + 루프백 아니면 **404**(경로 없음) — 인증 없이 "열리는" 경로가 아니다. 404 **만** 면제하고 200 · 422 등은 여전히 위반으로 센다. 비밀번호 없는 로그인 행(`/login/as` 200 → `/sys/users` 200 이면 FAIL)도 그대로 | **유지** — 기대값을 낮추지 않았다. 다만 TestClient 기본 주소(`testclient`)만 보던 것을 보강: dev/prod/빈 값 × 루프백(127.0.0.1 · ::1)/비루프백 6조합과 로그인 화면 버튼을 따로 검사(R6-3) |
+| `0fdfde7` 팩 G-P05 | 화면 글에서 terms 값과 함께 `pack.verbatim`(= `menus.rename` 값)도 지운 뒤 키를 찾음 | D-38 ③(판정 단위) · `check_terms --pack` 과 같은 규칙이라 화면 글 판정으로는 맞다. 그러나 D-38 ① 은 "rename 값은 terms 키를 담지 않게 최종 꼴로" 를 **요구**한다 — 이 면제만 두면 rename 값 안의 날것 키(회전 4 printfilm `작업지시 관리` 같은 것)가 통째로 사라진다. 실제로 kimchi `품질이상` 이 이 면제로 가려졌다 | **기대값을 낮춘 부분이 있다** → 면제는 두되(같은 노출을 64 번 세지 않게) **rename 값 자체를 검사하는 행을 새로 넣어 기대값을 되돌렸다**: `G-P05 팩 용어 — menus.rename 값에 치환 안 된 terms 키 0 (D-38 ①)`. 코드 `rename_values_terms()` |
+
+### R6-3. 회전 5 새 기능 — 계약 대조 (검사기 ⑥ `round5_contracts` · 코어 + 팩 3 모두 PASS)
+
+| 기능 | 계약 | 실측 (코어 `mes_qa_db`) |
+|---|---|---|
+| `?sort=` 정렬 | D-37 · interfaces §8 `http.sort_clause` — 허용 열만 · 모르는 열 422 · 비면 기본 | `sort` 를 받는 목록 **17** (BAS 마스터 8 · BOM · JOB-01 · MAT 입고 · LOT · QUA 검사 · 이상 · EQP 점검 · 고장 · SYS-01) — 라우트가 `sort` 를 선언한 것 전부 포함. 모르는 열 → **422** `fields[name=sort]` (사유에 공개 이름만 · SQL 식 없음). 허용 열 오름 · 내림 · 여럿 · SQL 조각(`x;drop table x` · `x desc` · `(select 1)` · `1`) **305 호출 어긋남 0**. 브라우저 GET → 422 오류 화면(api-contract §2). SYS-01 `login_id` 오름/내림 실제 순서 일치. printfilm 은 숨긴 eqp 2 목록 제외(403) |
+| JOB-02 `?wo=` 드릴다운 | D-604 확정 — id 또는 지시 번호 · 없으면 404 · 실적별 측정값 | `?wo=5` 와 `?wo=W-EX-0001` → 같은 지시 · 실적 2 = DB 2 · 실적마다 `measures`. 없는 번호 · `999999999` → **404 · 404**. 측정값 4(이탈 1 표시 · 기록 없는 선언 키 `미수집` 1). 팩 3(팩 접두 번호) 도 PASS |
+| 422 입력값 유지 | api-contract §2 — 303 + 알림 `values` · 비밀 칸은 싣지 않음 · JSON 422 에는 없음 | `POST /sys/users`(없는 역할) 브라우저 → 303 → 폼에 `login_id` · 이름 다시 채움 · **`<input type="password" name="password" value="">`** · 비밀 값은 화면 · Set-Cookie 어디에도 없음 · 다음 GET 에는 사라짐(알림 한 번) · JSON 422 키 `code fields message` 뿐 · 행 생성 0 |
+| `POST /logout` 전용 | api-contract §2 — GET 405 | `GET /logout` **405** (세션 유지 200) · `POST /logout` 303 `/login` → 그 세션 **401**. 8051 서버 `curl localhost:8051/logout` → 405 |
+| 로그인 `dev_login` · `role_summary` | D-605 · api-contract §2 · 세션 쿠키 | 개발용 역할 버튼은 dev + 루프백일 때만(6조합 일치) · prod 로 만든 앱의 세션 쿠키 `httponly; samesite=lax; secure` · `role_summary` = DB 역할 × 입력 칸 메뉴 그대로(어긋남 0) · 비밀번호 · `password` 글자 없음 |
+
+### R6-4. 검사기 원문 판정 줄 (`967021f` + 이 회전 검사기 · 소요 코어 23s)
+
+코어 단독 — `MES_PACK= uv run python src/mescore/tools/check_screens.py --reset-db` (종료 0)
+```
+G-C02  기능 136 계약 호출 (정상 + 오류 계약)                                       PASS  PASS 136/136 · FAIL 0 [] · 미검증 0 [] · 검사 677건 · DB mes_qa_db
+G-C17  권한 칸 데이터 = core.yaml                                            PASS  칸 48 (입력 19 · 조회 22 · 없음 7) · DB 불일치 0
+G-C17  역할 × 기능 전부 (없음 · 조회 쓰기 403 · 입력 통과)                             PASS  역할 4 ['ADMIN', 'FIELD', 'PROD', 'QA'] · 호출 522 (허용 281 · 거부 241) · 위반 0 []
+G-C17  칸별 판정 (화면 GET + 기능)                                             PASS  48/48 칸 PASS · FAIL []
+G-C17  범위(scopes) 4종 — 입고검사 · 승인 · 지표 · 재전송                            PASS  8 조합 · 어긋남 0 (호출 판정은 위 전수에 포함)
+G-C03  화면 51 + 공통 200 · placeholder 0                                  PASS  200 54 · placeholder 0 · 문제 0
+G-C03  응답 모양 · 인증 없는 경로 · 503 (api-contract §2)                        PASS  검사 31 · 통과 못한 0 []
+G-C02  회전 5 계약 — ?sort= (D-37) · JOB-02 ?wo= (D-604)                   PASS  검사 7 · 통과 못한 0 []
+G-C03  회전 5 계약 — 422 입력값 유지 · POST /logout · /login/as · role_summary  PASS  검사 8 · 통과 못한 0 []
+G-C13  채널 밖 화면 403 (core.yaml: channels)                               PASS  호출 155 · 위반 0 []
+G-C23  화면 HTML 금지어 0 (DB · 시드 값 포함)                                    PASS  화면 60 · 금지어 44개 · 노출 0 []
+G-C23  코어 파일 금지어 0 (정적)                                                PASS  파일 160 · 위반 0 []
+G-C23  날것 중립어 0 — 용어 표지 치환 후 화면 글 (t() 누락)                             PASS  화면 60 · 표지 뒤에도 남은 곳 0 [] · (정적 템플릿 스캔 0)
+```
+
+팩 3 — `MES_PACK=<팩> uv run python src/mescore/tools/check_screens.py` (G-P05 · 회전 5 · 응답 모양 행만 · 나머지 G-C02 · G-C17 · G-C13 전부 PASS — kimchi 156/156 · 108칸 · foodservice 132/132 · 72칸 · printfilm 156/156 · 60칸)
+```
+G-C03  응답 모양 · 인증 없는 경로 · 503 (api-contract §2)                        PASS  [kimchi] 검사 27 · 통과 못한 0 []
+G-C02  회전 5 계약 — ?sort= (D-37) · JOB-02 ?wo= (D-604)                   PASS  [kimchi] 검사 7 · 통과 못한 0 []
+G-C03  회전 5 계약 — 422 입력값 유지 · POST /logout · /login/as · role_summary  PASS  [kimchi] 검사 8 · 통과 못한 0 []
+G-P05  팩 용어 — JSON 오류 message · fields.label 치환                        PASS  [kimchi] 오류 응답 91 · 치환 안 된 0 []
+G-P05  팩 용어 — 치환 안 된 terms 키 노출 0 (화면 글)                               PASS  [kimchi] 화면 64 · 바뀌는 키 12 · 노출 0 []
+G-P05  팩 용어 — menus.rename 값에 치환 안 된 terms 키 0 (D-38 ①)                FAIL  [kimchi] rename 값 10 · 키 든 값 1 ['`품질이상` 에 `이상`(→`품질 이슈`)']
+G-C03  응답 모양 · 인증 없는 경로 · 503 (api-contract §2)                        PASS  [foodservice] 검사 27 · 통과 못한 0 []
+G-C02  회전 5 계약 — ?sort= (D-37) · JOB-02 ?wo= (D-604)                   PASS  [foodservice] 검사 7 · 통과 못한 0 []
+G-C03  회전 5 계약 — 422 입력값 유지 · POST /logout · /login/as · role_summary  PASS  [foodservice] 검사 8 · 통과 못한 0 []
+G-P05  팩 용어 — JSON 오류 message · fields.label 치환                        PASS  [foodservice] 오류 응답 76 · 치환 안 된 0 []
+G-P05  팩 용어 — 치환 안 된 terms 키 노출 0 (화면 글)                               PASS  [foodservice] 화면 56 · 바뀌는 키 16 · 노출 0 []
+G-P05  팩 용어 — menus.rename 값에 치환 안 된 terms 키 0 (D-38 ①)                PASS  [foodservice] rename 값 12 · 키 든 값 0 []
+G-C03  응답 모양 · 인증 없는 경로 · 503 (api-contract §2)                        PASS  [printfilm] 검사 27 · 통과 못한 0 []
+G-C02  회전 5 계약 — ?sort= (D-37) · JOB-02 ?wo= (D-604)                   PASS  [printfilm] 검사 7 · 통과 못한 0 []
+G-C03  회전 5 계약 — 422 입력값 유지 · POST /logout · /login/as · role_summary  PASS  [printfilm] 검사 8 · 통과 못한 0 []
+G-P05  팩 용어 — JSON 오류 message · fields.label 치환                        PASS  [printfilm] 오류 응답 88 · 치환 안 된 0 []
+G-P05  팩 용어 — 치환 안 된 terms 키 노출 0 (화면 글)                               PASS  [printfilm] 화면 59 · 바뀌는 키 9 · 노출 0 []
+G-P05  팩 용어 — menus.rename 값에 치환 안 된 terms 키 0 (D-38 ①)                PASS  [printfilm] rename 값 10 · 키 든 값 0 []
+```
+
+`gate.per_gate` 로 읽은 값: 코어 G-C02 · G-C03 · G-C13 · G-C17 · G-C23 **PASS** / kimchi **G-P05 FAIL**(DEF-QA1-011) · G-C23 WARN(팩 용어 참고) / foodservice · printfilm G-P05 **PASS**.
+→ 다음 `make gate-full` 은 kimchi G-P05 가 FAIL 로 바뀐다(검사기가 기대값을 되돌린 결과 · 의도). 또 `check_screens.py` 는 `outputs/core.sha256` 대상이라 **아키텍트가 `make core-hash` 를 다시 찍어야** 코어 무변경 검사가 이 수정을 코어 변경으로 세지 않는다.
+
+### R6-5. 이 회전에 검사기에서 바꾼 것 (`check_screens.py`)
+- F-SHP-07: `ifc_outbox` 메모 → 검사 항목(승인 뒤 `shipment_approved · 대기` 1행 · D-39).
+- 팩 G-P05: `rename_values_terms()` — rename 값 안의 terms 키(D-38 ①) 새 행. 아키텍트의 화면 글 면제는 주석에 검토 결과를 적고 유지.
+- ⑥ `round5_contracts()` — `?sort=` · JOB-02 `?wo=` · 422 입력값 유지 · `POST /logout` · `/login/as` 6조합 · prod 세션 쿠키 · `role_summary` (G-C02 · G-C03 행 1개씩 · 쓰기 없음 · 팩에서도 돈다). `MES_ENV` 는 바꿨다가 원래 값으로 되돌린다.
+- G-C03 `/login/as` 404 면제는 검토 주석만 더함.
+
+---
+
+# (회전 4 원문) QA1 리포트 — 기능 · 계약 · 용어 (회전 4 · 2026-10-09)
 
 > 담당 QA1 (`goal.md` §3.3). 범위: G-C01~G-C03 · 기능 136 의 1:1 · §2.5 오류 계약 · G-C17 48칸 전수 · G-C23 금지어 전수 · G-P05.
 > **고치지 않았다 — 결함만 적는다.** 기대값은 `contracts/function-list.md` · `contracts/api-contract.md` · `src/mescore/core.yaml` · 팩 `pack.yaml`/`gates.yaml` 에서만 끌어왔다.
