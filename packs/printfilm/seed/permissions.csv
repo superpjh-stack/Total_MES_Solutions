@@ -43,7 +43,7 @@ trc,ADMIN,조회,
 trc,PROD,조회,
 trc,QC,조회,
 trc,FIELD,없음,
-kpi,ADMIN,조회,
+kpi,ADMIN,입력,지표
 kpi,PROD,조회,
 kpi,QC,조회,
 kpi,FIELD,조회,

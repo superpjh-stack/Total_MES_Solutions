@@ -90,3 +90,8 @@ def test_kpi_extra_metrics():
     assert ind["splice_count"]["calc_kind"] == "pack:splice_count" and ind["splice_count"]["value"] >= 1
     assert packs.has_hook("kpi_extra") and packs.has_hook("validate_shipment") and packs.has_hook("on_result_closed")
     assert client("admin").get(P["KPI-03"]).status_code == 200
+    # DEF-QA1-009 — 지표 정의(F-KPI-06 · 07)는 관리자 `입력 (지표)` 만. 나머지 3 역할은 조회 (README §6 D-510)
+    adm = packs.current().permission("kpi", "ADMIN")
+    assert adm["level"] == "입력" and list(adm["scopes"]) == ["지표"]
+    assert client("admin").get(P["KPI-03"]).json()["can_write"] is True
+    assert client("prod").get(P["KPI-03"]).json()["can_write"] is False

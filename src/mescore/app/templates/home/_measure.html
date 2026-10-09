@@ -5,14 +5,15 @@
    latest = {param_key: {"value", "ts"}}  (collect 칸의 최근 수신 — 선택)
    폼 이름은 p.field (m_<param_key>). 검사 항목(qua_insp_plan)은 measure.plan_fields(rows) 로 같은 모양(i_<item_key>)이 된다.
    모양(디자이너2 · docs/design/pop/pop_result_end.html): .measure > .m-field(.deviated .collect) > .lbl(라벨 · 단위 · 배지) + .range(기준) + 칸.
+   recorded_only(선언이 꺼졌지만 기록이 있는 키 · measure.params_with_recorded) 는 입력 칸을 만들지 않고 measure_table 에만 나온다 (DEF-QA2-004).
    bool = 2버튼(radio 예/아니오 · 체크박스가 아니다) · select ≤5 = 버튼 · 6+ = <select> · collect = 읽기 전용(최근 수신 / 미수집) · 이탈 = 주의색 + 「이탈」. #}
 
 {% macro measure_fields(params, values={}, latest={}) %}
-{% if not params %}
+{% if not (params|rejectattr('recorded_only')|list) %}
 <p class="empty">{{ t('측정값 선언이 없습니다') }} <small>bas_process_param</small></p>
 {% endif %}
 <div class="measure">
-{% for p in params %}
+{% for p in params if not p.recorded_only %}
 {% set row = values.get(p.param_key) if values else none %}
 {% set dev = row.deviated if row else false %}
 <div class="m-field{% if dev %} deviated{% endif %}{% if p.is_collect %} collect{% endif %}" data-param="{{ p.param_key }}" data-type="{{ p.value_type }}">

@@ -260,3 +260,28 @@ def test_input_screen_last_qty_skips_canceled():
     c.post(f"{POP03}/{i2['id']}/cancel")
     assert float(c.get(POP03, params={"result": s["id"]}).json()["last_qty"]) == 3.0
     assert 'value="3' in c.get(POP03, params={"result": s["id"]}, headers=HTML).text
+
+
+@pytest.mark.fn("F-POP-06")
+def test_product_lot_open_inputs_count_against_remain():
+    """DEF-QA2-001 — 반제품(PRODUCT) LOT 20 을 종료 전 실적 E 에 15 스캔 → 실적 F 에 15 스캔은 422 (열린 pop_input 도 잔량에서 뺀다). QA2 재현 절차 그대로."""
+    c = client("prod")
+    s0 = start(c)
+    p = c.post(f"{POP02}/{s0['id']}/end", data={"good_qty": 20}).json()
+    e, f = start(c), start(c)
+    assert c.post(POP03, data={"work_result_id": e["id"], "barcode": p["lot_no"], "qty": 15}).status_code == 200
+    r = c.post(POP03, data={"work_result_id": f["id"], "barcode": p["lot_no"], "qty": 15})
+    assert r.status_code == 422 and r.json()["code"] == "validation_error", r.text
+    assert conn.q1("select count(*) as n from pop_input where work_result_id = %s", (f["id"],))["n"] == 0
+    assert c.post(POP03, data={"work_result_id": f["id"], "barcode": p["lot_no"], "qty": 5}).status_code == 200      # 잔량 5 까지는 받는다
+    assert c.post(POP03, data={"work_result_id": f["id"], "barcode": p["lot_no"], "qty": 1}).status_code == 422
+    # E 를 취소하면 그만큼 돌아온다
+    i_e = conn.q1("select id from pop_input where work_result_id = %s", (e["id"],))["id"]
+    assert c.post(f"{POP03}/{i_e}/cancel").status_code == 200
+    assert c.post(POP03, data={"work_result_id": e["id"], "barcode": p["lot_no"], "qty": 15}).status_code == 200
+    # 종료 뒤(계보 투입 행으로 셈)에도 두 번 세지 않고 넘치지 않는다
+    assert c.post(f"{POP02}/{e['id']}/end", data={"good_qty": 15}).status_code == 200
+    assert c.post(f"{POP02}/{f['id']}/end", data={"good_qty": 5}).status_code == 200
+    k = conn.q1("select consumed_qty, remain_qty from v_lot_stock where lot_id = %s", (p["lot_id"],))
+    assert float(k["consumed_qty"]) == 20.0 and float(k["remain_qty"]) == 0.0
+    assert lineage.state(p["lot_id"]) == lineage.CONSUMED

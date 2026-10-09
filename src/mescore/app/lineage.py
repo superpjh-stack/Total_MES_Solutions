@@ -535,6 +535,23 @@ def _stock_move(cur, *, item_id: int, lot_id: int, qty, unit: str | None, trx_ty
                                                        updated_at = now(), updated_by = excluded.created_by""", (item_id, qty, unit, by))
 
 
+def _input_available(cur, n: Node) -> Decimal | None:
+    """투입 스캔이 받을 수 있는 잔량 (DEF-QA2-001). LOT 행을 잠그고 뷰를 거치지 않고 센다 — 같은 LOT 을 동시에 스캔해도 넘치지 않게.
+    MATERIAL: qty − Σ 취소 아닌 pop_input. PRODUCT 등: qty − Σ 자식 계보 qty − Σ **열린** pop_input(취소 아님 · 실적 미종료 — 종료되면 계보 투입 행으로 세므로 두 번 세지 않는다).
+    LOT 수량이 없으면 None(검사하지 않음)."""
+    r = _one(cur, "select qty from lot where id = %s for update", (int(n.id),))
+    if r is None or r["qty"] is None:
+        return None
+    if n.kind_base == MATERIAL:
+        used = _one(cur, "select coalesce(sum(qty), 0) as s from pop_input where material_lot_id = %s and canceled_yn = 'N'", (int(n.id),))["s"]
+    else:
+        used = _one(cur, """select coalesce((select sum(g.qty) from lot_genealogy g where g.parent_lot_id = %(id)s), 0)
+                                 + coalesce((select sum(i.qty) from pop_input i join pop_work_result w on w.id = i.work_result_id
+                                              where i.material_lot_id = %(id)s and i.canceled_yn = 'N' and w.ended_at is null), 0) as s""",
+                    {"id": int(n.id)})["s"]
+    return Decimal(str(r["qty"])) - Decimal(str(used))
+
+
 def consume_material(cur, *, work_result_id: int, material_lot_id: int, qty, by: str, unit: str | None = None) -> int:
     """F-POP-06 투입 스캔 → `pop_input` 한 행(계보는 종료 때). 불합격 · 미검사 · 소진 LOT · 잔량 부족 · 종료된 실적은 422.
     원재료(MATERIAL)면 재고 거래 `투입` −qty + 현재고 갱신. 반제품(PRODUCT 재고) 투입도 받는다. pop_input.id 를 돌려준다."""
@@ -548,8 +565,9 @@ def consume_material(cur, *, work_result_id: int, material_lot_id: int, qty, by:
     q = None if qty in (None, "") else Decimal(str(qty))
     if q is not None and q <= 0:
         raise http.validation_error(t("투입량은 0 보다 커야 합니다"), fields=[{"name": "qty", "label": t("투입량"), "reason": str(qty)}])
-    if q is not None and n.remain_qty is not None and q > Decimal(str(n.remain_qty)) + Decimal("0.0005"):
-        raise http.validation_error(t("투입량이 LOT 잔량을 넘습니다"), fields=[{"name": "qty", "label": t("투입량"), "reason": f"{q} > {n.remain_qty}"}])
+    avail = _input_available(cur, n)
+    if q is not None and avail is not None and q > avail + Decimal("0.0005"):
+        raise http.validation_error(t("투입량이 LOT 잔량을 넘습니다"), fields=[{"name": "qty", "label": t("투입량"), "reason": f"{q} > {avail}"}])
     row = _one(cur, """insert into pop_input (work_result_id, material_lot_id, qty, unit, created_by) values (%s, %s, %s, %s, %s) returning id""",
                (r["id"], n.id, q, unit or n.unit, by))
     if q is not None and n.kind_base == MATERIAL and n.item_id is not None:

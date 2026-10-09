@@ -161,14 +161,18 @@ def plan_update(request: Request, id: int, label: str | None = Form(None), unit:
 
 
 # ── QUA-02 검사 결과 ─────────────────────────────────────────────────────
-def _inspection_rows(frm: date, to: date, insp_type: str | None, judgement: str | None, lot_no: str | None) -> list[dict]:
+INSPECTION_SORT = {"at": "q.inspected_at", "type": "q.insp_type", "lot": "l.lot_no", "item": "i.item_code", "judgement": "q.judgement"}
+ISSUE_SORT = {"at": "q.occurred_at", "no": "q.issue_no", "status": "q.status", "process": "p.process_name"}
+
+
+def _inspection_rows(frm: date, to: date, insp_type: str | None, judgement: str | None, lot_no: str | None, order: str = "q.inspected_at desc") -> list[dict]:
     rows = conn.q("""select q.*, l.lot_no, l.kind, i.item_code, i.item_name,
                             (select count(*) from qua_insp_item x where x.inspection_id = q.id) as item_count,
                             (select count(*) from qua_insp_item x where x.inspection_id = q.id and x.deviated) as deviated_count
                        from qua_inspection q join lot l on l.id = q.lot_id left join bas_item i on i.id = l.item_id
                       where q.inspected_at::date between %s and %s and (%s::text is null or q.insp_type = %s)
                         and (%s::text is null or q.judgement = %s) and (%s::text is null or l.lot_no ilike %s)
-                      order by q.inspected_at desc, q.id desc limit 300""",
+                      order by """ + order + ", q.id desc limit 300",
                   (frm, to, insp_type, insp_type, judgement, judgement, lot_no, f"%{lot_no or ''}%"))
     if rows:
         items = conn.q("select * from qua_insp_item where inspection_id = any(%s) order by id", ([r["id"] for r in rows],))
@@ -182,11 +186,12 @@ def _inspection_rows(frm: date, to: date, insp_type: str | None, judgement: str 
 
 @router.get(QUA02)                                                                     # F-QUA-06 검사 결과 조회 (스캔 ?no=)
 def inspections(request: Request, no: str | None = None, insp_type: str | None = None, frm: str | None = None, to: str | None = None,
-                judgement: str | None = None, lot: str | None = None, process_id: str | None = None, user: rbac.User = rbac.require_fn("F-QUA-06")):
+                judgement: str | None = None, lot: str | None = None, process_id: str | None = None, sort: str | None = None,
+                user: rbac.User = rbac.require_fn("F-QUA-06")):
     it = f.choice(insp_type, "insp_type", "검사 유형", INSP_TYPES, required=False)
     jd = f.choice(judgement, "judgement", "판정", JUDGEMENTS, required=False)
     d1, d2 = f.period(frm, to)
-    ctx: dict = {"rows": _inspection_rows(d1, d2, it, jd, f.opt_text(lot)), "frm": d1, "to": d2, "insp_type": it or "공정", "judgement": jd or "", "lot_filter": lot or "",
+    ctx: dict = {"rows": _inspection_rows(d1, d2, it, jd, f.opt_text(lot), http.sort_clause(sort, INSPECTION_SORT, "q.inspected_at desc")), "sort": sort or "", "frm": d1, "to": d2, "insp_type": it or "공정", "judgement": jd or "", "lot_filter": lot or "",
                  "lot": None, "fields": [], "pending": [], "scan_no": no or "", "type_options": [(x, t(x)) for x in INSP_TYPES],
                  "insp_process_id": None, "process_options": f.options(_processes(), "id", "process_code", "process_name"),
                  "judgement_options": [(x, t(x)) for x in JUDGEMENTS], "defect_options": f.options(conn.q("select id, defect_code, defect_name from bas_defect_code where use_yn = 'Y' order by defect_code"), "id", "defect_code", "defect_name")}
@@ -292,14 +297,14 @@ def defect_stats(request: Request, frm: str | None = None, to: str | None = None
 # ── QUA-04 이상 · 시정 ───────────────────────────────────────────────────
 @router.get(QUA04)                                                                     # F-QUA-11 이상 조회
 def issues(request: Request, status: str | None = None, frm: str | None = None, to: str | None = None, process_id: str | None = None,
-           user: rbac.User = rbac.require_fn("F-QUA-11")):
+           sort: str | None = None, user: rbac.User = rbac.require_fn("F-QUA-11")):
     st = f.choice(status, "status", "상태", ISSUE_STATUS, required=False)
     d1, d2 = f.period(frm, to, days=90)
     pid = f.int_id(process_id, "process_id", "공정")
     rows = conn.q("""select q.*, p.process_name, l.lot_no from qua_issue q left join bas_process p on p.id = q.process_id left join lot l on l.id = q.lot_id
                       where q.occurred_at::date between %s and %s and (%s::text is null or q.status = %s) and (%s::bigint is null or q.process_id = %s)
-                      order by q.occurred_at desc, q.id desc limit 300""", (d1, d2, st, st, pid, pid))
-    return templating.render(request, "qua/issues.html", {"rows": rows, "status": st or "", "frm": d1, "to": d2, "process_id": pid,
+                      order by """ + http.sort_clause(sort, ISSUE_SORT, "q.occurred_at desc") + ", q.id desc limit 300", (d1, d2, st, st, pid, pid))
+    return templating.render(request, "qua/issues.html", {"rows": rows, "status": st or "", "sort": sort or "", "frm": d1, "to": d2, "process_id": pid,
                                                           "status_options": [(x, t(x)) for x in ISSUE_STATUS],
                                                           "process_options": f.options(_processes(), "id", "process_code", "process_name")}, screen_id="QUA-04")
 

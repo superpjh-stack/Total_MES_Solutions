@@ -38,7 +38,11 @@ def _partners() -> list[dict]:
     return conn.q("select id, partner_code, partner_name, partner_type from bas_partner where use_yn = 'Y' order by partner_code")
 
 
-def _receipt_rows(frm: date, to: date, item_id: int | None, partner_id: int | None) -> list[dict]:
+RECEIPT_SORT = {"date": "r.receipt_date", "no": "r.receipt_no", "item": "i.item_code", "partner": "p.partner_name", "qty": "r.qty", "lot": "l.lot_no"}
+LOT_SORT = {"made": "l.made_at", "no": "l.lot_no", "item": "i.item_code", "qty": "l.qty", "remain": "k.remain_qty", "state": "s.state", "insp": "l.insp_status"}
+
+
+def _receipt_rows(frm: date, to: date, item_id: int | None, partner_id: int | None, order: str = "r.receipt_date desc") -> list[dict]:
     return conn.q("""select r.*, i.item_code, i.item_name, p.partner_name, l.lot_no, l.insp_status, s.state, k.remain_qty
                        from mat_receipt r
                        join bas_item i on i.id = r.item_id
@@ -47,18 +51,18 @@ def _receipt_rows(frm: date, to: date, item_id: int | None, partner_id: int | No
                        left join v_lot_state s on s.lot_id = l.id
                        left join v_lot_stock k on k.lot_id = l.id
                       where r.receipt_date between %s and %s and (%s::bigint is null or r.item_id = %s) and (%s::bigint is null or r.partner_id = %s)
-                      order by r.receipt_date desc, r.id desc limit 500""", (frm, to, item_id, item_id, partner_id, partner_id))
+                      order by """ + order + ", r.id desc limit 500", (frm, to, item_id, item_id, partner_id, partner_id))
 
 
 # ── MAT-01 입고 ─────────────────────────────────────────────────────────
 @router.get(nav.path_of("MAT-01"))                                                    # F-MAT-03 입고 조회 = 화면 GET
 def receipts(request: Request, frm: str | None = None, to: str | None = None, item_id: str | None = None, partner_id: str | None = None,
-             item_code: str | None = None, user: rbac.User = rbac.require_fn("F-MAT-03")):
+             item_code: str | None = None, sort: str | None = None, user: rbac.User = rbac.require_fn("F-MAT-03")):
     d1, d2 = f.period(frm, to)
     iid, pid = f.int_id(item_id, "item_id", "품목"), f.int_id(partner_id, "partner_id", "공급처")
-    rows = _receipt_rows(d1, d2, iid, pid)
+    rows = _receipt_rows(d1, d2, iid, pid, http.sort_clause(sort, RECEIPT_SORT, "r.receipt_date desc"))         # D-37
     items = _items("원재료") + _items("부자재")
-    ctx = {"rows": rows, "frm": d1, "to": d2, "item_id": iid, "partner_id": pid,
+    ctx = {"rows": rows, "frm": d1, "to": d2, "item_id": iid, "partner_id": pid, "sort": sort or "",
            "item_options": f.options(items, "id", "item_code", "item_name"),
            "partner_options": f.options([p for p in _partners() if p["partner_type"] != "고객"], "id", "partner_code", "partner_name"),
            "today": date.today(), "attr_specs": packs.attrs_of("lot"), "scan_no": item_code or "", "scan_item": None, "item_id_default": None}
@@ -221,8 +225,9 @@ def inspection_judge(request: Request, judgement: str = Form(...), lot_no: str |
 # ── MAT-03 원재료 LOT ────────────────────────────────────────────────────
 @router.get(nav.path_of("MAT-03"))                                                    # F-MAT-06 원재료 LOT 조회
 def lots(request: Request, no: str | None = None, item_id: str | None = None, state: str | None = None, insp: str | None = None,
-         user: rbac.User = rbac.require_fn("F-MAT-06")):
+         sort: str | None = None, user: rbac.User = rbac.require_fn("F-MAT-06")):
     iid = f.int_id(item_id, "item_id", "품목")
+    order = http.sort_clause(sort, LOT_SORT, "l.made_at desc")                         # D-37
     rows = conn.q("""select l.id, l.lot_no, l.kind, l.qty, l.unit, l.insp_status, l.made_at, i.item_code, i.item_name, p.partner_name, s.state,
                             k.consumed_qty, k.remain_qty,
                             (select string_agg(distinct w.work_order_no, ', ') from pop_input pi join pop_work_result r on r.id = pi.work_result_id
@@ -231,10 +236,10 @@ def lots(request: Request, no: str | None = None, item_id: str | None = None, st
                        join bas_item i on i.id = l.item_id left join bas_partner p on p.id = l.partner_id
                       where l.kind_base = 'MATERIAL' and (%s::bigint is null or l.item_id = %s) and (%s::text is null or s.state = %s)
                         and (%s::text is null or l.insp_status = %s) and (%s::text is null or l.lot_no ilike %s)
-                      order by l.made_at desc, l.id desc limit 500""",
+                      order by """ + order + ", l.id desc limit 500",
                   (iid, iid, f.opt_text(state), f.opt_text(state), f.opt_text(insp), f.opt_text(insp), f.opt_text(no), f"%{(no or '').strip()}%"))
     return templating.render(request, "mat/lots.html", {"rows": rows, "item_options": f.options(_items("원재료") + _items("부자재"), "id", "item_code", "item_name"),
-                                                        "item_id": iid, "state": state or "", "insp": insp or "", "no": no or ""}, screen_id="MAT-03")
+                                                        "item_id": iid, "state": state or "", "insp": insp or "", "no": no or "", "sort": sort or ""}, screen_id="MAT-03")
 
 
 @router.get(nav.path_of("MAT-03") + "/{id}/label")                                    # F-MAT-07 원재료 LOT 라벨 출력

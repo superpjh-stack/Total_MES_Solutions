@@ -149,3 +149,17 @@ def test_status_scan_entry_by_equip_code(equip):
     page = c.get(EQP01, params={"equip_code": "EQ-NO-SUCH"}, headers=HTML)
     assert page.status_code == 422 and page.text.count("data-scan") == 1 and 'id="scan-result"' in page.text
     assert c.get(EQP01, headers=HTML).text.count("data-scan") == 1
+
+
+@pytest.mark.fn("F-EQP-07")
+def test_list_sort_param_d37():
+    """D-37 `?sort=` — 허용한 열만 · `-열` 내림 · 모르는 열 422 (MAT-01 · MAT-03 · QUA-02 · QUA-04 · EQP-02 · EQP-03)."""
+    c = client("admin")
+    for sid, good in (("MAT-01", "-date,item"), ("MAT-03", "remain,-no"), ("QUA-02", "-judgement"), ("QUA-04", "status,-at"), ("EQP-02", "equip"), ("EQP-03", "-hours")):
+        r = c.get(nav.path_of(sid), params={"sort": good})
+        assert r.status_code == 200, (sid, r.text)
+        bad = c.get(nav.path_of(sid), params={"sort": "id; drop table lot"})
+        assert bad.status_code == 422 and bad.json()["fields"][0]["name"] == "sort", sid
+    rows = c.get(nav.path_of("MAT-03"), params={"sort": "no"}).json()["rows"]
+    nos = [r["lot_no"] for r in rows]
+    assert nos == sorted(nos)

@@ -101,13 +101,18 @@ def status_record(request: Request, equipment_id: str = Form(...), state: str = 
 
 
 # ── EQP-02 점검 ─────────────────────────────────────────────────────────
+CHECK_SORT = {"at": "c.checked_at", "equip": "e.equip_code", "item": "c.item", "result": "c.result"}
+FAULT_SORT = {"at": "x.occurred_at", "equip": "e.equip_code", "fixed": "x.fixed_at", "hours": "hours"}
+
+
 @router.get(EQP02)                                                                     # F-EQP-04 점검 조회
-def checks(request: Request, equipment_id: str | None = None, frm: str | None = None, to: str | None = None, user: rbac.User = rbac.require_fn("F-EQP-04")):
+def checks(request: Request, equipment_id: str | None = None, frm: str | None = None, to: str | None = None, sort: str | None = None,
+           user: rbac.User = rbac.require_fn("F-EQP-04")):
     eid = f.int_id(equipment_id, "equipment_id", "설비")
     d1, d2 = f.period(frm, to)
     rows = conn.q("""select c.*, e.equip_code, e.equip_name from eqp_check c join bas_equipment e on e.id = c.equipment_id
-                      where c.checked_at::date between %s and %s and (%s::bigint is null or c.equipment_id = %s) order by c.checked_at desc, c.id desc limit 300""", (d1, d2, eid, eid))
-    return templating.render(request, "eqp/checks.html", {"rows": rows, "equipment_id": eid, "frm": d1, "to": d2, "today": date.today(),
+                      where c.checked_at::date between %s and %s and (%s::bigint is null or c.equipment_id = %s) order by """ + http.sort_clause(sort, CHECK_SORT, "c.checked_at desc") + ", c.id desc limit 300", (d1, d2, eid, eid))
+    return templating.render(request, "eqp/checks.html", {"rows": rows, "equipment_id": eid, "sort": sort or "", "frm": d1, "to": d2, "today": date.today(),
                                                           "equipment_options": f.options(_equipment(), "id", "equip_code", "equip_name")}, screen_id="EQP-02")
 
 
@@ -131,7 +136,7 @@ def check_create(request: Request, equipment_id: str = Form(...), item: str = Fo
 # ── EQP-03 고장 ─────────────────────────────────────────────────────────
 @router.get(EQP03)                                                                     # F-EQP-07 고장 조회 (MTTR 은 stats.equipment)
 def faults(request: Request, equipment_id: str | None = None, frm: str | None = None, to: str | None = None, fixed: str | None = None,
-           user: rbac.User = rbac.require_fn("F-EQP-07")):
+           sort: str | None = None, user: rbac.User = rbac.require_fn("F-EQP-07")):
     eid = f.int_id(equipment_id, "equipment_id", "설비")
     d1, d2 = f.period(frm, to, days=90)
     fx = f.choice(fixed, "fixed", "복구 여부", ("Y", "N"), required=False)
@@ -139,8 +144,8 @@ def faults(request: Request, equipment_id: str | None = None, frm: str | None = 
                        from eqp_fault x join bas_equipment e on e.id = x.equipment_id
                       where x.occurred_at::date between %s and %s and (%s::bigint is null or x.equipment_id = %s)
                         and (%s::text is null or (x.fixed_at is not null) = (%s = 'Y'))
-                      order by x.occurred_at desc, x.id desc limit 300""", (d1, d2, eid, eid, fx, fx))
-    return templating.render(request, "eqp/faults.html", {"rows": rows, "equipment_id": eid, "frm": d1, "to": d2, "fixed": fx or "",
+                      order by """ + http.sort_clause(sort, FAULT_SORT, "x.occurred_at desc") + ", x.id desc limit 300", (d1, d2, eid, eid, fx, fx))
+    return templating.render(request, "eqp/faults.html", {"rows": rows, "equipment_id": eid, "sort": sort or "", "frm": d1, "to": d2, "fixed": fx or "",
                                                           "equipment_options": f.options(_equipment(), "id", "equip_code", "equip_name")}, screen_id="EQP-03")
 
 

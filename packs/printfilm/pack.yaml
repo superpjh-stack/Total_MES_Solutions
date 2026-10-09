@@ -23,16 +23,16 @@ terms:
 # ── E1 메뉴 — 엘컴화인 대메뉴 12 + 영업관리(D-418). 순서는 nav.SIDEBAR 일하는 순서(D-417) ──
 menus:
   hide: [eqp]              # 엘컴화인 G-12: 설비는 기준정보(BAS-05)까지. 가동 · 점검 · 고장 · 수집값 화면은 숨긴다. ord 는 숨기지 않는다(영업관리 확장)
-  rename:
+  rename:                  # 화면에 보일 최종 이름 — 코어가 t() 를 걸지 않는다(회전 4 아키텍트). terms 키(작업지시 · 실적 …)를 날것으로 쓰지 않는다(G-P05)
     bas: 기준정보 관리
     ord: 영업관리
-    job: 작업지시 관리
+    job: Job 관리            # 엘컴화인 「작업지시 관리」 + terms 작업지시 → Job
     mat: 자재 · 입고
-    pop: 생산 실적 (POP)
+    pop: 작업 실적 (POP)     # 엘컴화인 「생산 실적 (POP)」 · 중메뉴 「작업 실적」 + terms 실적 → 작업 실적
     qua: 품질 검사 기록
     shp: 출하
     trc: LOT 추적
-    kpi: 실적 현황
+    kpi: 작업 실적 현황      # 엘컴화인 「실적 현황」 + terms 실적 → 작업 실적
     sys: 시스템 관리
   order: [kpi, ord, job, mat, clr, pop, rll, qua, shp, trc, bas, prt, sys, ifc]
   add:

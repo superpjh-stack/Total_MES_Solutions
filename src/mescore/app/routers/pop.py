@@ -113,8 +113,8 @@ def result(request: Request, wo: str | None = None, id: str | None = None, user:
         ctx["result"] = r
         ctx["work_order"] = conn.q1("select * from job_work_order where id = %s", (r["work_order_id"],))
         ctx["equipment_options"] = _equipment_options(r["process_id"], r["equipment_id"])
-        ctx["params"] = measure.params_for(r["process_id"])
         ctx["values"] = measure.values_of(r["id"])
+        ctx["params"] = measure.params_with_recorded(r["process_id"], ctx["values"])     # 꺼진 선언의 지난 기록도 보인다 (DEF-QA2-004)
         if r["equipment_id"] is not None:
             lv = collect.latest(r["equipment_id"])
             if lv:

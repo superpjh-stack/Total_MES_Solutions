@@ -172,3 +172,23 @@ G-P05  용어 — terms 키 치환 안 된 노출 0                             
 - **기획(printfilm)**: `terms` 복원으로 메뉴 rename 이 `t()` 를 한 번 더 거쳐 「생산 작업 실적 (POP)」 · 「작업 실적 현황」 이 된다(겹말은 아님). pack-contract §2 대로 rename 을 최종 이름(`작업 실적 (POP)` 등)으로 쓸지 판단.
 - **디자이너2**: MAT-01 · EQP-01 POP 화면에 `ui.scan_box` 한 줄씩 넣었다(요청 4 — S-01 하나 유지) · EQP-01 카드 `.card.sel` · POP-02 종료 폼에 `merge_lot_ids` 칸 한 줄 · QUA-02 검사 공정 GET 폼(`#insp-process-form`) — 모양은 그대로 두었으니 다듬어 달라.
 - **개발3**: §3-5 `link(at=)` · §3-6 `counts` · §3-15 팩 분할 N ≥ 1 · §3-16 상속(이제 kimchi `age` 의 `update lot set insp_status` 를 뺄 수 있다) · §3-18 QUA-02 `?process_id=` / 폼 `process_id` · §3-19 F-POP-03 `merge_lot_ids`(+ `merge_relation`) — 전부 반영. §3-9 링크 쿼리 이름(`QUA-02 ?no=` · `MAT-03 ?no=`)은 그대로 맞다.
+
+## §6 회전 5 (2026-10-09) — QA 결함 수정
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| **DEF-QA2-001 중대** 반제품 이중 스캔 | `lineage.consume_material` 이 `_input_available` 로 잔량을 직접 센다(LOT 행 `for update` · 뷰를 거치지 않음): MATERIAL = qty − Σ 취소 아닌 pop_input · PRODUCT 등 = qty − Σ 자식 계보 qty − Σ **열린** pop_input(취소 아님 · 실적 미종료 — 종료 뒤엔 계보 투입 행으로 세므로 두 번 세지 않음). 생산 LOT 20 → E 15(열림) → F 15 **422** · F 5 200 · F 1 422 · E 취소 뒤 다시 15 200 · 둘 다 종료 → v_lot_stock 소비 20 · 잔량 0 · 소진. 아키텍트 `v_lot_stock` 변경과 독립(어느 쪽이든 두 번 빼지 않음) | `tests/test_pop_api.py::test_product_lot_open_inputs_count_against_remain`(수정 전 코드로 FAIL 확인) · QA2 `check_data.py` 「반제품 투입 — 종료 전 이중 스캔」 **PASS** |
+| **DEF-QA2-004 경미** 꺼진 선언의 지난 기록 | `measure.params_with_recorded(process_id, values)` — 지금 선언 + `pop_measure` 에만 남은 키(라벨은 param_id 선언 → 같은 공정 · 키 선언 → 키 그대로) · `recorded_only=True`. POP-02 `?id=` 가 이것을 `params` 로 넘긴다(JSON · HTML 표). `_measure.html measure_fields` 는 `recorded_only` 를 건너뛴다(새 입력 칸 없음) | `tests/test_measure.py::test_turned_off_declaration_keeps_past_values_visible` · QA2 `check_data` 참고 행 **PASS** |
+| DEF-QA1-004 경로 키 404 | 아키텍트 `main.py` 일괄 처리 확인 — 내 라우트 13(F-MAT-02 · 07 · F-POP-03/04/05/07 · F-QUA-02/05/09/10 · F-EQP-06 · split · merge) `abc` → **404**. 내 라우터 손대지 않음 | TestClient 호출 · printfilm `check_screens` G-C02 156/156 |
+| **DEF-QA1-009** printfilm 지표 정의 | `seed/permissions.csv` `kpi,ADMIN,입력,지표` · README §6 D-510 근거(엘컴화인 실적 현황 "조회" 는 집계 · 현황판 — `지표` 범위는 F-KPI-06 · 07 만 연다) · `scenarios.md` 권한 표. `mes_printfilm_db` 의 그 칸 1행을 같은 값으로 갱신(시드는 기존 칸을 덮어쓰지 않는다 — `--reset` 대신 그 칸만) | `packs/printfilm/tests/test_hooks.py::test_kpi_extra_metrics`(admin can_write True · prod False) · check_screens G-C17 60/60 |
+| **printfilm G-P05** | `menus.rename` = 최종 이름: `job: Job 관리` · `pop: 작업 실적 (POP)` · `kpi: 작업 실적 현황`(엘컴화인 메뉴명에 terms 적용). 노출 **180 → 2** — 남은 2 는 CMN-02 메인 카드 출처 문구 `stats.TODAY_COUNT_SOURCES`(「오늘 계획 작업지시」 · 「오늘 시작 실적」 · t() 없음 · 개발3/디자이너3). attrs 라벨 노출은 printfilm 에서 0 | `MES_PACK=printfilm uv run python src/mescore/tools/check_screens.py` · `test_terms_and_pack.py` 메뉴 이름 단언 |
+| D-37 목록 정렬 | `?sort=` — MAT-01(`date no item partner qty lot`) · MAT-03(`made no item qty remain state insp`) · QUA-02(`at type lot item judgement`) · QUA-04(`at no status process`) · EQP-02(`at equip item result`) · EQP-03(`at equip fixed hours`) · `-` 내림 · 모르는 열 422 · ctx `sort`. 기본 정렬은 그대로 | `tests/test_eqp_api.py::test_list_sort_param_d37` |
+| pytest (코어) | **292 passed · 1 failed** — `test_arch_smoke::test_core_has_no_forbidden_terms`(`app/packs.py:583 조리` 아키텍트 작업 중 · `static/app.js:216 splice` 디자이너) · 내 파일 아님 | `uv run pytest -q` |
+| 팩 pytest | printfilm **39 passed** | `MES_PACK=printfilm uv run pytest -q packs/printfilm/tests` |
+| 계보 10행 | `tests/test_lineage_scenario.py` 18 passed (10행 유지) · QA2 G-C06 PASS | |
+| 라우트 · 용어 | check-routes PASS(56/56 · placeholder 0 · RBAC 위반 0) · check-terms G-C23 FAIL 2(위 두 파일 · 내 것 0) · t() 누락 0 | `make check-routes` · `make check-terms` |
+
+### §6-1 요청 (회전 5)
+- **개발3 / 디자이너3**: `app/stats.py: TODAY_COUNT_SOURCES` 문구를 화면에 낼 때 `t()` — printfilm G-P05 남은 2(「오늘 계획 작업지시」 · 「오늘 시작 실적」).
+- **아키텍트**: ① `make core-hash` 재기록(내 `lineage.py` · `measure.py` · `routers/{mat,pop,qua,eqp}.py` · `home/_measure.html`) ② 팩 attrs 라벨 `t()` — printfilm 은 지금 노출 0 이지만 다른 팩 몫 ③ `v_lot_stock` 열린 투입 규칙은 lineage 와 독립이라 어느 쪽을 택해도 두 번 빼지 않는다 ④ `interfaces.md` §6 에 `measure.params_with_recorded` 한 줄.
+- **디자이너2**: POP-02 측정값 표에 `recorded_only` 행(꺼진 선언의 기록)이 섞여 나온다 — 구분 표시가 필요하면 `p.recorded_only` 로. 목록 6 화면에 `?sort=` 가 생겼다(ctx `sort`) — 머리글 링크는 모양 쪽 판단.

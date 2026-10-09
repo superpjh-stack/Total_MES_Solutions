@@ -125,3 +125,32 @@ def test_bool_select_text_fields_parse():
     assert [e["name"] for e in errs] == ["m_b", "m_s"]
     assert measure.range_text(0.5, None) == "0.5 이상" and measure.range_text(None, 12) == "12 이하" and measure.range_text(60, 80) == "60 ~ 80"
     assert measure.deviated({"min_value": 10, "max_value": None}, 9) and not measure.deviated({"min_value": 10, "max_value": None}, 10)
+
+
+@pytest.mark.fn("F-POP-03")
+def test_turned_off_declaration_keeps_past_values_visible():
+    """DEF-QA2-004 — 선언을 use_yn=N 으로 꺼도 지난 실적 POP-02 화면 · 조회에 기록 값이 보인다. 새 실적에는 입력 칸이 생기지 않는다."""
+    proc = conn.q1("select id from bas_process where process_code = 'PRC-T-MEAS2'") or conn.q1(
+        "insert into bas_process (process_code, process_name, seq, created_by) values ('PRC-T-MEAS2', '측정값 끔 시험 공정 (예시)', 91, 'test') returning id")
+    for key, label, seq in (("d_keep", "남는 항목 (예시)", 1), ("d_off", "끌 항목 (예시)", 2)):
+        conn.x("""insert into bas_process_param (process_id, param_key, label, unit, value_type, required_yn, source, seq, created_by)
+                  values (%s, %s, %s, 'mm', 'number', 'N', 'manual', %s, 'test')
+                  on conflict (process_id, param_key) do update set label = excluded.label, use_yn = 'Y'""", (proc["id"], key, label, seq))
+    decl = {"process_id": proc["id"], "equipment_id": None}
+    s = _start(decl)
+    assert s["c"].post(f"{POP02}/{s['id']}/end", data={"good_qty": 1, "m_d_keep": "1.5", "m_d_off": "7.25"}).status_code == 200
+    conn.x("update bas_process_param set use_yn = 'N' where process_id = %s and param_key = 'd_off'", (proc["id"],))
+    j = s["c"].get(POP02, params={"id": s["id"]}).json()
+    by_key = {p["param_key"]: p for p in j["params"]}
+    assert set(by_key) == {"d_keep", "d_off"} and by_key["d_off"]["recorded_only"] is True and float(j["values"]["d_off"]["value_num"]) == 7.25
+    html = s["c"].get(POP02, params={"id": s["id"]}, headers=HTML).text
+    assert "끌 항목 (예시)" in html and "7.25" in html
+    s2 = _start(decl)                                                                          # 새 실적 — 꺼진 칸은 입력 칸 없음
+    assert [p["param_key"] for p in s2["c"].get(POP02, params={"id": s2["id"]}).json()["params"]] == ["d_keep"]
+    html2 = s2["c"].get(POP02, params={"id": s2["id"]}, headers=HTML).text
+    assert 'name="m_d_keep"' in html2 and 'name="m_d_off"' not in html2
+    # 선언 행을 지워도 기록 키 그대로 보인다
+    conn.x("update pop_measure set param_id = null where work_result_id = %s and param_key = 'd_off'", (s["id"],))
+    conn.x("delete from bas_process_param where process_id = %s and param_key = 'd_off'", (proc["id"],))
+    p_off = next(p for p in measure.params_with_recorded(proc["id"], measure.values_of(s["id"])) if p["param_key"] == "d_off")
+    assert p_off["recorded_only"] and p_off["label"] == "d_off"

@@ -33,6 +33,7 @@ def test_pack_manifest_merged():
     assert packs.t("작업지시") == "Job" and packs.t("생산 LOT") == "Roll" and packs.t("성적서") == "COA" and packs.t("분할") == "슬리팅" and packs.t("합병") == "splice"
     assert packs.t("추적") == "LOT 추적" and packs.t("실적") == "작업 실적"                                            # 기획값 그대로 (회전 4 — 우회 제거)
     assert packs.t("LOT 추적") == "LOT 추적" and packs.t("작업 실적") == "작업 실적"                                 # 겹말 방지 (packs.t · 아키텍트 733074f)
+    assert {m.code: m.name for m in nav.MENUS if m.code in ("job", "pop", "kpi")} == {"job": "Job 관리", "pop": "작업 실적 (POP)", "kpi": "작업 실적 현황"}   # rename = 최종 이름 (G-P05)
     assert {x["id"]: x["channels"] for x in p.pack_screens}["X-CLR-01"] == ["현장 POP"]                                   # 채널 코드 [pop] → 라벨 정규화
 
 

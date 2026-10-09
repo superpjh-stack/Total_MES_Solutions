@@ -7,6 +7,7 @@
     record(cur, work_result_id, params, values, *, by)    # 수동 칸 저장 — 범위 이탈은 저장 + deviated (422 아님)
     fill_collect(cur, result, params, *, by)              # collect 칸 — 구간(시작~종료 · 같은 설비)의 eqp_collect 대표값(agg). 수신 0 이면 value NULL(미수집)
     values_of(work_result_id) -> dict[param_key, row]     # 재렌더 · 조회
+    params_with_recorded(process_id, values)              # 화면 · 조회 — 지금 선언 + 꺼진 선언의 기록(recorded_only · 입력 칸 없음)
     deviated(param, value_num) -> bool
 
 검사 항목(`qua_insp_plan`)도 같은 모양으로 그린다 — `plan_fields(plan_rows)` 가 같은 키(param_key · label · value_type …)로 바꿔 준다.
@@ -59,6 +60,39 @@ def params_for(process_id: int | None, cur=None) -> list[dict]:
         cur.execute(sql, (int(process_id),))
         rows = [dict(r) for r in cur.fetchall()]
     return [_decorate(r, FIELD_PREFIX) for r in rows]
+
+
+def params_with_recorded(process_id: int | None, values: Mapping[str, Mapping], cur=None) -> list[dict]:
+    """화면 · 조회용 (DEF-QA2-004) — 지금 선언(use_yn=Y) + 선언이 꺼졌거나 지워졌어도 `pop_measure` 에 기록이 있는 키.
+    기록만 남은 칸은 `recorded_only=True` — 입력 칸은 만들지 않고(`measure_fields` 가 건너뛴다) 표(`measure_table`)와 JSON 에만 나온다.
+    라벨 · 단위 · 범위는 기록의 param_id 선언(꺼진 것 포함) → 같은 공정 · 같은 키 선언 → 없으면 키 그대로."""
+    active = params_for(process_id, cur)
+    keys = {p["param_key"] for p in active}
+    extra = []
+    for key, row in (values or {}).items():
+        if key in keys:
+            continue
+        decl = None
+        sql = "select * from bas_process_param where id = %s" if row.get("param_id") is not None else None
+        if sql:
+            decl = conn.q1(sql, (int(row["param_id"]),)) if cur is None else _q1(cur, sql, (int(row["param_id"]),))
+        if decl is None and process_id is not None:
+            sql2 = "select * from bas_process_param where process_id = %s and param_key = %s order by id desc limit 1"
+            decl = conn.q1(sql2, (int(process_id), key)) if cur is None else _q1(cur, sql2, (int(process_id), key))
+        if decl is None:
+            decl = {"param_key": key, "label": key, "unit": row.get("unit"), "value_type": "number" if row.get("value_num") is not None else "text",
+                    "source": row.get("source") or "manual", "required_yn": "N"}
+        d = _decorate(dict(decl), FIELD_PREFIX)
+        d["required"] = False
+        d["recorded_only"] = True
+        extra.append((row.get("id") or 0, d))
+    return active + [d for _, d in sorted(extra, key=lambda x: x[0])]
+
+
+def _q1(cur, sql: str, params) -> dict | None:
+    cur.execute(sql, params)
+    r = cur.fetchone()
+    return dict(r) if r else None
 
 
 def plan_fields(plan_rows: list[dict]) -> list[dict]:
