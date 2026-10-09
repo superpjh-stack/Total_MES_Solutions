@@ -319,6 +319,17 @@ def scan_screen(request: Request, no: str = "", id: str = "", user: rbac.User = 
     }, screen_id="SHP-02", status_code=422 if scan_error else 200)
 
 
+def _assert_remaining(cur, node) -> None:
+    """DEF-QA2-008 (출하 경로) — 종료 전 실적에 투입 스캔돼(열린 투입) 잔량이 0 이하인 생산 LOT 은 출하 스캔 422.
+    §3.4 회전 5 는 열린 투입이 상태를 바꾸지 않으므로(상태 `재고`) 상태만으로는 못 막는다. 잔량은 `v_lot_stock`(열린 투입 포함)을
+    이 tx 안에서 다시 읽는다. LOT 수량이 없으면(NULL) 판정하지 않는다 — 개발2 `lineage.ship` 이 같은 검사를 갖게 되면 여기는 지운다."""
+    r = cur.execute("select k.qty, k.remain_qty from v_lot_stock k where k.lot_id = %s", (int(node.id),)).fetchone()
+    if r is None or r["qty"] is None or r["remain_qty"] is None or r["remain_qty"] > 0:
+        return
+    raise http.validation_error(t("다른 실적에 투입된(잔량 0) LOT 은 출하할 수 없습니다"),
+                                fields=[{"name": "barcode", "label": t("생산 LOT"), "reason": f"{node.no} {t('잔량')} {r['remain_qty']}"}])
+
+
 @router.post(nav.path_of("SHP-02"))                                                  # F-SHP-05 출하 LOT 스캔
 def scan_lot(request: Request, shipment_no: str = Form(""), barcode: str = Form(""), user: rbac.User = rbac.require_fn("F-SHP-05")):
     s = _by_no(shipment_no) if shipment_no.strip() else None
@@ -334,6 +345,7 @@ def scan_lot(request: Request, shipment_no: str = Form(""), barcode: str = Form(
         # 재고 아님 · 불합격 · 미검사 · 이미 출하 · 생산 LOT 아님 → lineage 가 422 (스캔칸은 남는다)
         if node.insp_status == "미검사":
             raise http.validation_error(t("검사하지 않은 LOT 은 출하할 수 없습니다"), fields=[{"name": "barcode", "label": t("생산 LOT"), "reason": node.no}])
+        _assert_remaining(cur, node)
         genealogy_id = lineage.ship(cur, shipment_id=s["id"], lot_id=node.id, by=user.login_id, user=user)
     audit.log_change(request, user, "F-SHP-05", f"shp_shipment:{s['shipment_no']} lot:{node.no}")
     return http.saved(request, f"{node.no} → {s['shipment_no']}", back=f"{nav.path_of('SHP-02')}?no={s['shipment_no']}",

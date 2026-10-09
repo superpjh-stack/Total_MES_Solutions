@@ -110,6 +110,30 @@ def test_scan_lot_rules_422_and_creates_shipment_lot():
     assert prod.get("/shp/scan", params={"no": s["shipment_no"]}).json()["summary"]["lot_count"] == 1
 
 
+@pytest.mark.fn("F-SHP-05")
+def test_scan_lot_used_up_by_open_input_is_422():
+    """DEF-QA2-008 (출하 경로) — 합격 생산 LOT 을 종료 전 실적에 전량 투입(열린 투입)하면 잔량 0 → 출하 스캔 422.
+    고객 출하와 다음 공정 투입 양쪽에 같은 LOT 이 나오는 이중 소진이 없다."""
+    from mescore.app import lineage
+    from _dev3_helpers import new_work_order
+
+    lot = scenario_lots(1)[0]                                                              # 합격 · 수량 10
+    with conn.tx() as cur:
+        wo = new_work_order(cur)
+        cur.execute("""insert into pop_work_result (work_order_id, process_id, equipment_id, started_at, good_qty, unit, created_by)
+                       values (%s, %s, %s, now(), 0, 'EA', 'test') returning id""", (wo["id"], wo["process_id"], wo["equipment_id"]))
+        wr = cur.fetchone()["id"]
+        lineage.consume_material(cur, work_result_id=wr, material_lot_id=lot["id"], qty=10, by="test")
+    assert lot_state(lot["id"]) in ("재고", "소진")                                       # 회전 5 「재고」 · D-41(뷰 정정) 뒤 「소진」 — 어느 쪽이든 422
+    assert conn.q1("select remain_qty from v_lot_stock where lot_id = %s", (lot["id"],))["remain_qty"] == 0
+    prod = client("prod")
+    s = new_shipment(prod)
+    r = _scan(prod, s["shipment_no"], lot["lot_no"])
+    assert r.status_code == 422, r.text
+    assert genealogy_count(lot["lot_no"]) == 0
+    assert conn.q1("select count(*)::int as n from lot where shipment_id = %s", (s["id"],))["n"] == 0
+
+
 @pytest.mark.fn("F-SHP-06")
 def test_unscan_lot_before_approval():
     prod, s, lots = _ship_with_lots(2)
