@@ -257,7 +257,7 @@ class HookError(Exception): message · fields              # 팩 훅이 올린�
 | `on_inspection_judged(cur, insp, user)` | `routers/qua.py` F-QUA-05 · `routers/mat.py` F-MAT-04 | 판정 저장 후 |
 | `validate_shipment(cur, shipment, lots, user)` | `routers/shp.py` F-SHP-07 | 승인 직전 |
 | `on_collect(cur, raw, user=None) -> None` | `collect.receive` | 정제 후 · 같은 `tx`. 반환값은 쓰지 않는다 — `collect.receive` 의 반환은 `ReceiveResult(raw_id, duplicate, unknown_tags, saved)`(D-204) |
-| `after_commit_<event>(payload)` | `main.py` 미들웨어 — `tx` 커밋 뒤 큐에 쌓인 이벤트 | 트랜잭션 밖. 실패해도 응답은 성공, `ifc_outbox` 에 남는다 |
+| `after_commit_<event>(payload)` | `main.py` 미들웨어 — `tx` 커밋 뒤 큐에 쌓인 이벤트 | 트랜잭션 밖. 실패해도 응답은 성공, `ifc_outbox` 에 남는다. 팩이 `after_commit_shipment_approved` 를 두지 않으면 코어 기본이 `erp.enqueue` 로 큐에 넣는다(D-39 — 팩 훅이 있으면 팩 것만 돈다) |
 | `kpi_extra(frm, to, by=None) -> list[{key, label, value, unit}]` | `stats.kpi_extra` ← `stats.indicators` · `stats.snapshot`(배치) | 조회 시 · 스냅샷 때 (D-508) |
 
 훅이 없으면 no-op. 코어는 훅 안에서 무엇이 일어나는지 모른다 — 훅이 코어 테이블에 쓰려면 `write_scope` 에 있어야 한다.

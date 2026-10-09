@@ -181,8 +181,8 @@
 - 바뀌면 고칠 곳: `app/packs.py`(`t` · `attrs_of`) · `tools/check_terms.py`.
 
 ## D-39 출하 승인 뒤 ERP 큐는 코어 기본 훅이 넣는다 · 상태: 가설
-- 회전 5 아키텍트(DEF-QA1-007). F-SHP-07 계약 문장 "after_commit 으로 ERP 큐" 를 맞춘다: `after_commit_shipment_approved` 를 팩이 선언하지 않으면 **코어 기본 구현**(`packs.CORE_DEFAULT_HOOKS` → `erp.enqueue("shipment_approved", payload)`)이 돈다. 팩이 같은 훅을 두면 팩 것이 대신한다(팩 훅이 큐를 원하면 스스로 `erp.enqueue`). D-20(트랜잭션 밖 · 실패 시 `ifc_outbox` 실패 행)은 그대로.
-- 바뀌면 고칠 곳: `app/packs.py`(`hook`) · `contracts/function-list.md` F-SHP-07 · `interfaces.md` §9.
+- 회전 5 아키텍트(DEF-QA1-007). F-SHP-07 계약 문장 "after_commit 으로 ERP 큐" 를 맞춘다: `after_commit_shipment_approved` 를 팩이 선언하지 않으면 **코어 기본 구현**(`main.CORE_AFTER_COMMIT` → 자기 트랜잭션에서 `erp.enqueue(cur, "shipment_approved", payload, by=승인자)` — `ifc_outbox` `대기` 1행)이 돈다. 팩이 같은 훅을 두면 팩 것이 대신한다(팩 훅이 큐를 원하면 스스로 `erp.enqueue`). D-20(트랜잭션 밖 · 실패 시 `ifc_outbox` 실패 행)은 그대로.
+- 바뀌면 고칠 곳: `app/main.py`(`CORE_AFTER_COMMIT` · `_run_after_commit`) · `contracts/function-list.md` F-SHP-07 · `interfaces.md` §9.
 
 ## 개발1 (웨이브 A R1·R2 · 2026-10-09 — `progress-dev1.md` §2 「계약과 달라진 점」 을 아키텍트가 옮겼다 · D-101 은 개발3 의견으로 바꿨다)
 

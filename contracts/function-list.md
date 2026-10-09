@@ -123,7 +123,7 @@
 | F-SHP-04 | shp | SHP-01 | 출하 조회 | 조회 | - | 현장 POP, 관리자 Web | 조회 이상 | - | `GET /shp/shipments` | - | 개발3 | 기간 · 거래처 · 상태. LOT 수 · 수량 |
 | F-SHP-05 | shp | SHP-02 | 출하 LOT 스캔 | 스캔 | lot, lot_genealogy | 현장 POP, 관리자 Web | 생산 · 현장 | 일반 | `POST /shp/scan` | - | 개발3 | 출하 + 생산 LOT 바코드 → `lineage.ship`(출하 LOT 이 없으면 `kind=SHIPMENT` 생성, `출하` 계보 1줄). 재고 아님 · 불합격 · 미검사 · 이미 출하 422(스캔칸 유지) |
 | F-SHP-06 | shp | SHP-02 | 출하 LOT 스캔 취소 | 취소 | lot, lot_genealogy | 현장 POP, 관리자 Web | 생산 · 현장 | 일반 | `POST /shp/scan/cancel` | - | 개발3 | 승인 전만. `lineage.unship` |
-| F-SHP-07 | shp | SHP-02 | 출하 승인 | 승인 | shp_shipment | 현장 POP, 관리자 Web | 관리자 | 승인 | `POST /shp/shipments/{id}/approve` | validate_shipment, after_commit_shipment_approved | 개발3 | LOT 0건 422 → 훅(`HookError` 422) → `status=승인` · `approved_at/by`. 승인 후 스캔 · 취소 불가. `after_commit` 으로 ERP 큐 |
+| F-SHP-07 | shp | SHP-02 | 출하 승인 | 승인 | shp_shipment | 현장 POP, 관리자 Web | 관리자 | 승인 | `POST /shp/shipments/{id}/approve` | validate_shipment, after_commit_shipment_approved | 개발3 | LOT 0건 422 → 훅(`HookError` 422) → `status=승인` · `approved_at/by`. 승인 후 스캔 · 취소 불가. `after_commit` 으로 ERP 큐 — 팩 훅이 없으면 코어 기본이 `ifc_outbox` `대기` 1행(D-39) |
 | F-SHP-08 | shp | SHP-03 | 출하 현황 조회 | 조회 | - | 관리자 Web, 모바일 | 조회 이상 | - | `GET /shp/status` | - | 개발3 | 오늘 · 이번 주 출하 · 납기 대비. 390px |
 | F-SHP-09 | shp | SHP-04 | 성적서 발행 | 등록 | shp_document | 관리자 Web | 생산 · 현장 | 일반 | `POST /shp/documents` | - | 개발3 | 승인된 출하 → 그 LOT 들의 **최신 검사 항목 값**으로 성적서 행(번호 `DOCUMENT`, 내용 스냅샷 JSON). 미승인 422. 같은 출하에 재발행은 새 번호 |
 | F-SHP-10 | shp | SHP-04 | 성적서 출력 | 출력 | - | 관리자 Web | 조회 이상 | - | `GET /shp/documents/{id}/print` | - | 개발3 | `print/document`. 스냅샷을 그린다(검사가 나중에 바뀌어도 발행본 불변). 팩이 양식 덮어쓰기(COA 등) |

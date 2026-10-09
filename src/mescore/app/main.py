@@ -363,12 +363,30 @@ def create_app() -> FastAPI:
     return app
 
 
+def _core_enqueue(event: str):
+    """코어 기본 after_commit — ERP 큐(`ifc_outbox` `대기`)에 한 행 (D-39). 팩이 같은 훅을 두면 그것이 대신한다."""
+    def run(payload: dict) -> None:
+        from . import erp
+
+        with conn.tx() as cur:
+            erp.enqueue(cur, event, payload, by=str(payload.get("approved_by") or "after_commit"))
+    run.__name__ = f"core_after_commit_{event}"
+    return run
+
+
+# 팩이 선언하지 않았을 때 도는 코어 기본 훅 — function-list 계약 문장 「after_commit 으로 ERP 큐」(F-SHP-07 · DEF-QA1-007 · D-39)
+CORE_AFTER_COMMIT = {"shipment_approved": _core_enqueue("shipment_approved")}
+
+
 def _run_after_commit(event: str, payload: dict) -> None:
-    """`after_commit_<event>` 훅 — 실패해도 응답은 이미 성공. 서버 로그 + `ifc_outbox` 실패 행 (D-20)."""
+    """`after_commit_<event>` 훅 — 실패해도 응답은 이미 성공. 서버 로그 + `ifc_outbox` 실패 행 (D-20).
+    팩 훅이 없으면 코어 기본(`CORE_AFTER_COMMIT`), 그것도 없으면 아무 일도 없다."""
     import json
 
     fn = packs.hook(f"after_commit_{event}")
     if fn is packs.NOOP_HOOK:
+        fn = CORE_AFTER_COMMIT.get(event)
+    if fn is None or fn is packs.NOOP_HOOK:
         return
     try:
         fn(payload)

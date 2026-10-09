@@ -304,3 +304,21 @@ def test_non_numeric_path_key_is_404_but_bad_body_is_422():
         assert c.post("/_arch_probe/7", data={"qty": "2"}).json() == {"id": 7, "qty": 2}
     finally:
         app.router.routes[:] = [rt for rt in app.router.routes if not getattr(rt, "path", "").startswith("/_arch_probe")]
+
+
+def test_shipment_approved_after_commit_enqueues_erp_by_default():
+    """D-39 · DEF-QA1-007 — 팩이 `after_commit_shipment_approved` 를 두지 않으면 코어 기본이 `ifc_outbox` `대기` 1행을 넣는다."""
+    from mescore.app import main as m
+    from mescore.db import conn
+
+    if packs.has_hook("after_commit_shipment_approved"):
+        pytest.skip("팩 훅이 대신한다")
+    marker = "S-ARCH-PROBE"
+    try:
+        m._run_after_commit("shipment_approved", {"shipment_no": marker, "approved_by": "admin", "lots": []})
+        rows = conn.q("select status, created_by from ifc_outbox where event = 'shipment_approved' and payload->>'shipment_no' = %s", (marker,))
+        assert [(r["status"], r["created_by"]) for r in rows] == [("대기", "admin")]
+        m._run_after_commit("no_such_event", {"shipment_no": marker})          # 코어 기본이 없는 이벤트는 아무 일도 없다
+        assert conn.q1("select count(*) as n from ifc_outbox where payload->>'shipment_no' = %s", (marker,))["n"] == 1
+    finally:
+        conn.x("delete from ifc_outbox where payload->>'shipment_no' = %s", (marker,))
