@@ -272,3 +272,15 @@ PASS 27 · FAIL 9 · WARN 0 · BLOCKED 0 · 미검증 6 / 전체 42
 명령: `make core-hash` → `uv run pytest -q -p no:cacheprovider` → `make check-routes` → `make check-terms` → `make gate > outputs/gate-r4-arch.txt` · 팩 시드 `MES_PACK=<팩> make db-seed` ×3 · 빈 DB `createdb mes_r4arch_<팩>_tmp_db` + schema/views/schema_ext + `MES_PACK=<팩> MES_PG_DSN=postgresql:///mes_r4arch_<팩>_tmp_db uv run python -m mescore.db.seed_core` ×2.
 
 **넘긴 것 (각 담당)** — ① 개발1 foodservice: `seed_pack.py` 우회 제거 가능(CR-9) · `menus.rename.pop` 을 최종 이름 `조리 실적 (POP)` 으로(지금 `실적 (POP)` 이 그대로 보인다 — rename 은 t() 없음) · `kpi_indicators.csv` 의 `base_value` · `formula` 는 `attrs.` 접두로 ② 개발2 printfilm: rename 값이 그대로 나온다(`생산 실적 (POP)` 등 — 최종 이름 확인) ③ 개발3 kimchi: `rename.qua: 품질이상` 으로 되돌려도 된다 · `equipment_example.csv` 의 `equip_type` · `comm_type` · `collect_tags` 는 `attrs.` 접두로 넣으면 attrs 에 들어간다 ④ 디자이너1: `flash.values` 키 확정(같은 이름 여러 값은 목록) ⑤ QA2: `check_data.py` 금지어 3 · G-C10/12 판정 행 ⑥ 각 목록 화면 정렬은 D-37 `http.sort_clause` 로 ⑦ **사람: D-501**(테이블 52→54 · 화면 51→52 · 기능 132→135 승인 여부) · D-606(현황판 다크 조건) · D-605(gate 환경 dev 로그인).
+
+## 2026-10-09 회전 4 — 오케스트레이터 (아키텍트 D-2 · 개발 3 · 디자이너1 · QA 3 첫 투입)
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| 게이트(아키텍트 09:21) | PASS 27 · FAIL 9 · 미검증 6 / 42 — QA 검사기 첫 투입. 3팩 G-P02 · P03 · P04 PASS | `make gate` · `outputs/gate-r4-arch.txt` |
+| QA1 | 기능 136: PASS 115 · FAIL 21(숫자 아닌 경로 키 422 → 404 계약) · 권한 48칸 · 역할×기능 522호출 위반 0 · 채널 155호출 위반 0 · 결함 10(중대 5) | `check_screens.py` · `outputs/qa1-기능계약.md` |
+| QA2 | G-C05 · 06 · 07 · 09 · 10 · 12 · 24 PASS(독립 SQL 재계산 일치) · C08 · C11 FAIL · 팩 printfilm · foodservice PASS · kimchi 행 수 차이 · 결함 6(중대 2) | `check_data.py` · `outputs/qa2-계보데이터.md` |
+| QA3 | G-C13~C20 · C22(브라우저 23단계) · G-P06(약 20초) PASS · G-P01 FAIL(R1 해시 · R9 테스트 2건) · 조용한 실패 0 · 결함 7(중대 4) | `check_security.py` · `outputs/qa3-채널보안.md` · `outputs/e2e/core/` |
+| 최우선 결함 | ① `MES_ENV` 기본 `dev` → 비밀번호 없는 관리자 로그인(QA1-001 · QA3-001) ② `make db-schema` 가 `MES_PG_DSN` 무시 → 코어 DB 삭제 위험(QA1-008) | — |
+| 사람 결정 대기 | D-501 설비 알람: 테이블 52→54 · 화면 51→52 · 기능 132→135 승인 vs EQP-01 표시만(수치 불변) | `decisions.md` D-501 |
+| 다음 | 회전 5 웨이브 D: 결함 23건을 담당별로 수정 → 회전 6 QA 재판정 | — |
