@@ -55,11 +55,10 @@ b{font-weight:600}
 .shell.no-side{grid-template-columns:minmax(0,1fr) var(--w-desc)}
 .shell.no-desc{grid-template-columns:var(--w-side) minmax(0,1fr)}
 .shell.no-side.no-desc,.shell.one{grid-template-columns:minmax(0,1fr)}
-body.side-collapsed .shell{grid-template-columns:0 minmax(0,1fr) var(--w-desc)}
-body.side-collapsed .side{display:none}
+/* 사이드바 줄이기 · 늘이기 — 줄이면 사라지지 않고 아이콘 막대(--w-side-rail)가 된다. 격자 첫 칸이 남아 본문이 밀리지 않는다 */
+body.side-collapsed{--w-side:var(--w-side-rail);--w-side-min:var(--w-side-rail)}
 body.desc-closed .shell{grid-template-columns:var(--w-side) minmax(0,1fr) 0}
 body.desc-closed .desc{display:none}
-body.side-collapsed.desc-closed .shell{grid-template-columns:0 minmax(0,1fr) 0}
 @media (max-width:1180px){
   .shell{grid-template-columns:var(--w-side-min) minmax(0,1fr) 0}
   .shell.no-side{grid-template-columns:minmax(0,1fr) 0}
@@ -68,6 +67,7 @@ body.side-collapsed.desc-closed .shell{grid-template-columns:0 minmax(0,1fr) 0}
 }
 @media (max-width:860px){
   .shell,.shell.no-side,.shell.no-desc{grid-template-columns:minmax(0,1fr)}
+  body.side-collapsed .side{display:none}   /* 한 단 화면에서는 줄인 막대 대신 접는다 — 본문은 같은 칸이라 밀리지 않는다 */
   .side{position:static;max-height:none}
   .main{order:-1}
 }
@@ -90,6 +90,15 @@ a.mg-h:hover{text-decoration:none}
 .mg li a:hover{background:var(--c-surface-2);color:var(--c-ink);text-decoration:none}
 .mg li a.cur{background:var(--c-accent-tint);color:var(--c-accent);font-weight:700;border-left-color:var(--c-accent)}
 .mg li a .ch{font-style:normal;font-size:10px;color:var(--c-ink-3);border:var(--bw) solid var(--c-line);border-radius:var(--r-sm);padding:0 3px;line-height:14px}
+/* 메뉴 첫 글자 아이콘 — 늘인 상태에서는 숨기고, 줄인 막대에서만 보인다 */
+.mg-ic{display:none;font-style:normal;width:28px;height:28px;flex:none;place-items:center;border-radius:var(--r-md);background:var(--c-surface-2);color:var(--c-ink);font-weight:700;font-size:var(--fs-sm)}
+.mg-t{min-width:0;overflow:hidden;text-overflow:ellipsis}
+body.side-collapsed .side{padding:var(--sp-1) 4px;overflow-x:hidden}
+body.side-collapsed .mg-h{justify-content:center;padding:4px 0}
+body.side-collapsed .mg-ic{display:grid}
+body.side-collapsed .mg.on>.mg-h .mg-ic{background:var(--c-accent);color:var(--c-accent-ink)}
+body.side-collapsed .mg.on>.mg-h{background:transparent}
+body.side-collapsed .mg-t,body.side-collapsed .mg-h small,body.side-collapsed .mg>ul,body.side-collapsed .mg.on>ul,body.side-collapsed .mg.open>ul{display:none}
 .side .side-empty{padding:var(--sp-2);font-size:var(--fs-sm);color:var(--c-ink-2)}
 
 /* 본문 · 패널 */

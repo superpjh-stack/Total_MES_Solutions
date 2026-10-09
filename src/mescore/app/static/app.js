@@ -5,8 +5,26 @@
   "use strict";
 
   /* 좌측 메뉴 접기/펼치기 — 메뉴를 누르면 그 화면 목록이 펼쳐지고, 펼쳐져 있던 다른 메뉴는 접힌다 (base.html .mg > button.menu-head[aria-expanded]) */
+  /* 사이드바 줄이기 · 늘이기 — #side-toggle 이 body.side-collapsed 를 바꾼다(줄이면 아이콘 막대). 상태는 이 브라우저에만 기억한다(localStorage — 막혀 있으면 기억만 안 한다) */
+  var SIDE_KEY = "mes.side.collapsed", sideBtn = document.getElementById("side-toggle");
+  function setSide(collapsed, remember) {
+    document.body.classList.toggle("side-collapsed", collapsed);
+    if (sideBtn) sideBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    if (remember) { try { window.localStorage.setItem(SIDE_KEY, collapsed ? "1" : "0"); } catch (e) { /* 저장 불가 — 이번 화면에서만 적용 */ } }
+  }
+  if (sideBtn) {
+    var saved = null;
+    try { saved = window.localStorage.getItem(SIDE_KEY); } catch (e) { saved = null; }
+    if (saved === "1") setSide(true, false);
+    sideBtn.addEventListener("click", function () { setSide(!document.body.classList.contains("side-collapsed"), true); });
+  }
+
   document.querySelectorAll(".menu-head").forEach(function (head) {
     head.addEventListener("click", function () {
+      if (document.body.classList.contains("side-collapsed")) {   /* 줄인 막대에서 누르면 늘이고 그 메뉴를 연다 */
+        setSide(false, true);
+        if (head.parentElement.classList.contains("open") || head.parentElement.classList.contains("on")) return;
+      }
       var group = head.parentElement, opening = !group.classList.contains("open");
       group.parentElement.querySelectorAll(".menu-group.open").forEach(function (g) {
         if (g !== group) { g.classList.remove("open"); var h = g.querySelector(".menu-head"); if (h && !g.classList.contains("on")) h.setAttribute("aria-expanded", "false"); }
@@ -24,7 +42,6 @@
       btn.setAttribute("aria-expanded", on ? "false" : "true");
     });
   }
-  toggleBody(document.getElementById("side-toggle"), "side-collapsed");
   toggleBody(document.getElementById("desc-toggle"), "desc-closed");
   document.querySelectorAll("[data-toast-close]").forEach(function (b) {
     b.addEventListener("click", function () { var tst = b.closest(".toast"); if (tst) tst.remove(); });
