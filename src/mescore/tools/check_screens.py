@@ -1227,6 +1227,8 @@ def shapes(ctx: dict) -> list[tuple[str, bool, str]]:
         url = re.sub(r"\{kind\}", "item", re.sub(r"\{[^}]+\}", "1", p))
         r = ANON.request(m, url, data={})
         n += 1
+        if (m, p) == ("POST", "/login/as") and r.status_code == 404:   # D-605 확정 — dev + 루프백이 아니면 경로가 없다(404) · 아키텍트 회전 5 수정(QA1 검토)
+            continue
         if r.status_code != 401:
             leaks.append(f"{m} {url} → {r.status_code}")
     add(f"인증 없이 열리는 경로 = 계약 5종뿐 (라우트 {n} 전수 401)", not leaks, f"{leaks[:6]}")
