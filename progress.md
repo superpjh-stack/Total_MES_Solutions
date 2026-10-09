@@ -284,3 +284,40 @@ PASS 27 · FAIL 9 · WARN 0 · BLOCKED 0 · 미검증 6 / 전체 42
 | 최우선 결함 | ① `MES_ENV` 기본 `dev` → 비밀번호 없는 관리자 로그인(QA1-001 · QA3-001) ② `make db-schema` 가 `MES_PG_DSN` 무시 → 코어 DB 삭제 위험(QA1-008) | — |
 | 사람 결정 대기 | D-501 설비 알람: 테이블 52→54 · 화면 51→52 · 기능 132→135 승인 vs EQP-01 표시만(수치 불변) | `decisions.md` D-501 |
 | 다음 | 회전 5 웨이브 D: 결함 23건을 담당별로 수정 → 회전 6 QA 재판정 | — |
+
+## 2026-10-09 회전 5 — 아키텍트 (웨이브 D: QA 결함 수정)
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| 1 보안 QA1-001 · QA3-001 (`de9feba` · `02d6d16`) | `MES_ENV` 기본 **prod**(비거나 없으면) · `.env.example` `MES_ENV=prod`(로컬 `.env` 의 dev 는 그대로 · `make setup` 새 `.env` 는 prod) · `settings.dev_login_allowed(request)` = dev **그리고** 상대 주소 루프백(127/8 · ::1 — 이름 `testclient`/`localhost` 는 아님) · `main.py` 미들웨어가 라우터 앞에서 404 · 개발1 `home.login_as` 도 같은 함수 · `login.html` 역할 버튼은 ctx `dev_login` · D-605 **확정** · api-contract §2 | `test_dev_login_only_dev_and_loopback` — (빈값 · prod · dev+10.0.0.5 · dev+testclient) 404 · (dev+127.0.0.1 · dev+::1) 200 |
+| 2 Makefile QA1-008 (`14bd28f`) | `db-create` · `db-schema` · `db-reset` 대상 = `MES_PG_DSN`(셸 · `.env`) 을 앱과 같은 규칙으로 푼 DB(`tools/db_target.py name|dsn|admin`) · `pack-db` 는 `mes_<팩>_db` 고정 · `restore-check` 는 그 DB 의 덤프(`<DB>-<일시>.dump`)만 | `MES_PG_DSN=postgresql:///mes_qa_db make -n db-schema` → `psql -d "dbname=mes_qa_db host=/tmp" … drop schema` · `MES_PACK=kimchi make -n db-reset` → mes_kimchi_db · `make -n db-create` → mes_core_db |
+| 3 check_terms · gate QA1-002 · 010 (`b2761d4`) | `check_terms --pack`: 덮어쓰기 버그 제거 · 화면 글 조각(태그 사이 · title/placeholder/aria-label · 표 본문/선택지/코드 제외 · 숫자/(예시) 조각 제외) 마다 **키별** 판정 · rename 값 · 치환 값 먼저 지움 · /login · /error 포함. gate: `check_screens` 의 G-C02 · C03 · **C13 · C17 · C23** 을 앞 판정과 합침(나쁜 쪽 우선 · 실측 둘 다) · 팩 G-P05 = check_terms + check_screens(팩 DB 읽기만) | `make gate` 원문의 `‖ check_screens:` |
+| 4 G-P05 QA1-003 (`9dda6ac`) | `packs.attrs_of()` 가 **t() 거친 라벨**(choices 는 그대로) · rename 값은 그대로(D-38) · pack-contract `attrs` 줄. 3팩 재측정(10:07 gate): **kimchi 0 · foodservice 0 · printfilm 0** — check_terms · check_screens 둘 다 PASS | `test_attr_labels_pass_through_terms` · `make gate` |
+| 5 경로 키 404 QA1-004 (`e484766`) | `RequestValidationError` 중 loc[0]=path 가 있으면 404 `not_found` · 본문/쿼리만이면 422 그대로 · 미로그인은 여전히 401 먼저 | `test_non_numeric_path_key_is_404_but_bad_body_is_422` · `POST /ord/orders/abc` · `GET /mat/lots/abc/label` · `GET /shp/documents/abc/print` → 404 · QA1 기능 **136/136 PASS** |
+| 6 채널명 t() QA1-005 (`d7f91b6` · `02d6d16` · `9de6316`) | `base.html` 헤더 채널 · 사이드바 배지 · 계약 패널 · `login.html` 채널 표 · 선택 라벨 · 역할 요약 채널. 표지 치환 뒤 `/login` 날것 `현황판` 0 | TestClient 표지(§B§) 치환 |
+| 7 ERP 큐 QA1-007 (`2d051e5`) | 계약 문장이 맞다(D-39) — 팩이 `after_commit_shipment_approved` 를 안 두면 `main.CORE_AFTER_COMMIT` 이 자기 트랜잭션에서 `erp.enqueue` → `ifc_outbox` `대기` 1행(created_by=승인자). 팩 훅이 있으면 팩 것만. function-list F-SHP-07 · interfaces §9 | `test_shipment_approved_after_commit_enqueues_erp_by_default` |
+| 8 `v_lot_stock` QA2-001 (`6704c24`) | PRODUCT 소비 = Σ 자식 계보 + Σ **종료 전 실적**의 `pop_input`(취소 제외) · 종료 뒤엔 계보로만(한 번만 셈) · `v_lot_state` 불변 · db-schema §3.4. `create or replace` 로 mes_core_db · 팩 DB 3 재적용 | `test_product_lot_open_input_counts_in_stock` (20 − 열린 15 = 5 · 취소 무시 · 종료+계보 뒤 5/15) |
+| 9 테스트 QA3-004 · 005 (`3365cf9` · `b232c80`) | `test_admin_opens_every_screen…` 이 `packs.current().hidden` 메뉴 화면을 403 으로 기대 · 부분 투입 테스트는 고유 번호 + 트랜잭션 안 `views.sql` 재적용(오래된 뷰가 남은 DB 에서도 코드 정의 판정 · QA3 실패 원인은 예전 v_lot_state 로 추정) | `MES_PACK=printfilm·kimchi·foodservice uv run pytest tests/test_arch_smoke.py` 21 passed 6 skipped · `MES_PG_DSN=…/mes_qa3_db` 통과 |
+| 10 로그아웃 · 쿠키 QA3-007 (`da90231`) | `GET /logout` 405(세션 유지) · `POST /logout` 만 · 템플릿 로그아웃은 이미 폼 3곳 · 쿠키 `httponly` · `samesite=lax` · **dev 아니면 `secure`** | `test_logout_is_post_only_and_cookie_flags` |
+| 덤 | 디자이너1 몫(`fffde65`): 모바일 `.m-top` 번호 검색 — TRC-01/02 에서는 그 화면 `?no=` · 현황판 채널 오류/503 `err-msg` 48px+ · `err-code` 64px+. interfaces §6 `measure.params_with_recorded` 한 줄 · `packs.py` 주석 업종어 제거 | 화면 HTML 실측 |
+| QA1 도구 수정(아키텍트 · 회전 5) — **QA1 다음 회전 검토** (`0fdfde7` · `e3819c5`) | `check_screens.py` ① 팩 G-P05 가 `menus.rename` 값(팩 최종 이름 · D-38)을 노출로 세지 않음(check_terms 와 같은 규칙) ② G-C03 「인증 없이 열리는 경로」 에서 `POST /login/as → 404` 는 위반 아님(D-605 확정 — 경로 없음). 「비밀번호 없는 로그인 0」 검사는 그대로 | 코디네이터 · 개발1 · 개발3 요청 |
+| core-hash (`ceba02e`) | `outputs/core.sha256` 160 파일 — 회전 5 개발1 · 2 · 3 · 디자이너 커밋분 포함 | `make core-hash` |
+| pytest (코어 단독) | **301 passed · 0 failed** | `uv run pytest -q -p no:cacheprovider` |
+| check-routes · check-terms | G-C03 PASS 56/56 · placeholder 0 · RBAC 204 위반 0 · G-C23 금지어 0 · t() 누락 0 | `make check-routes` · `make check-terms` |
+| 게이트 | **PASS 39 · FAIL 1 · WARN 2 · 미검증 0 / 42** (회전 4: 27 · 9 · 미검증 6) | `make gate`(10:07) → `outputs/gate-r5-arch.txt` |
+
+### 남은 FAIL 1 · WARN 2 — 누구 몫인가
+
+| 게이트 | 원인 | 담당 |
+|---|---|---|
+| G-C23 FAIL | QA1 표지 치환 — ① CMN-01 `/login` 채널 선택 라벨 `현황판` → **gate 뒤 고침**(`9de6316` · 표지 뒤 0) ② CMN-02 메인 `· 관리자 Web · 현황판 · 모바일` — `home/main.html:53` `c.menu.channels|reject(…)|join` 에 `map('t')` · `:67` `{{ channel }}` → `t(channel)` · `:51` `title="{{ c.today_source }}"` → `t(…)`(G-P05 화면 글 · 지금은 check_screens 판정 밖) | 디자이너3 (`home/main.html`) |
+| G-P01 WARN ×2 | R10 코어 템플릿 덮어쓰기 — foodservice `print/work_order.html` · printfilm `print/document.html · label_lot.html · work_order.html` 을 README 에 적기 | 개발1(foodservice) · 개발2(printfilm) |
+
+### 회전 5 요청 · 다음 회전 후보
+
+- **개발1**: `home.login_as` · `GET /login` ctx `dev_login` 은 반영됨(개발1 회전 5). foodservice `attrs` 라벨이 t() 를 거치면 어색해진다 — `조리공정구분` → 「조리조리 공정구분」 · `연결 설비이상` → 「연결 설비품질 이슈」 · `이상유형` → 「품질 이슈유형」. 라벨을 중립어로(`공정구분`) 쓰거나 terms 키와 겹치지 않는 낱말(`고장 유형` 등)로 바꾼다(D-38). (지금 gate G-P05 는 표 본문 · 숫자 조각 규칙 때문에 잡지 않는다 — 화면에서 확인.)
+- **디자이너3**: 위 `home/main.html` 3곳.
+- **QA1(다음 회전)**: `check_screens.py` 아키텍트 수정 2건 검토 · `/login/as` 는 `MES_ENV=dev`+루프백이 아니면 404 가 PASS. `OPEN_PATHS` 의 `("GET","/logout")` 은 이제 라우트가 없다(405).
+- **QA3(다음 회전)**: `MES_ENV` 가 비면 prod → 쿠키 `Secure`. **운영을 HTTP 로 띄우면 브라우저가 세션 쿠키를 보내지 않아 로그인이 안 된다**(localhost 는 예외) — 운영 HTTPS 여부는 사람 결정(미확정). 검사 서버를 루프백 밖 주소로 띄우면 `/login/as` 는 404.
+- **아키텍트 다음 회전 후보**(개발1 요청): `seed_core` 에 `bom*` 로더(헤더 + 구성품 · attrs · 훅) · `seeds[]` 행에 팩 `after_save_*` 훅 실행 옵션.
+- **D-501 은 사람 결정 대기 — 손대지 않았다.**
