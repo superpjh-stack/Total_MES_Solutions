@@ -1,7 +1,59 @@
-# QA3 — 채널 · 보안 · 팩 격리 · 브라우저 E2E (회전 6 재판정 · 2026-10-09)
+# QA3 — 채널 · 보안 · 팩 격리 · 브라우저 E2E (회전 8 재확인 · 2026-10-09)
 
 > QA3 는 **고치지 않는다.** 재고 적는다. 전용 DB `mes_qa3_db`(초기화 → `schema.sql` + `views.sql` + `seed_core`) · 포트 8053(코어 dev) · 8054(prod · 0.0.0.0) · 8055(dev · 0.0.0.0 → LAN 상대 주소 · DB 끊김) · 8056(다른 사이트 흉내 정적 서버 `localhost`).
 > 비밀번호는 `.env` 에서만 · 출력 · 리포트 · 캡처 어디에도 값 없음. LAN 주소 값도 적지 않는다. 회전 4 본문(§1~§8)은 아래에 그대로 둔다.
+
+## 회전 8 재확인 (2026-10-09 15:20~15:27)
+
+기준: HEAD `2f39590`(회전 8 아키텍트 D-43) · `mes_qa3_db` 초기화(`schema.sql` + `views.sql` + `seed_core`) 직후 · 포트 8053~8056 · 검사기 `check_security.py` **이번 회전 변경 없음**(core-hash 그대로). 한 번에 `QA3_E2E_PREFIX=r8_ … check_security.py --e2e --hardening` → **rc=0 · FAIL 0**(G-C13~G-C20 · G-C22 전부 PASS · 미검증 2 = 참고 행 `next=` · 운영 HTTPS 사람 결정). 작업 트리에 남아 있던 `r6_*.png` 12장(게이트 실행이 다시 찍은 것)은 **되돌렸다**(회전 6 증거 보존) — 이번 증거는 모두 `r8_*`.
+
+### R8.1 DEF-QA3-008 POP · Web 폼 422 입력값 유지 — **해결**
+
+재현(헤드리스 Chrome · 현장 · POP · 열린 실적 #8 · 스크래치 스크립트로 `check_security.Ui` 를 그대로 써서 키보드 + Enter):
+
+| 단계 | 기대 | 실측 | 판정 |
+|---|---|---|---|
+| POP-03 투입량 `3.5` → 스캔칸 `NOPE-QA3-0000` Enter | 422 → 303 + 알림(필드 줄) · 투입량 3.5 유지 · 스캔칸 비움 · 행 0 | 알림 「입력값을 확인해 주세요 · 원재료 LOT — NOPE-QA3-0000」 · 투입량 **3.5** · 스캔칸 `""` · 포커스 스캔칸 · `pop_input` +0 (`r8_def008_pop03_422_kept.png`) | OK |
+| Esc 로 알림 닫기 | 3.5 그대로 · 포커스 스캔칸 | 3.5 · 스캔칸 | OK |
+| 바른 LOT `M261009-0001` 스캔 | 3.5 로 저장 | 「투입 M261009-0001」 · `pop_input` +1 · **qty 3.500** · LOT M261009-0001 (`r8_def008_pop03_saved_3_5.png`) | OK |
+| POP-02 종료: 양품 `12` · 합칠 LOT `NOPE-QA3-0000` → 종료 | 422 → 같은 화면 · 양품 · 합병 칸 유지 · 스캔칸 비움 · 실적 안 닫힘 | `/pop/result?id=8` · 알림 「합병 LOT — NOPE-QA3-0000」 · 양품 **12** · 합병 칸 **NOPE-QA3-0000** · 스캔칸 `""` · 포커스 스캔칸 · `ended_at` NULL 그대로 (`r8_def008_pop02_end_422_kept.png`) | OK |
+
+`--hardening` 의 S-09(`r8_s09_422_popup_kept.png` · `r8_s09_422_pop02_end_kept.png`)도 같은 값 — S-01~S-14 전부 OK. 참고(결함 아님): 전체 페이지 캡처에서 알림 뒤 어두운 막이 화면 높이(900px)까지만 덮인다 — 캡처 방식 탓(고정 레이어) · 화면에서는 정상.
+
+### R8.2 G-C22 브라우저 한 바퀴 — **23/23 PASS · 막힌 단계 0** (`r8_01_*` ~ `r8_23_*`)
+
+**검사기 분할 수량 `30,30,30` → `30,30,40`(아키텍트 `2f39590`) 검토 — 동의.** 합병 P…-0004 = 100(50+50) 이므로 합 100 = 부모 잔량 0 → D-43 「수량을 모두 준 분할의 부모는 잔량으로 판정」에서 **소진**, 코어 시나리오(`tests/test_lineage_scenario.py`)와 같은 수량이다. 이 줄 하나만 바뀌었고 뒤 단계의 기대(분할 ①② 출하 · ③ 재고)는 수량과 무관해 그대로 맞는다. DB 실측:
+
+| LOT | qty | v_lot_state |
+|---|---|---|
+| P261009-0002 · 0003 (생산 ①②) | 50 · 50 | 소진 · 소진 |
+| P261009-0004 (합병) | 100 | **소진** (잔량 0) |
+| P261009-0005 · 0006 (분할 ①②) | 30 · 30 | 출하 · 출하 |
+| P261009-0007 (분할 ③) | **40** | 재고 |
+
+단계 요지: 06 지시서 바코드 W261009-002 · 수주 O261009-001 · 납기 표시 · `order_dtl_id` 일치 / 09~13 POP 시작 · 투입 · 종료 P…-0002 · 0003(이탈 1) · S-15 칩 on/off/typed/cleared 정상 / 14 합병 P…-0004 / 15 「분할 3」 → 0005~0007 / 16 합격 2 / 17~19 S261009-002 · 현장 승인 버튼 비활성 · 관리자 승인 / 20 C261009-002 해독 · 분할 ①② 행 / 21 X261009-0002 → 원재료 M…-0003 · 0004 / 22 정방향 7 노드 전부 · 재고 표시 · 합병 노드 100.000 EA(간선 50.000 따로) / 23 5초 주기 갱신. 모바일 390px 8화면 · 출력물 4종 해독 · 현황판 503 stale 모두 PASS(`r8_m390_*` · `r8_print_*` · `r8_board_503_stale.png`).
+
+### R8.3 보안 회귀 (`--hardening`) — **전부 PASS**
+
+- `/login/as`: prod(MES_ENV 빈 값) 루프백 **404** · XFF=127.0.0.1 404 · Host=localhost 404 · LAN 404 · 개발 버튼 없음. dev 루프백 평 200(설계) · XFF · XFF=127.0.0.1 · Forwarded 404. **dev 0.0.0.0 서버에 LAN 주소로** 평 **404** · XFF=127.0.0.1 404 · Host=127.0.0.1 404.
+- `GET /logout`: prod **405** · dev 405(뒤 메인 200).
+- 쿠키: prod `HttpOnly · SameSite=lax · Secure` / dev `HttpOnly · SameSite=lax`(Secure 없음 — 설계). 다른 사이트 5 페이지 방문 뒤 세션 유지 · CSRF 계정 0. 세션 고정 · 위조 쿠키 401 PASS.
+
+### R8.4 G-P01 팩 격리 (R9)
+
+| 항목 | 판정 | 실측 |
+|---|---|---|
+| `git worktree add --detach /tmp/qa3-wt HEAD` → `packs/{foodservice,kimchi,printfilm}` 삭제 → 코어 `tests/` 전건(`mes_qa3_db`) | **PASS** | **319 passed · 0 failed** |
+| 팩 올린 채 `tests/test_arch_*.py` (팩 3 · 각 팩 DB) | **PASS** | 60 passed, 6 skipped × 3 |
+| 팩 3 `check_pack` | **PASS (HEAD)** | 원본 작업 트리에서는 R1 해시 FAIL 3 — 원인은 **다른 역할이 작업 중인 미커밋 `src/mescore/tools/check_data.py`**(HEAD 해시 = core.sha256). HEAD worktree 에서 다시 → 팩 3 rc=0 · FAIL 0. 결함 아님 · 그 역할이 커밋할 때 core-hash 재기록 필요 |
+
+worktree 둘 다 지움 · `git worktree list` = 원본 하나 · 서버(8053~8056) 모두 내림.
+
+### R8.5 정리
+
+- 새 결함 **0**. DEF-QA3-001~008 전부 해결 · **치명 0 · 중대 0 · 경미 0 남음**.
+- 참고(그대로): dev `/login/as` 의 `X-Real-IP` 통과 · `next=` 인코딩 의존(dev 전용) · 운영 HTTPS 결정 대기(사람 결정).
+- 재현 명령: 위 회전 6 절의 초기화 3줄 → `QA3_E2E_PREFIX=r8_ MES_PACK= MES_PG_DSN=postgresql:///mes_qa3_db uv run python src/mescore/tools/check_security.py --e2e --hardening` → `… --only skip --pack-isolation`.
 
 ## 0. 회전 6 재판정
 
