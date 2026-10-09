@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import parse_qsl
 
 from fastapi import HTTPException
 
@@ -33,6 +34,11 @@ ERRORS: dict[str, tuple[int, str]] = {
 
 FLASH_KEY = "flash"
 AFTER_COMMIT_ATTR = "after_commit_events"
+FORM_ECHO_KEY = "mes.form_body"          # scope 키 — FormEcho 가 urlencoded POST 본문을 복사해 둔다(422 뒤 입력값 유지)
+FORM_ECHO_MAX = 64 * 1024                # 이보다 큰 본문은 복사하지 않는다
+#: 422 뒤 되돌려 주지 않는 칸 — 비밀번호 · 토큰 (G-C19)
+SECRET_FIELD_HINTS = ("password", "passwd", "secret", "token", "csrf")
+VALUE_MAX = 2000                         # 칸 하나의 길이 상한(세션 쿠키 크기)
 
 
 class HookError(Exception):
@@ -44,10 +50,75 @@ class HookError(Exception):
         self.fields = fields or []
 
 
-def flash(request, title: str, message: str, *, fields: list[dict] | None = None, kind: str = "info") -> None:
+def clean_values(values: dict | None) -> dict[str, Any]:
+    """폼 값 → 알림에 실어 되돌릴 값. 비밀 칸 제외 · 문자열 길이 상한 · 같은 이름 여러 값은 목록."""
+    out: dict[str, Any] = {}
+    for k, v in (values or {}).items():
+        k = str(k)
+        if any(h in k.lower() for h in SECRET_FIELD_HINTS):
+            continue
+        if isinstance(v, (list, tuple)):
+            out[k] = [str(x)[:VALUE_MAX] for x in v]
+        elif v is not None:
+            out[k] = str(v)[:VALUE_MAX]
+    return out
+
+
+def posted_values(request) -> dict[str, Any]:
+    """이 요청의 urlencoded POST 본문(FormEcho 가 복사) → {이름: 값 | [값…]}. 없으면 {} (multipart · 큰 본문 · 다른 메서드)."""
+    scope = getattr(request, "scope", None) or {}
+    body = scope.get(FORM_ECHO_KEY)
+    if not body:
+        return {}
+    out: dict[str, Any] = {}
+    for k, v in parse_qsl(body.decode("utf-8", errors="replace"), keep_blank_values=True):
+        if k in out:
+            out[k] = (out[k] if isinstance(out[k], list) else [out[k]]) + [v]
+        else:
+            out[k] = v
+    return clean_values(out)
+
+
+class FormEcho:
+    """순수 ASGI 미들웨어 — `application/x-www-form-urlencoded` POST 본문을 흘려보내며 `scope["mes.form_body"]` 에 복사한다.
+    본문을 소비하지 않는다(라우터는 그대로 읽는다). 422 핸들러가 `posted_values` 로 입력값을 알림에 싣는다(api-contract.md §2)."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http" or scope.get("method") != "POST":
+            return await self.app(scope, receive, send)
+        ctype = dict(scope.get("headers") or []).get(b"content-type", b"")
+        if not ctype.startswith(b"application/x-www-form-urlencoded"):
+            return await self.app(scope, receive, send)
+        chunks: list[bytes] = []
+        size = 0
+
+        async def recv():
+            nonlocal size
+            msg = await receive()
+            if msg.get("type") == "http.request":
+                body = msg.get("body", b"")
+                size += len(body)
+                if size <= FORM_ECHO_MAX:
+                    chunks.append(body)
+                    if not msg.get("more_body", False):
+                        scope[FORM_ECHO_KEY] = b"".join(chunks)
+                else:
+                    scope.pop(FORM_ECHO_KEY, None)
+            return msg
+
+        return await self.app(scope, recv, send)
+
+
+def flash(request, title: str, message: str, *, fields: list[dict] | None = None, kind: str = "info",
+          values: dict | None = None) -> None:
+    """알림 한 번. `values` = 422 뒤 폼에 다시 채울 입력값 `{이름: 값 | [값…]}`(비밀 칸 제외) — 템플릿은 `flash.values` 로 읽는다."""
     if not hasattr(request, "session"):
         return
-    request.session[FLASH_KEY] = {"title": title, "message": message, "kind": kind, "fields": fields or []}
+    request.session[FLASH_KEY] = {"title": title, "message": message, "kind": kind, "fields": fields or [],
+                                  "values": clean_values(values)}
 
 
 def pop_flash(request) -> dict | None:
@@ -95,9 +166,10 @@ def _by_code(code: str, message: str | None = None, **extra: Any) -> HTTPExcepti
     return err(status, code, message or default, **extra)
 
 
-def validation_error(message: str | None = None, *, fields: list[dict] | None = None) -> HTTPException:
-    """422. `fields` 는 [{'name': 컬럼 식별자, 'label': 치환어, 'reason': …}]."""
-    return _by_code("validation_error", message, fields=fields or [])
+def validation_error(message: str | None = None, *, fields: list[dict] | None = None, values: dict | None = None) -> HTTPException:
+    """422. `fields` 는 [{'name': 컬럼 식별자, 'label': 치환어, 'reason': …}].
+    `values` = 브라우저 폼 POST 가 303 으로 돌아갈 때 다시 채울 입력값(주지 않으면 요청 본문에서 — `posted_values`). JSON 응답에는 싣지 않는다."""
+    return _by_code("validation_error", message, fields=fields or [], values=clean_values(values) if values else None)
 
 
 def hook_rejected(exc: HookError) -> HTTPException:

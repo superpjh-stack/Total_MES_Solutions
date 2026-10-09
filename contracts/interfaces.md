@@ -231,7 +231,8 @@ migrate.run(command, dir, *, dry_run=False, run_by=None) -> MigrateReport   # .o
 ## 8. HTTP 헬퍼 — `app.util.http`
 
 ```python
-http.validation_error(message, fields=None) -> HTTPException(422)
+http.validation_error(message, fields=None, values=None) -> HTTPException(422)   # values = 폼 POST 303 뒤 다시 채울 입력값(없으면 요청 본문 — http.posted_values · 비밀 칸 제외). JSON 422 에는 안 실린다
+http.flash(request, title, message, fields=None, kind=, values=None)   # 템플릿: flash.title · message · kind · fields · values
 http.not_found(message=None) -> HTTPException(404)
 http.undecided(decision_id, what) -> HTTPException(501)
 http.saved(request, message, data=None) -> Response       # 브라우저 303 + 알림 · JSON 200

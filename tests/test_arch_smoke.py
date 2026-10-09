@@ -213,3 +213,35 @@ def test_numbering_rules_seeded_from_core_yaml():
 def test_term_substitution_is_identity_without_pack():
     if packs.current().is_core_only:
         assert packs.t("생산 LOT") == "생산 LOT" and packs.t("없는 말") == "없는 말"
+
+
+def test_422_form_post_keeps_values_in_flash_and_asset_version_tracks_static():
+    """폼 POST 422 → 303 + 알림에 입력값(values · 비밀 칸 제외) · JSON 422 에는 values 없음 · asset_version = static 전체 mtime."""
+    import os
+    import time
+
+    from mescore.app import templating
+    from mescore.app.util import http as h
+
+    c = _client("admin")
+    r = c.post(nav.path_of("BAS-01"), data={"item_code": "", "item_name": "값 유지 (예시)", "password": "x"}, headers=HTML, follow_redirects=False)
+    assert r.status_code == 303
+    import base64
+    import json
+
+    from itsdangerous import TimestampSigner
+    raw = TimestampSigner(get_settings().session_secret).unsign(c.cookies.get(get_settings().session_cookie).encode())
+    flash = json.loads(base64.b64decode(raw))["flash"]     # 세션 쿠키(SessionMiddleware) 안의 알림
+    assert flash["values"].get("item_name") == "값 유지 (예시)" and "password" not in flash["values"]
+    j = c.post(nav.path_of("BAS-01"), data={"item_code": "", "item_name": "x"})
+    assert j.status_code == 422 and "values" not in j.json()
+    e = h.validation_error("x", values={"a": "1", "token": "t"})
+    assert e.detail["values"] == {"a": "1"}
+    probe = templating.STATIC_DIR / "_asset_probe.tmp"
+    try:
+        before = int(templating.asset_version())
+        probe.write_text("x", encoding="utf-8")
+        os.utime(probe, (time.time() + 100, time.time() + 100))
+        assert int(templating.asset_version()) >= before + 99
+    finally:
+        probe.unlink(missing_ok=True)

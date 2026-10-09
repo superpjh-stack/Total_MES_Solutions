@@ -30,9 +30,10 @@
 |---|---|---|
 | 화면 GET | 200 HTML | **200 JSON** — 그 화면의 `ctx`(`templating.render` 가 받은 것 + `screen_id` · `user` · `functions` · `template`). placeholder 는 `placeholder: true` (백엔드 우선 · D-18) |
 | 쓰기 성공 | **303** → 원래 화면 + 알림 한 번 | **200** `{"ok": true, "message": "…", …}` (`http.saved(request, msg, data={…})`) |
-| 422 (폼 POST) | **303** → 원래 화면 + 알림(메시지 · 항목별 사유). POP 은 큰 글씨, 닫으면 스캔칸으로. 원래 화면 = `Referer` → 요청 경로의 화면 경로 → 메인 | **422** `{"code": "validation_error"|"hook_rejected", "message": "…", "fields": [{"name": …, "reason": …}]}` |
+| 422 (폼 POST) | **303** → 원래 화면 + 알림(메시지 · 항목별 사유 · **입력값**). POP 은 큰 글씨, 닫으면 스캔칸으로. 원래 화면 = `Referer` → 요청 경로의 화면 경로 → 메인. **입력값 유지**: 알림(`flash`)에 `values {이름: 값 | [값…]}` — `http.validation_error(..., values={…})` 로 준 값, 없으면 요청 본문(urlencoded · `http.FormEcho` 가 복사 · 64KB 이하). 훅 거부 · DB 제약 422 도 같다. 비밀 칸(`password` · `token` · `secret` …)은 싣지 않는다. 폼은 `flash.values[이름]` 으로 다시 채운다(`_macros` · 템플릿 — 디자이너1) | **422** `{"code": "validation_error"|"hook_rejected", "message": "…", "fields": [{"name": …, "reason": …}]}` |
 | 422 (**스캔 진입 GET** `?no=`) | **그 화면을 422 로 다시 그린다** — 사유를 큰 글씨로, `data-scan` 포커스 유지. 오류 화면으로 보내지 않는다 | **422** `validation_error` |
 | 422 (그 밖 브라우저 GET) | 422 오류 화면(`_error.html`) | **422** |
+| 정적 파일 | `/static/<파일>?v={{ asset_v }}` — `asset_v` = `static/` **전체** 파일의 최신 mtime(`templating.asset_version`) | — |
 | 401 | GET 은 **303** → `/login?next=…` · POST 는 401 오류 화면 | **401** `{"code": "unauthorized", "message": "로그인이 필요합니다"}` |
 | 403 · 404 · 501 · 503 · 500 | 그 상태코드의 오류 화면 | 그 상태코드 + `{"code": …, "message": …}` (501 은 `decision` 포함) |
 

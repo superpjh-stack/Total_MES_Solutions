@@ -48,8 +48,9 @@ def _fmt_now() -> str:
 
 
 def asset_version() -> str:
+    """정적 파일 캐시 무효화 값 — `static/` 아래 **전체** 파일의 최신 mtime(`tokens.css` · `pop.css` · `board.js` … 를 고쳐도 바뀐다). 없으면 "0"."""
     try:
-        return str(int(max((STATIC_DIR / n).stat().st_mtime for n in ("style.css", "app.js"))))
+        return str(int(max((f.stat().st_mtime for f in STATIC_DIR.rglob("*") if f.is_file()), default=0)))
     except OSError:
         return "0"
 

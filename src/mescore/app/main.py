@@ -84,6 +84,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(SessionMiddleware, secret_key=s.session_secret or secrets.token_urlsafe(32),
                        session_cookie=s.session_cookie, same_site="lax", https_only=False, max_age=auth.SESSION_MAX_AGE_SECONDS)
+    app.add_middleware(http.FormEcho)      # 422 뒤 입력값 유지 — urlencoded POST 본문 복사(소비하지 않는다)
 
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -247,8 +248,10 @@ def create_app() -> FastAPI:
         hits = [sc.path for sc in nav.ALL if sc.path != "/" and "{" not in sc.path and (path == sc.path or path.startswith(sc.path + "/"))]
         return max(hits, key=len) if hits else "/"
 
-    def _back_with_flash(request: Request, message: str, fields: list[dict]):
-        http.flash(request, t("입력값을 확인해 주세요"), message, fields=fields, kind="warn")
+    def _back_with_flash(request: Request, message: str, fields: list[dict], values: dict | None = None):
+        """422 폼 POST → 원래 화면 303 + 알림. 입력값(`values` 또는 요청 본문)을 알림에 실어 폼이 다시 채운다 (api-contract.md §2)."""
+        http.flash(request, t("입력값을 확인해 주세요"), message, fields=fields, kind="warn",
+                   values=values if values else http.posted_values(request))
         return RedirectResponse(request.headers.get("referer") or _screen_to_return(request), status_code=303)
 
     def _invalid_input(request: Request, message: str, fields: list[dict], code: str = "validation_error"):
@@ -269,10 +272,10 @@ def create_app() -> FastAPI:
             nxt = request.url.path + (f"?{request.url.query}" if request.url.query else "")
             return RedirectResponse(f"/login?next={quote(nxt, safe='')}", status_code=303)
         if exc.status_code == 422 and html and request.method == "POST":
-            return _back_with_flash(request, message, detail.get("fields") or [])
+            return _back_with_flash(request, message, detail.get("fields") or [], detail.get("values"))
         if html:
             return _error_page(request, exc.status_code, code, message, fields=detail.get("fields"), note=detail.get("decision", ""))
-        return JSONResponse({"code": code, "message": message, **{k: v for k, v in detail.items() if k not in {"code", "message"}}},
+        return JSONResponse({"code": code, "message": message, **{k: v for k, v in detail.items() if k not in {"code", "message", "values"}}},
                             status_code=exc.status_code)
 
     _REASONS = {"missing": "필수 항목입니다", "int_parsing": "정수여야 합니다", "float_parsing": "숫자여야 합니다",
