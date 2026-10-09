@@ -181,3 +181,94 @@ PASS 22 · FAIL 11 · WARN 0 · BLOCKED 0 · 미검증 9 / 전체 42
 | 팩 재현 | printfilm S1 `lot_genealogy` 10행(투입 3 · splice 2 · 슬리팅 3 · 출하 2) · foodservice 소요량 144/120/24 · 배치 측정값 collect · kimchi S1 10행(기획 9 — 합병 API 가 별도 LOT) · S2 422 hook_rejected · S3 알람 합침 · S4 숙성 | 각 팩 `tests/` · `outputs/e2e/<팩>/` |
 | 코어 변경 요청 | 세 팩 공통: 설비 알람(D-501 반영 결정 · 테이블 52→54 는 정본 수정 필요 → **사람 결정**) · 팩 시드 적재 범위(CR-9) · check_trace↔import_design(CR-10) · R9 범위(CR-11) · `read_attrs(Request)` 버그 · `menus.rename` 이중 치환 · 채널 코드 정규화 · 시드 순서 · `audit` 기능명 `t()` | `progress-dev{1,2,3}.md` §3 |
 | 다음 | 회전 4: 아키텍트 D-2(요청 처리 · core-hash · R9 정의) · 개발 3 수정 · QA 3(`mes_qa_db` 전용 · check_screens/data/security · E2E) · 디자이너1 채널 틀 통합 | — |
+
+## 2026-10-09 회전 4 — 아키텍트 (웨이브 D-2: 요청 처리 · CR-9/10/11 · 422 입력값 · R9 정의 · D-501 정리 · core-hash)
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| 1 packs (`733074f` · `649c2d6`) | ① `read_attrs(Request)` — starlette `Request` 는 Mapping 이라 폼을 안 읽던 것(개발1 ①) → `HTTPConnection` 이면 `request.form()` · 폼 이름 `attr_<key>` · `attrs.<key>` 둘 다 ② `t()` 한 번 훑기 · 같은 자리 긴 키 먼저 · 치환 결과 재치환 없음 · 겹말 방지(`추적: LOT 추적` 에서 `LOT 추적` → 그대로) ③ **`menus.rename` 값은 `t()` 를 걸지 않는다**(코디네이터 · 개발3 22 — 합성어 `품질이상` 까지) · 단 값이 terms 키와 똑같으면(`출하`) 치환 · `check_terms` G-P05 는 rename 값을 노출로 세지 않음 ④ 채널 코드 `web/pop/mobile/board` · 라벨 둘 다(`screens[]` · `menus.add[]` · `channels` 키) → 병합본은 라벨/코드 키로 정규화 · 모르는 값 `PackError` · `pack-contract.md` §2 | `tests/test_arch_packs.py` 26 passed(새 5) · 3팩 `packs.load` OK |
+| 2 팩 시드 CR-9 (`6c77eb9`) | 순서 **seeds[] 공정 → 품목 → 설비 → process_params → inspection_items → 나머지 seeds[] 선언 순서 → 계정** · `seeds[]` 항목 = 문자열(이름 접두 `processes items equipment partners workers defect_codes codes kpi_indicators users`) 또는 `{file, table, key}`(`x_<팩>_*` · 허용 코어 기준정보 8 — 그 밖 `PackError`) · 모든 파일 `attrs.<키>` → attrs 합침 · 열이 아닌 `<x>_code` 는 FK 로 풀기(없는 값 오류 · `ink_code → ink_formula_id`) · 문자열 항목의 모르는 열은 경고(stderr) · `{…}` 항목은 오류 · 계정 = 팩 역할마다 1(로그인 ID 역할 코드 소문자 · 코어 4 는 `admin prod qa field`) + `seed/users.csv`(비밀번호 열 없음 — `MES_SEED_PASSWORD`) | **빈 임시 DB**(스키마 + schema_ext) 3팩 각각 `seed_core` 2회 diff 0 · 우회 없이 첫 시드 성공 · 실 팩 DB `MES_PACK=<팩> make db-seed` ×3 2→3회 diff 0 · printfilm `{file,table,key}` 4 + defect_codes 로 `seed_pack.sql` 결과와 같은 수(판사양 2 · 아니록스 2 · 잉크 2 · 조성 3 · 불량 attrs 4 · 공정 구분 3) 2회 diff 0 · 엄격 모드 모르는 열 · 없는 FK 값 SystemExit |
+| 3 audit (`3e86ba4`) | 저장 = function-list 중립어 원문 · 표시 = SYS-04 `|t`(개발1 82f525f) · `interfaces.md` §2 · audit docstring | 문서 |
+| 4 422 입력값 · 정적 버전 (`2d908b2`) | `http.validation_error(..., values=)` · `http.FormEcho`(urlencoded POST 본문 복사 · 64KB · 소비 안 함) → `_back_with_flash` 가 `flash.values`(비밀 칸 password/token/secret/csrf 제외 · 칸 2000자) · 훅 거부 · DB 제약 422 도 같다 · JSON 422 에는 values 없음 · `asset_version()` = `static/` 전체 rglob 최신 mtime · `api-contract.md` §2 · `interfaces.md` §8. 디자이너1 매크로(47bbbdc)와 이어 **BAS-01 중복 코드 POST → 303 → 다시 그린 화면에 `item_code="PRD-EX-01"` · `item_name="값유지확인-예시"` 값이 남음** | `tests/test_arch_smoke.py::test_422_form_post_keeps_values_in_flash_and_asset_version_tracks_static` · TestClient HTML 실측 |
+| 요청 (`40cca8a`) | `POST /login` 실패 401 재렌더도 `role_summary` · `n_menus`(GET 은 개발1 home · POST 는 인증이라 main 에 둠) | `test_login_401_then_ok_and_logout_revokes` |
+| 요청 (`7581e2d`) | `http.sort_clause(sort, allowed, default)` — `열` · `-열` · 쉼표 · 허용 열만 · 모르는 열 422 (D-37). 라우터 적용은 각 담당 | `test_sort_clause_allows_only_declared_columns` |
+| 5 G-P03 (`f1e0974`) | `check_trace` 가 `import_design.py --pack <팩>` 출력 마지막 `G-P03 … PASS|FAIL|미검증` 줄 + 종료코드(0/1/2) 로 판정 · 어긋나면 FAIL · `--pack` 없는 도구면 `MES_PACK` 로 다시 | 3팩 G-P03 **PASS**(아래 원문) |
+| 6 R9 (`904b12c` · D-36) | R9 = 코어 단독 `tests/` 전건(G-C21) + 팩 올린 채 `tests/test_arch_*.py`(check_pack R9 → G-P01). `test_arch_packs` 임시 팩 픽스처가 끝나고 **실행 팩**으로 복귀(전엔 코어 단독으로 돌려 뒤 테스트가 팩 DB 를 코어 병합본으로 봤다) | kimchi · foodservice `test_arch_*` 50 passed · 6 skipped(구조 · 병합만 · 코어 권한 표 단언은 `is_core_only`) |
+| 7 `v_lot_state` (`3d2bdf3`) | PRODUCT: 출하 계보 → 출하 · 분할/합병/생산 → 소진(통째) · **투입만 → 잔량**(≤0 · qty NULL 투입 · LOT 수량 NULL → 소진). `create or replace view` 로 `mes_core_db` · 팩 DB 3 에 다시 적용 | `test_arch_schema::test_product_lot_partial_input_stays_in_stock` · 계보 · POP · 출하 · 이관 테스트 60 passed |
+| 8 D-501 (`969b63f`) | 상태 **차단(사람 승인 대기)** — `bas_equipment_param` · `eqp_alarm`(열린 알람 하나 부분 uq · 합침 count) · `collect.receive` 판정(정제 뒤 · `on_collect` 앞 · 자동 해제 기본 off) · `on_alarm_raised` · EQP-05 를 한 벌로 정리. **스키마 · 코드 변경 0** | `decisions.md` D-501 |
+| 9 결정 등재 (`969b63f`) | 개발 D-107 · D-108 · D-206~D-209 · D-303~D-305 · 디자이너 D-606(현황판 다크 `?theme=dark` — 차단) · D-607(채널 틀 base 통합) · 아키텍트 D-36 · D-37 | `decisions.md` |
+| 10 core-hash (`3decfe9`) | `outputs/core.sha256` 158 파일 — 회전 4 개발1·2·3 · 디자이너1 커밋분 + **QA 미커밋 `tools/check_data.py` · `check_screens.py`**(작업 중이라 다음 편집에서 R1 이 다시 어긋난다 — D-33) | `make core-hash` |
+| pytest (코어 단독) | **278 passed · 1 failed** — `test_arch_smoke::test_core_has_no_forbidden_terms` ← QA `tools/check_data.py:1528 · 1532` 의 `슬리팅` · `splice`(미커밋 QA 파일). 아키텍트 파일 위반 0 | `uv run pytest -q -p no:cacheprovider` |
+| check-routes · check-terms | G-C03 라우트 PASS 56/56 · placeholder 0 · RBAC 204 위반 0 · G-C23 FAIL 3(전부 QA `check_data.py`) · t() 누락 0 | `make check-routes` · `make check-terms` |
+| 게이트 | **PASS 27 · FAIL 9 · 미검증 6 / 42** — QA 검사기(check_screens · check_data)가 이번 회전 처음 판정에 들어왔다(`mes_qa_db`) | `make gate`(09:21) → `outputs/gate-r4-arch.txt` |
+
+### FAIL 9 — 누구 몫인가
+
+| 게이트 | 원인 | 담당 |
+|---|---|---|
+| G-C02 | QA check_screens 계약 호출 FAIL 21(F-ORD-02/03/08/09 · F-MAT-02/07 · F-POP-03/04/05/07 · F-QUA-02/05 …) — 정상 + 오류 계약 호출 판정 | QA 대조 → 개발2 · 개발3 (`outputs/qa*`) |
+| G-C03 | `POST /login/as`(D-605 개발용 로그인) — 인증 없이 열리는 경로 · 비밀번호 없는 로그인(`MES_ENV=dev`). D-605 는 dev 만이라 의도된 것이나 QA 기준은 계약 5종 | 개발1 · 사람(D-605 를 gate 환경에서 끌지) |
+| G-C08 | TRC-02 지시 링크 `/job/status?wo=W261009-001` → 404 | 개발3 `trc._links` ↔ 개발1 JOB-02 `?wo=` |
+| G-C11 | `미확정` 뒤 `(D-nn)` 없음 — KPI-01「% 목표 미확정」 · SYS-06「실행 폴더 미확정 (MES_MIGRAT…」 | 디자이너3/개발3(KPI-01) · 개발1(SYS-06) |
+| G-C21 · G-C23 | QA `check_data.py` 금지어 3(`슬리팅` · `splice`) | QA2 |
+| G-P01 ×3 | R1 = QA 미커밋 2 파일(해시 뒤 편집) · R9 = 같은 금지어 테스트 1건 · R10 WARN(foodservice 1 · printfilm 3 — README 기재) | QA2 · (해시는 QA 커밋 뒤 아키텍트 재기록) |
+
+미검증 6: G-C10 · G-C12(check_data rc=1 — 판정 행 없음 · QA2 작업 중) · G-C22(QA3 판정 문서 없음 · e2e 캡처 25) · G-P06 ×3(사람 실측).
+
+### `make gate` 판정표 원문 (2026-10-09 09:21 · 줄마다 앞 400자 · 전문 `outputs/gate-r4-arch.txt`)
+
+```
+게이트 판정 — MES 표준플랫폼 · 2026-10-09 09:21
+[코어 단독 MES_PACK=]
+G-C01  메뉴 — 코어 12 · 공통 5 · nav = core.yaml                    PASS  검사 7 전부 PASS
+G-C02  기능 — 132 + 이관 4 · 계약 = API = 테스트 · 고아 0                FAIL  기능 136 계약 호출 (정상 + 오류 계약): PASS 115/136 · FAIL 21 ['F-ORD-02', 'F-ORD-03', 'F-ORD-08', 'F-ORD-09', 'F-MAT-02', 'F-MAT-07', 'F-POP-03', 'F-POP-04', 'F-POP-05', 'F-POP-07', 'F-QUA-02', 'F-QUA-05'] · 미검증 0 [] · 검사 676건 · DB mes_qa_db
+G-C03  화면 — 51 + 공통 5 전부 200 · placeholder 0                  FAIL  검사 2 · 통과 못한 1 — 응답 모양 · 인증 없는 경로 · 503 (api-contract §2): 검사 31 · 통과 못한 2 ["인증 없이 열리는 경로 = 계약 5종뿐 (라우트 139 전수 401): ['POST /login/as → 422']", '비밀번호 없는 로그인 경로 0 (POST /login/as role=ADMIN): /login/as 200 → 그 세션 /sys/users 200 · MES_ENV=dev']
+G-C04  스키마 — 테이블 52 · 계약 = 실제 DB · 공통 컬럼                      PASS  검사 8 전부 PASS
+G-C05  쓰기 경계 — trc · kpi 쓰기 0 · lot_genealogy 는 lineage 만     PASS  GET 132회(화면 · 추적 · 라벨 · 인쇄 · 팝업 · 집계 — JSON+HTML) 응답 {2: 132} · 행 수 · 최종 수정 시각 바뀐 테이블 0
+G-C06  계보 재현 — 코어 시나리오 lot_genealogy 10행 (API)                PASS  검사 2 전부 PASS
+G-C07  추적 — 역방향 · 정방향 재귀 · 깊이 20 분기 100 2초                    PASS  검사 7 전부 PASS
+G-C08  키 연결 — LOT 번호 → 지시 · 실적 · 측정값 · 검사 · 출하 · 채번 한 곳       FAIL  검사 3 · 통과 못한 1 — LOT 번호 → 화면 링크 따라가기 (API): TRC-02 start_links ['backward', 'forward', 'inspection', 'lot', 'work_order'] → 지시 · POP-02 측정값 · QUA-02 검사 · SHP-02 출하 — 불일치 ['지시 링크 /job/status?wo=W261009-001 → 404']
+G-C09  시드 멱등 — 2회 실행 행 수 diff 0 · (예시) 표기                     PASS  검사 2 전부 PASS
+G-C10  집계 — stats = QA 별도 SQL · measure_series                미검증  check_data 출력에 G-C10 판정 행 없음 (rc=1)
+G-C11  빈 화면 — 미수집 / 미확정 (D-nn)                                FAIL  검사 2 · 통과 못한 1 — 미확정 표기 — (D-nn) 동반: 화면 본문의 `미확정` 중 `(D-nn)` 이 바로 붙지 않은 곳 ['KPI-01:「% 목표 미확정 % 불량 미수집 시간」', 'SYS-06:「실행 폴더 미확정 (MES_MIGRAT」'] (goal.md G-C11: 미정이면 `미확정 (D-nn)`)
+G-C12  범위 밖 0 — 설비 제어 · 업종 전용 기능 없음                           미검증  check_data 출력에 G-C12 판정 행 없음 (rc=1)
+G-C13  4채널 — POP 스캔 · 모바일 390px · 현황판 새로고침                    PASS  body.ch-pop True · ch-mobile True · ch-board+새로고침 True · 채널 밖(BAS-01?device=pop) 403 · POP 화면 13 중 data-scan 1개 9 · 2개 이상 0 · 390px 가로 넘침 0 은 브라우저 대조 · QA 대조 대기 (check_security)
+G-C14  출력물 4종 — 작업지시서 · 라벨 2 · 성적서 · 바코드 SVG                  PASS  작업지시서 200 svg 바코드=T-W-E373FE6378 · LOT 라벨 200 svg 바코드=P261009-2349 · 출하 라벨 200 svg 바코드=T-S-2762A3FE93 · 성적서 200 svg 바코드=C261009-159 · LOT 라벨 바코드 → lineage.resolve 같은 LOT · QA 대조 대기 (check_security)
+G-C15  이관 배치 4 — Import 파일 · 멱등 · 리포트                         PASS  examples dry-run 8회(명령 4 × 2) 오류 0 · 이관 대상 테이블 20 행 수 diff 0 · sys_migration_log +34 · test_migrate 통과 (5 passed in 0.38s) · QA 대조 대기 (check_security)
+G-C16  ERP — 어댑터 + 501 명시 · 조용한 폴백 0                          PASS  기본 어댑터 push → 501 D-02 · flush processed 89 undecided 89 sent 0 failed 0 · ifc_outbox {'미확정': 89} · QA 대조 대기 (check_security)
+G-C17  RBAC — 48칸 데이터 · 없음 403 · 조회 = 쓰기 403 · scopes         PASS  검사 4 전부 PASS
+G-C18  접근 로그 — 로그인 · 조회 · 변경 · SYS-04                         PASS  sys_access_log login_ok 10551 · login_fail 299 · view 25701 · change 13991 · SYS-04 200 · QA 대조 대기 (check_security)
+G-C19  비밀 — 저장소 · 문서에 비밀 값 없음                                 PASS  저장소 대상 파일 501개 중 비밀 값(MES_SEED_PASSWORD · SESSION_SECRET · COLLECT_TOKEN)이 든 파일 0 · .env gitignore 됨 · QA 대조 대기 (check_security)
+G-C20  백업 — make backup · restore-check                       PASS  backup rc=0 (다음: `make restore-check` — 이 덤프를 임시 DB 에 복구해 테이블별 행 수를 대조한다) · restore-check rc=0 (판정: PASS — 테이블 52개 전부 복구 · 테이블별 행 수 일치 (행 90,078)) · QA 대조 대기 (check_security)
+G-C21  빌드 — pytest 전건 · check-routes · /health 200            FAIL  pytest passed 278 · failed 1 ['tests/test_arch_smoke.py::test_core_has_no_forbidden_terms'] · check-routes PASS · /health 200
+G-C22  브라우저 한 바퀴 — outputs/e2e/core 캡처 · QA3 판정               미검증  outputs/e2e/core 파일 25개 — `outputs/qa3-채널보안.md` 없음 (QA3)
+G-C23  용어 중립 — 코어 금지어 0 · t() 누락 0                            FAIL  검사 2 · 통과 못한 1 — 코어 금지어 0: 파일 158 · 금지어 44개 · 위반 3 — ['src/mescore/tools/check_data.py:1528 `슬리팅` (인쇄필름)', 'src/mescore/tools/check_data.py:1528 `splice` (인쇄필름)', 'src/mescore/tools/check_data.py:1532 `슬리팅` (인쇄필름)']
+G-C24  측정값 — bas_process_param 선언 → POP 폼 → pop_measure → 집계  PASS  폼 칸 ['m_qa2_req', 'm_qa2_rng', 'm_qa2_col'] · HTML 입력 ['m_qa2_req', 'm_qa2_rng'] · 수집 칸 라벨 있음 · 필수 누락 422 · 저장 측정값 0 · LOT None · 범위 이탈 25 → 200 · deviated True · 화면 '이탈' 있음 · collect 수신 [200, 200, 200] → 대표값(avg) 3.0 (기대 3 — 구간 밖 9 제외) · 수신 0 실적 종료 200 · collect 값 None · 화면 미수집 있음 · 선언 변경 뒤 새 실적 폼 ['m_qa2_req', 'm_qa2_rng', 'm_qa
+[팩 foodservice · mes_foodservice_db]
+G-P01  격리 — 코어 해시 변동 0 · ALTER 0 · 경로 재정의 0 · scope 밖 쓰기 0  FAIL  검사 8 · 통과 못한 3 — R1 코어 파일 해시 변동 0: [foodservice] 바뀜 2 · 생김 0 · 없어짐 0 ['src/mescore/tools/check_data.py', 'src/mescore/tools/check_screens.py'] / R10 코어 템플릿 덮어쓰기 목록 (README.md 에 적는다): [foodservice] 덮어쓴 템플릿 ['print/work_order.html'] / R9 팩을 올린 채 tests/test_arch_*.py 통과 (코어 단독 tests/ 전건은 G-C21): [foodservice] 파일 3 · 1 failed, 51 passed
+G-P02  규모 — 팩 화면 · 테이블 · 기능 수 = gates.yaml                  PASS  검사 2 전부 PASS
+G-P03  추적표 — 산출물 ID ↔ 화면 매핑 · 고아 0                          PASS  산출물 49 · 매핑 41 · 범위 밖 8 · 고아 0 · N:1 8 · 1:N 6 · 모르는 화면 ID 0 (import_design --pack)
+G-P04  시나리오 — gates.yaml: scenarios 재현                      PASS  [foodservice] 시나리오 8 · 실행 8 · 실패 0
+G-P05  용어 — terms 키 치환 안 된 노출 0                             PASS  [foodservice] 화면 54 · terms 키 16 · 치환 안 된 노출 0
+G-P06  착수 시간 — outputs/pack-timing.md ≤ 4h                  미검증  [foodservice] outputs/pack-timing.md 없음 (사람 · QA3 실측)
+[팩 kimchi · mes_kimchi_db]
+G-P01  격리 — 코어 해시 변동 0 · ALTER 0 · 경로 재정의 0 · scope 밖 쓰기 0  FAIL  검사 8 · 통과 못한 2 — R1 코어 파일 해시 변동 0: [kimchi] 바뀜 2 · 생김 0 · 없어짐 0 ['src/mescore/tools/check_data.py', 'src/mescore/tools/check_screens.py'] / R9 팩을 올린 채 tests/test_arch_*.py 통과 (코어 단독 tests/ 전건은 G-C21): [kimchi] 파일 3 · 1 failed, 51 passed, 6 skipped in 3.28s ['tests/test_arch_smoke.py::test_core_has_no_forbidden_terms']
+G-P02  규모 — 팩 화면 · 테이블 · 기능 수 = gates.yaml                  PASS  검사 2 전부 PASS
+G-P03  추적표 — 산출물 ID ↔ 화면 매핑 · 고아 0                          PASS  산출물 64 · 매핑 52 · 범위 밖 12 · 고아 0 · N:1 14 · 1:N 15 · 모르는 화면 ID 0 (import_design --pack)
+G-P04  시나리오 — gates.yaml: scenarios 재현                      PASS  [kimchi] 시나리오 4 · 실행 4 · 실패 0
+G-P05  용어 — terms 키 치환 안 된 노출 0                             PASS  [kimchi] 화면 62 · terms 키 25 · 치환 안 된 노출 0
+G-P06  착수 시간 — outputs/pack-timing.md ≤ 4h                  미검증  [kimchi] outputs/pack-timing.md 없음 (사람 · QA3 실측)
+[팩 printfilm · mes_printfilm_db]
+G-P01  격리 — 코어 해시 변동 0 · ALTER 0 · 경로 재정의 0 · scope 밖 쓰기 0  FAIL  검사 8 · 통과 못한 3 — R1 코어 파일 해시 변동 0: [printfilm] 바뀜 2 · 생김 0 · 없어짐 0 ['src/mescore/tools/check_data.py', 'src/mescore/tools/check_screens.py'] / R10 코어 템플릿 덮어쓰기 목록 (README.md 에 적는다): [printfilm] 덮어쓴 템플릿 ['print/document.html', 'print/label_lot.html', 'print/work_order.html'] / R9 팩을 올린 채 tests/test_arch_*.py 통과 (코어 단독 tests/ 전건은 G-C21
+G-P02  규모 — 팩 화면 · 테이블 · 기능 수 = gates.yaml                  PASS  검사 2 전부 PASS
+G-P03  추적표 — 산출물 ID ↔ 화면 매핑 · 고아 0                          PASS  산출물 32 · 매핑 31 · 범위 밖 1 · 고아 0 · N:1 2 · 1:N 3 · 모르는 화면 ID 0 · 설계 원본에 없는 매핑 3 (import_design --pack)
+G-P04  시나리오 — gates.yaml: scenarios 재현                      PASS  [printfilm] 시나리오 3 · 실행 3 · 실패 0
+G-P05  용어 — terms 키 치환 안 된 노출 0                             PASS  [printfilm] 화면 57 · terms 키 9 · 치환 안 된 노출 0
+G-P06  착수 시간 — outputs/pack-timing.md ≤ 4h                  미검증  [printfilm] outputs/pack-timing.md 없음 (사람 · QA3 실측)
+PASS 27 · FAIL 9 · WARN 0 · BLOCKED 0 · 미검증 6 / 전체 42
+※ WARN · 미검증은 통과가 아니다. 「QA 대조 대기」 가 붙은 PASS 는 아키텍트 증거 판정 — QA 검사기(check_data · check_security)가 생기면 그 출력이 우선한다. BLOCKED 는 decisions.md 에 D-번호와 사유가 있어야 종료 조건(goal.md §4.4)을 만족한다.
+```
+
+명령: `make core-hash` → `uv run pytest -q -p no:cacheprovider` → `make check-routes` → `make check-terms` → `make gate > outputs/gate-r4-arch.txt` · 팩 시드 `MES_PACK=<팩> make db-seed` ×3 · 빈 DB `createdb mes_r4arch_<팩>_tmp_db` + schema/views/schema_ext + `MES_PACK=<팩> MES_PG_DSN=postgresql:///mes_r4arch_<팩>_tmp_db uv run python -m mescore.db.seed_core` ×2.
+
+**넘긴 것 (각 담당)** — ① 개발1 foodservice: `seed_pack.py` 우회 제거 가능(CR-9) · `menus.rename.pop` 을 최종 이름 `조리 실적 (POP)` 으로(지금 `실적 (POP)` 이 그대로 보인다 — rename 은 t() 없음) · `kpi_indicators.csv` 의 `base_value` · `formula` 는 `attrs.` 접두로 ② 개발2 printfilm: rename 값이 그대로 나온다(`생산 실적 (POP)` 등 — 최종 이름 확인) ③ 개발3 kimchi: `rename.qua: 품질이상` 으로 되돌려도 된다 · `equipment_example.csv` 의 `equip_type` · `comm_type` · `collect_tags` 는 `attrs.` 접두로 넣으면 attrs 에 들어간다 ④ 디자이너1: `flash.values` 키 확정(같은 이름 여러 값은 목록) ⑤ QA2: `check_data.py` 금지어 3 · G-C10/12 판정 행 ⑥ 각 목록 화면 정렬은 D-37 `http.sort_clause` 로 ⑦ **사람: D-501**(테이블 52→54 · 화면 51→52 · 기능 132→135 승인 여부) · D-606(현황판 다크 조건) · D-605(gate 환경 dev 로그인).
