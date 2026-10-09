@@ -11,7 +11,7 @@ from mescore.db import conn
 
 from _dev3_helpers import HTML, client, load_examples, uniq
 
-BOARD_KEYS = {"today", "source", "production", "quality", "delivery", "equipment", "work_orders_count", "work_orders", "measure", "indicators"}
+BOARD_KEYS = {"today", "source", "undecided", "production", "quality", "delivery", "equipment", "work_orders_count", "work_orders", "measure", "indicators"}
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -44,7 +44,7 @@ def test_summary_production_by_item_process_equipment():
         r = c.get("/kpi/summary", params={"kind": "production", "frm": "2026-10-01", "to": "2026-10-02", "by": by})
         assert r.status_code == 200 and r.json()["section"]["by"] == by, by
     body = c.get("/kpi/summary", params={"kind": "production", "frm": "2026-10-01", "to": "2026-10-02", "by": "item"}).json()
-    row = next(x for x in body["section"]["rows"] if x["code"] == "PRD-EX-01")
+    row = next(x for x in body["section"]["rows"] if x["code"] == "PRD-EX-91")
     assert row["good_qty"] == 100 and row["defect_qty"] == 3 and row["result_count"] == 2
     assert c.get("/kpi/summary", params={"kind": "production", "by": "x"}).status_code == 422
     assert c.get("/kpi/summary", params={"kind": "nope"}).status_code == 422
@@ -66,7 +66,7 @@ def test_summary_quality_defect_and_measure_series():
 def test_summary_delivery_by_day_and_partner():
     c = client("admin")
     body = c.get("/kpi/summary", params={"kind": "delivery", "frm": "2026-10-01", "to": "2026-10-05", "by": "partner"}).json()
-    row = next(x for x in body["section"]["rows"] if x["code"] == "CUST-EX-01")
+    row = next(x for x in body["section"]["rows"] if x["code"] == "CUST-EX-91")
     assert row["on_time"] >= 1 and {"due_count", "shipped_count", "late", "pending", "on_time_rate"} <= set(row)
     assert c.get("/kpi/summary", params={"kind": "delivery", "by": "day"}).status_code == 200
 
@@ -76,7 +76,7 @@ def test_summary_equipment_rows_and_none_rates():
     c = client("field")
     body = c.get("/kpi/summary", params={"kind": "equipment", "frm": "2026-10-01", "to": "2026-10-02"}).json()
     rows = body["section"]["rows"]
-    assert any(r["code"] == "EQ-EX-01" for r in rows) and all({"run_rate", "stop_count", "fault_count", "mttr_hours", "current_state"} <= set(r) for r in rows)
+    assert any(r["code"] == "EQ-EX-91" for r in rows) and all({"run_rate", "stop_count", "fault_count", "mttr_hours", "current_state"} <= set(r) for r in rows)
     assert body["section"]["total"]["equipment_count"] == len(rows)
 
 

@@ -60,7 +60,7 @@ def test_basics_idempotent_and_logged():
     assert [f.file for f in first.files] == list(migrate.COMMANDS["basics"]) and all(f.present for f in first.files)
     log = conn.q1("select * from sys_migration_log where command = 'basics' and file = '01_items.csv' order by id desc")
     assert log["read_count"] == 3 and log["errors"] == 0 and log["run_by"] == "test" and log["ended_at"] is not None and not log["dry_run"]
-    assert conn.q1("select count(*)::int as n from bas_bom_dtl d join bas_bom b on b.id = d.bom_id join bas_item i on i.id = b.item_id where i.item_code = 'PRD-EX-01' and d.created_by = 'migrate'")["n"] == 2
+    assert conn.q1("select count(*)::int as n from bas_bom_dtl d join bas_bom b on b.id = d.bom_id join bas_item i on i.id = b.item_id where i.item_code = 'PRD-EX-91' and d.created_by = 'migrate'")["n"] == 2
 
 
 @pytest.mark.fn("B-MIG-02")

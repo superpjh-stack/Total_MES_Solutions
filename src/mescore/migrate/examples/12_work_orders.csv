@@ -1,2 +1,2 @@
 work_order_no,item_code,process_code,equip_code,plan_qty,unit,plan_date,order_no,line_no,status
-W-EX-0001,PRD-EX-01,PRC-EX-01,EQ-EX-01,100,EA,2026-10-01,O-EX-0001,1,마감
+W-EX-0001,PRD-EX-91,PRC-EX-91,EQ-EX-91,100,EA,2026-10-01,O-EX-0001,1,마감

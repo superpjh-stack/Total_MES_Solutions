@@ -19,7 +19,8 @@
                                shipped = 승인 출하가 있는 수주 수 · on_time_rate = on_time / (on_time + late) × 100. by: day(due_date) · partner
   equipment(frm, to)           `bas_equipment`(use_yn=Y) 마다 `eqp_run_log` 구간을 [frm 00:00, to+1일 00:00) 으로 잘라 상태별 초를 더한다(ended_at NULL = now()).
                                run_rate = 가동 초 / (가동+정지+점검+고장 초) × 100 (기록 0 → None) · stop_count = 기간에 시작한 정지 구간 수
-                               fault_count = `eqp_fault.occurred_at` 이 기간 안 · mttr_hours = 그 고장 중 복구된 것의 평균 (fixed_at − occurred_at) 시간
+                               fault_count = `eqp_fault.occurred_at` 이 기간 안 · mttr_hours = 그 고장 중 복구된 것의 평균 (fixed_at − occurred_at) 시간 · fixed_count = 복구된 고장 수
+                               totals 의 mttr_hours = 모든 설비의 복구 고장을 한데 모은 평균(Σ 복구 시간 / Σ fixed_count — 설비별 MTTR 의 평균이 아니다)
                                current_state = ended_at 이 NULL 인 가장 최근 구간의 state (없으면 None → 화면 `미수집`)
   measure_series(key, …)       `pop_measure`(value_num 이 있는 행) 중 `measured_at` 날짜가 기간 안. by: day · work_order · equipment(실적의 설비)
                                agg: avg · min · max · sum · count · last(measured_at 이 가장 늦은 값). n = 행 수 · deviated_count = deviated 행 수
@@ -254,7 +255,7 @@ def shipment_due(shipment_ids: list[int]) -> dict[int, dict]:
 # ── 설비 ───────────────────────────────────────────────────────────────
 def equipment(frm: date, to: date) -> list[dict]:
     """설비 집계 — 설비마다 {equipment_id, code, name, collect_yn, run_seconds, stop_seconds, check_seconds, fault_seconds, logged_seconds,
-    run_rate, stop_count, fault_count, mttr_hours, current_state}."""
+    run_rate, stop_count, fault_count, fixed_count, mttr_hours, current_state}."""
     params = {"ws": datetime.combine(frm, datetime.min.time()), "we": datetime.combine(to + timedelta(days=1), datetime.min.time()),
               "frm": frm, "to": to}
     rows = conn.q("""
@@ -274,6 +275,7 @@ def equipment(frm: date, to: date) -> list[dict]:
               from seg group by equipment_id),
         fault as (
             select f.equipment_id, count(*)::int as fault_count,
+                   count(f.fixed_at)::int as fixed_count,
                    avg(extract(epoch from (f.fixed_at - f.occurred_at)) / 3600.0) as mttr_hours
               from eqp_fault f where f.occurred_at::date between %(frm)s and %(to)s
              group by f.equipment_id),
@@ -283,7 +285,7 @@ def equipment(frm: date, to: date) -> list[dict]:
         select e.id as equipment_id, e.equip_code as code, e.equip_name as name, e.collect_yn,
                coalesce(a.run_seconds, 0)::float as run_seconds, coalesce(a.stop_seconds, 0)::float as stop_seconds,
                coalesce(a.check_seconds, 0)::float as check_seconds, coalesce(a.fault_seconds, 0)::float as fault_seconds,
-               coalesce(a.stop_count, 0) as stop_count, coalesce(f.fault_count, 0) as fault_count, f.mttr_hours, c.state as current_state
+               coalesce(a.stop_count, 0) as stop_count, coalesce(f.fault_count, 0) as fault_count, coalesce(f.fixed_count, 0) as fixed_count, f.mttr_hours, c.state as current_state
           from bas_equipment e
           left join agg a on a.equipment_id = e.id
           left join fault f on f.equipment_id = e.id
@@ -364,10 +366,11 @@ def totals(kind: str, rows: list[dict]) -> dict | None:
                 "on_time": on_time, "late": late, "pending": sum(r["pending"] for r in rows), "on_time_rate": rate(on_time, on_time + late)}
     if kind == "equipment":
         run, logged = sum(r["run_seconds"] for r in rows), sum(r["logged_seconds"] for r in rows)
-        fixed = [r["mttr_hours"] for r in rows if r["mttr_hours"] is not None]
+        fixed = [(r["mttr_hours"], r.get("fixed_count") or 0) for r in rows if r["mttr_hours"] is not None]
+        n_fixed = sum(n for _, n in fixed)                              # 복구 고장 전체 평균(가중) — 설비별 MTTR 의 평균이 아니다
         return {"equipment_count": len(rows), "run_seconds": run, "logged_seconds": logged, "run_rate": rate(run, logged),
                 "stop_count": sum(r["stop_count"] for r in rows), "fault_count": sum(r["fault_count"] for r in rows),
-                "mttr_hours": (sum(fixed) / len(fixed)) if fixed else None}
+                "fixed_count": n_fixed, "mttr_hours": (sum(h * n for h, n in fixed) / n_fixed) if n_fixed else None}
     raise ValueError(f"집계 종류가 아니다: {kind!r}")
 
 
@@ -528,6 +531,10 @@ def open_work_orders(limit: int = 7) -> list[dict]:
     return rows
 
 
+#: 지표 목표값이 없을 때(NULL) 근거 결정 — 현황판 · 지표 화면의 `미확정 (D-602)`
+TARGET_DECISION = "D-602"
+
+
 def board(today: date | None = None) -> dict:
     """현황판 한 화면 분 — 키는 `docs/design/README.md` 디자이너3 절(D-602) 그대로. 전부 **오늘 하루** 기준."""
     day = today or date.today()
@@ -547,6 +554,7 @@ def board(today: date | None = None) -> dict:
     return {
         "today": day.isoformat(),
         "source": f"스냅샷 {snap_at.strftime('%H:%M')}" if snap_at else "실시간",
+        "undecided": f"{packs.t('미확정')} ({TARGET_DECISION})",                       # 목표 NULL 칸 문구 — goal G-C11 `미확정 (D-nn)` (DEF-QA2-003)
         "production": {"plan_qty": _f(prod.get("plan_qty")), "actual_qty": _f((prod.get("good_qty") or 0) + (prod.get("defect_qty") or 0)) if prod else None,
                        "good_qty": _f(prod.get("good_qty")), "defect_qty": _f(prod.get("defect_qty")), "unit": unit["unit"] if unit else None,
                        "achieve_rate": values.get("production.achieve_rate") if snap else prod.get("achieve_rate"),
@@ -599,11 +607,22 @@ def recent_activity(limit: int = 5) -> list[dict]:
 
 
 #: 메인 카드 "오늘 건수" 출처 — 모듈 코드 → 무엇을 세는가 (home/main.html 디자이너3 가설 · trc 는 오늘 계보 연결)
-TODAY_COUNT_SOURCES: dict[str, str] = {
+class _TermsDict(dict):
+    """읽을 때 팩 terms 를 건 값을 돌려주는 dict — 출처 문장이 화면(CMN-02 카드 title)에 그대로 나가므로 `t()` 를 여기서 건다(G-P05).
+    저장 값은 코어 중립어 원문 그대로."""
+
+    def __getitem__(self, key):
+        return packs.t(super().__getitem__(key))
+
+    def get(self, key, default=None):
+        return self[key] if key in self else default
+
+
+TODAY_COUNT_SOURCES: dict[str, str] = _TermsDict({
     "bas": "오늘 기준정보 변경(F-BAS-* change 로그)", "ord": "오늘 납기 수주(취소 제외)", "job": "오늘 계획 작업지시(취소 제외)",
     "mat": "오늘 입고", "pop": "오늘 시작 실적", "qua": "판정 대기 검사", "eqp": "고장 중 설비(미조치 고장)", "shp": "출하 대기(등록)",
     "trc": "오늘 계보 연결", "kpi": "오늘 측정값 이탈", "sys": "오늘 로그인", "ifc": "오늘 수신 거부",
-}
+})
 
 
 def today_counts(today: date | None = None) -> dict[str, int]:

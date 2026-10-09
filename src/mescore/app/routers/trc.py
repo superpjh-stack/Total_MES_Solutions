@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
@@ -38,26 +40,29 @@ def _lineage():
 
 def _links(node) -> dict[str, str]:
     """G-C08 — LOT 번호 하나로 지시 · 실적 · 측정값 · 검사 · 출하 화면을 연다. 경로는 nav 에서."""
-    out = {"lot": f"{nav.path_of('MAT-03') if node.kind_base == 'MATERIAL' else nav.path_of('QUA-02')}?no={node.no}"}
-    if node.work_order_no:
-        out["work_order"] = f"{nav.path_of('JOB-02')}?wo={node.work_order_no}"          # D-604 — 실적 · 측정값은 지시 현황에서 드릴다운
+    no = quote(node.no, safe="")
+    out = {"lot": f"{nav.path_of('MAT-03') if node.kind_base == 'MATERIAL' else nav.path_of('QUA-02')}?no={no}"}
+    if node.work_order_no:                                                              # D-604 — JOB-02 `?wo=` 는 지시 번호를 받는다(개발1 wo_of_key)
+        out["work_order"] = f"{nav.path_of('JOB-02')}?wo={quote(node.work_order_no, safe='')}"   # 실적 · 측정값은 지시 현황에서 드릴다운
     if node.kind_base == "PRODUCT":
-        out["inspection"] = f"{nav.path_of('QUA-02')}?no={node.no}"
+        out["inspection"] = f"{nav.path_of('QUA-02')}?no={no}"
     if node.kind_base == "SHIPMENT":
         out["shipment"] = f"{nav.path_of('SHP-02')}?id={node.shipment_id}" if node.shipment_id else nav.path_of("SHP-01")
-    out["forward"] = f"{nav.path_of('TRC-01')}?no={node.no}"
-    out["backward"] = f"{nav.path_of('TRC-02')}?no={node.no}"
+    out["forward"] = f"{nav.path_of('TRC-01')}?no={no}"
+    out["backward"] = f"{nav.path_of('TRC-02')}?no={no}"
     return out
 
 
 def _stages(trace) -> list[dict]:
-    """화살표를 출발점에서 가까운 순(`depth`)으로 묶는다 — 화면의 "단계". 계산해서 보여 줄 뿐 저장하지 않는다."""
+    """화살표를 출발점에서 가까운 순(`depth`)으로 묶는다 — 화면의 "단계". 계산해서 보여 줄 뿐 저장하지 않는다.
+    수량은 둘이다(DEF-QA3-006): `qty` = 화살표 수량(lot_genealogy.qty — 이 관계로 옮겨 간 양) · `lot_qty` = 도착 LOT 의 `lot.qty`(= `to.qty`).
+    합병 LOT 은 화살표 50 + 50 이어도 노드는 100 이다 — 트리 노드에는 `lot_qty` 를, 관계 옆에는 `qty` 를 쓴다."""
     stages: dict[int, dict] = {}
     for e in trace.edges:
         near, far = (e.parent, e.child) if trace.direction == FORWARD else (e.child, e.parent)
         st = stages.setdefault(e.depth, {"depth": e.depth, "edges": [], "relations": [], "nodes": {}})
         st["edges"].append({"genealogy_id": e.genealogy_id, "relation": e.relation, "relation_base": e.relation_base, "qty": e.qty,
-                            "from": near, "to": far, "links": _links(far)})
+                            "lot_qty": far.qty, "unit": far.unit, "from": near, "to": far, "links": _links(far)})
         if e.relation not in st["relations"]:
             st["relations"].append(e.relation)
         st["nodes"].setdefault(far.id, far)

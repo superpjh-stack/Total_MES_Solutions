@@ -5,7 +5,8 @@
 숙성 투입(F-X-AGE-01)의 계보: 코어 `lineage.split` 은 N ≥ 2 만 받는다(D-503 은 merge 쪽만 N ≥ 1). 그래서 1차는
   · 부분 수량 → `split(count=2, qtys=[숙성 수량, 잔량], relation=숙성, kind=AGING)` 뒤 잔량 LOT 을 `retag(PRODUCT)`(잔량은 새 번호의 포장 LOT 재고)
   · 전량      → 새 LOT 없이 그 LOT 을 `retag(AGING)` (계보 행 0)
-코어가 분할 계열 팩 relation 에 N ≥ 1 을 허용하면 둘 다 `split(count=1)` 한 줄로 바뀐다 — progress-dev3.md §3 코어 변경 요청.
+검사 상태(`insp_status`)는 `lineage.split` 이 부모에서 잇는다(회전 5 — 직접 `update lot` 0). 코어는 이제 분할 계열 팩 relation 에 N ≥ 1 을 허용하지만
+gates.yaml S4(계보 +2 · 잔량 LOT 재고)에 맞춰 부분 숙성은 count=2 를 그대로 쓴다.
 """
 
 from __future__ import annotations
@@ -98,10 +99,10 @@ def aging_in(request: Request, equipment_id: str = Form(...), qty: str | None = 
     device = (request.query_params.get("device") or "web") if hasattr(request, "query_params") else "web"
     with conn.tx() as cur:
         if remain is not None and q < remain:
+            # 자식 둘의 insp_status 는 lineage.split 이 부모에서 잇는다(inherit_insp · 개발2 2bf68da) — 직접 SQL 없음
             children = lineage.split(cur, parent_id=n.id, count=2, by=user.login_id, qtys=[q, remain - q], relation=AGING_REL, kind=AGING_KIND, user=user)
             aging, rest = children[0], children[1]
             lineage.retag(cur, rest["id"], lineage.PRODUCT, by=user.login_id)                  # 잔량 LOT 은 포장 LOT 재고로 남는다
-            cur.execute("update lot set insp_status = %s, updated_at = now(), updated_by = %s where id = any(%s)", (n.insp_status, user.login_id, [aging["id"], rest["id"]]))
             mode = "split"
         else:
             aging = lineage.retag(cur, n.id, AGING_KIND, by=user.login_id)                      # 전량 — LOT 자체가 숙성 배치 (계보 0행)

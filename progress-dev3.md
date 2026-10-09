@@ -33,6 +33,9 @@ stats.late_orders(*, today=None, limit=20) · stats.open_work_orders(limit=7) ·
   equipment{run stop check fault items[]} work_orders_count work_orders[] measure{measured_count deviated_count} indicators[]`. 지표 `status` 는 서버 계산(값 ≥ 목표 good · ≥ 목표×95 % warn · 그 밖 critical · 목표 NULL → null).
   `actual_qty` = good + defect · `by_hour` 는 실적이 있는 첫 시간부터 23시까지 · `top_defects.share` = 1위 수량 대비 % · 조건부는 합격에 세지 않는다(D-302).
   → `docs/design/README.md` 디자이너3 §1 을 "확정" 으로 갱신했다.
+- **출처 문장 치환은 stats 쪽 한 곳 (회전 5)**: `stats.TODAY_COUNT_SOURCES[k]` · `.get(k)` 는 **읽을 때 `packs.t()` 를 건 값**을 돌려준다(`_TermsDict` — 저장 값은 중립어 원문). 그래서 `home.today_counts()` 의 `source` · 템플릿의 `c.today_source` 는 이미 팩 용어다 — **템플릿(디자이너3 `home/main.html`)은 `t(c.today_source)` 를 걸지 않는다**(이중 치환 금지). `today_label`(`home.TODAY_LABELS`, 개발1)은 이 규칙 밖.
+- `board()` 에 `undecided` 키(회전 5): 목표 NULL 칸 문구 `미확정 (D-602)`(`t()` 적용 · `stats.TARGET_DECISION`). `equipment()` 행에 `fixed_count`(복구된 고장 수) · `totals('equipment')` 에 `fixed_count` · `mttr_hours` = Σ 복구 시간 / Σ 복구 건수(가중).
+- TRC 간선(`stages[].edges[]`)에 `lot_qty`(= `to.qty` = lot.qty) · `unit` — `qty` 는 화살표 수량. 링크 값은 URL 인코딩.
 - **`today_counts()` 출처 (회전 4 · `stats.TODAY_COUNT_SOURCES`)** — 디자이너3 `home/main.html` 머리 주석 가설 그대로 + `trc` 는 오늘 계보 연결:
   `bas` 오늘 F-BAS-* 변경(접근 로그 change) · `ord` 납기 = 오늘(취소 제외) · `job` 계획일 = 오늘(취소 제외) · `mat` 입고일 = 오늘 · `pop` 오늘 시작 실적 · `qua` 판정 대기 검사(날짜 무관) ·
   `eqp` 미조치 고장 설비 수 · `shp` 등록(승인 대기) 출하 · `trc` 오늘 `lot_genealogy.linked_at` · `kpi` 오늘 이탈 측정값 · `sys` 오늘 `login_ok` · `ifc` 오늘 수신 거부(`rejected_reason`). 값은 전부 int(0 도 숫자). 개발1 `home.cards_for` 가 `aa9e22a` 에서 붙였다.
@@ -258,3 +261,15 @@ G-P06  착수 시간 — outputs/pack-timing.md ≤ 4h                  미검�
 | 수기 기록 이탈(F-X-WSH-01 소독수 수기 10 ppm 미달) | 수집이 아닌 수기 — 코어 `collect` 를 안 탄다. 팩이 `eqp_alarm` 에 쓰려면 코어 공개 함수 `alarm.raise_(cur, equipment_id, tag, value, *, source)` 가 필요(팩 write_scope 에 `eqp_alarm` 을 넣지 않는다) |
 | 품목별 범위(염도 허용편차 · D-509) | 설비 × 태그 임계값으로는 품목 축이 없다 — `x_kimchi_item_std` 유지 |
 | 지우는 것 | `x_kimchi_env_alarm` · `alarm.py` 의 `raise_env/ack/clear` · X-ALM-01 화면(→ EQP-05) · `on_collect` 안 범위 비교 코드 · numbering `ALARM` 팩 종류(코어로) |
+
+
+## §5 회전 5 — QA 결함 수정 (2026-10-09)
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| DEF-QA3-003 · QA3 참고(예시가 시드를 바꿈) | `migrate/examples/` 기준정보 코드를 시드와 겹치지 않는 `*-EX-9n`(PRD-EX-91 · RAW-EX-91/92 · PRC-EX-91/92 · EQ-EX-91 · WK/DF/CUST/SUP-EX-91 · 이름 「이관 … (예시)」)으로. 멱등 기준 그대로(2회째 inserted 0 · 대상 테이블 이관 행 diff 0) · BOM 상세 `created_by=migrate` 2. 시드 PRC-EX-01 측정값 정의 3 · PRD-EX-01 BOM 3 그대로 | 새 DB `mes_dev3_r5` `make db-reset` 직후 `test_migrate` 통과 · 같은 DB 2회째 통과 · psql 행 수 |
+| DEF-QA2-002 · G-C08 | `_links.work_order` = `/job/status?wo=<지시 번호>`(URL 인코딩) — 개발1 `wo_of_key` 로 200. 역추적 X-EX-0001 의 모든 링크(지시 · LOT · 검사 · 출하 · 정/역방향) prod · qa 200 · 지시 현황 실적 2(P-EX-0001/0002) | `test_trc_api::test_every_drilldown_link_opens_200` |
+| DEF-QA2-003 | `board()["undecided"] = 미확정 (D-602)` — 디자이너3 `kpi/board.html` 이 이 값을 쓴다. 새 D 번호 없음 | `test_stats` · `test_kpi_api` BOARD_KEYS |
+| DEF-QA2-005 | totals MTTR 가중 평균(설비 A 0.5h×1 · B 1/3h×2 → 0.3889, 평균의 평균 0.4167 아님) | `test_stats::test_equipment_totals_mttr_is_weighted_over_all_fixed_faults` |
+| DEF-QA3-006 | 간선 `qty`(50) ↔ `lot_qty`(합병 LOT 100) 분리 | `test_trc_api::test_merge_node_shows_lot_qty_apart_from_edge_qty` |
+| QA2-006 kimchi S1 | **9행**(투입 6 · 혼합 2 · 출하 1) — F-POP-03 종료 `merge_lot_ids=T1,T2` · `merge_relation=혼합` · P1 양품 1000 → 잔량 **150 재고** · 깊이 5 · edge 9. age 직접 `update lot set insp_status` 제거(split 상속). `rename.qua: 품질이상` · attrs 라벨 `설비·탱크 구분` · 설비/공정 CSV 머리글 `attrs.` | `MES_PACK=kimchi` 새 DB `mes_kimchi_dev3r5` 팩 테스트 26 passed · `check_terms --pack` G-P05 PASS(노출 0) |

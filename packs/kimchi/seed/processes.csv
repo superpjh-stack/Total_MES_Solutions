@@ -1,4 +1,4 @@
-process_code,process_name,seq,use_yn,ccp_yn,note
+process_code,process_name,seq,use_yn,attrs.ccp_yn,note
 P01,입고/보관,1,Y,N,design.json meta.main_processes (정본)
 P02,절단/전처리,2,Y,N,정본
 P03,세척/절임,3,Y,N,정본 — 절임통 8기

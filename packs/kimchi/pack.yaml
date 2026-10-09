@@ -46,7 +46,7 @@ menus:
     job: 작업지시
     mat: 자재·재고
     pop: POP 작업
-    qua: 품질            # 기획 「품질이상」 — t(이상)=품질 이슈 라 「품질품질 이슈」 가 된다. 회전 4 packs.translate 겹말 방지는 값이 키를 품을 때만이라 이 꼴은 남는다(§3-22)
+    qua: 품질이상        # 기획 이름 그대로 — menus.rename 값은 t() 를 거치지 않는다(아키텍트 회전 4 · 733074f)
     eqp: 설비
     shp: 포장·출하
     trc: 로트 추적
@@ -115,7 +115,7 @@ attrs:
   bas_process:
     - { key: ccp_yn,       label: CCP 공정,   type: bool }
   bas_equipment:
-    - { key: equip_type,   label: 설비구분,   type: select, choices: [절임통, 냉장고, 충진기, 속넣기기계, 금속검출기, 자동테이핑기, 중량저울, 소독수공급장치, 온습도센서, 온도조절기, 염도센서, PLC제어반] }
+    - { key: equip_type,   label: 설비·탱크 구분, type: select, choices: [절임통, 냉장고, 충진기, 속넣기기계, 금속검출기, 자동테이핑기, 중량저울, 소독수공급장치, 온습도센서, 온도조절기, 염도센서, PLC제어반] }
     - { key: comm_type,    label: 통신방식,   type: select, choices: [RS-485, "Ethernet(TCP/IP)", OPC-UA] }
     - { key: plc_tag,      label: PLC 태그,   type: text }
     - { key: collect_item, label: 수집 항목,  type: text }

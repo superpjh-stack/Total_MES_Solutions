@@ -68,3 +68,25 @@ def test_search_by_partial_number_and_item():
     assert c.get("/trc/search", params={"q": "제품 1"}).json()["results"]
     assert c.get("/trc/search").json()["results"] is None
     assert c.get("/trc/search", params={"q": "ZZZ-NOPE"}).json()["results"] == []
+
+
+@pytest.mark.fn("F-TRC-01")
+def test_merge_node_shows_lot_qty_apart_from_edge_qty():
+    """DEF-QA3-006 — 화살표 수량(qty · lot_genealogy.qty)과 노드 수량(lot_qty = lot.qty)은 따로 넘긴다. 합병 LOT P-EX-0003 = 화살표 50 + 50 · LOT 100."""
+    body = client("prod").get("/trc/forward", params={"no": "M-EX-0001"}).json()
+    merged = [e for st in body["stages"] for e in st["edges"] if e["to"]["no"] == "P-EX-0003"]
+    assert [e["qty"] for e in merged] == [50.0, 50.0] and all(e["lot_qty"] == e["to"]["qty"] == 100.0 for e in merged)
+
+
+@pytest.mark.fn("F-TRC-02")
+def test_every_drilldown_link_opens_200():
+    """DEF-QA2-002 · G-C08 — 노드 링크(지시 `?wo=<지시 번호>` · LOT · 검사 · 출하 · 정/역방향)가 전부 200. 지시 현황은 그 지시의 실적을 드릴다운한다(D-604)."""
+    for role in ("prod", "qa"):
+        c = client(role)
+        body = c.get("/trc/backward", params={"no": "X-EX-0001"}).json()
+        links = set(body["start_links"].values()) | {v for st in body["stages"] for e in st["edges"] for v in e["links"].values()}
+        assert any(x.startswith("/job/status?wo=W-EX-0001") for x in links)
+        bad = {x: c.get(x).status_code for x in links if c.get(x).status_code != 200}
+        assert bad == {}, (role, bad)
+    wo = client("qa").get("/job/status", params={"wo": "W-EX-0001"}).json()
+    assert wo["detail"]["work_order_no"] == "W-EX-0001" and sorted(r["lot_no"] for r in wo["results"]) == ["P-EX-0001", "P-EX-0002"]

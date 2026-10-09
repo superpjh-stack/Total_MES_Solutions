@@ -343,7 +343,7 @@
 | `hooks.py` | `validate_shipment` · `on_inspection_judged` · `on_collect` · `on_result_closed` · `kpi_extra(frm, to, by=None)` — `hooks.md` §1~§5 |
 | `alarm.py` | `raise_env` (D-512 합침) · `ack` · `clear` — `x_kimchi_env_alarm` 에 쓰는 유일한 자리 |
 | `common.py` | 조회 · 판정 헬퍼 (기준은 전부 데이터에서 · 없으면 None) · `x_kimchi_lot_ext` upsert |
-| `adapters/collect_tags.py` | 설비 종류 · 태그 표(`equipment_example.csv` 의 `equip_type` · `collect_tags` 열을 읽는다) · 태그 → 알람 종류 · 센서 ↔ 절임통 고정 매핑 `SENSOR_TO_TANK = {}` (미확정 D-206). 드라이버는 코어 HTTP 수신 그대로 |
+| `adapters/collect_tags.py` | 설비 종류 · 태그 표(`equipment_example.csv` 의 `attrs.equip_type` · `attrs.collect_tags` 열을 읽는다) · 태그 → 알람 종류 · 센서 ↔ 절임통 고정 매핑 `SENSOR_TO_TANK = {}` (미확정 D-206). 드라이버는 코어 HTTP 수신 그대로 |
 | `routers/{cond,wsh,tank,pkg,age,alm}.py` | 기능 24 = 엔드포인트 24 (`function-list.md` 의 API 열 글자 그대로) |
 | `templates/{cond,wsh,tank,pkg,age,alm}/*.html` | 화면 8 — `base.html` + `ui` 매크로 · `{{ t("…") }}` |
 | `tests/` | `_helpers.py` · S1~S4 · 기능 24 · 용어 · 스모크 = 26건 |
@@ -354,23 +354,25 @@
 |---|---|---|
 | ~~`pack.yaml` `screens[].channels` 라벨~~ | **회전 4 되돌림** — 기획 그대로 코드(`web/pop/mobile/board`). 코어 `packs.load` 가 코드 · 라벨 둘 다 받는다(아키텍트 `733074f`) | — |
 | ~~`pack.yaml` `menus.rename.trc` `추적`~~ | **회전 4 되돌림** — 기획 그대로 `로트 추적`(겹말 방지 `packs.translate`) | — |
-| `pack.yaml` `menus.rename.qua` | 기획 `품질이상` → `품질` (남김) | `t(이상)=품질 이슈` 라 `품질품질 이슈`. 겹말 방지는 치환값이 키를 품을 때(`추적`→`로트 추적`)만 막는다 — 붙여 쓴 합성어는 그대로 치환된다(progress-dev3 §3-22) |
+| ~~`pack.yaml` `menus.rename.qua` `품질`~~ | **회전 5 되돌림** — 기획 그대로 `품질이상`. `menus.rename` 값은 `t()` 를 거치지 않는다(아키텍트 `733074f`) | — |
+| `pack.yaml` attrs `bas_equipment.equip_type` 라벨 | `설비구분` → `설비·탱크 구분` | attrs 라벨은 `t()` 를 거치지 않아 `설비`(→ `설비·탱크`) 가 그대로 보였다(G-P05 · DEF-QA1-003). 치환된 말로 적었다 |
+| `seed/equipment_example.csv` · `seed/processes.csv` | 머리글 `equip_type` · `comm_type` · `collect_tags` · `ccp_yn` → `attrs.<키>` (회전 5) | `seed_core` 가 `attrs.` 접두 열만 attrs 로 넣는다. `adapters/collect_tags.py` 는 두 머리글 다 읽는다 |
 | `pack.yaml` `menus.add[]` | `owner: 개발3` · `channels` 추가 | `contracts._validate` 가 기능의 담당 = 모듈 owner 를 요구(없으면 `kimchi` 가 되어 24건 전부 거부) |
 | `function-list.md` | `## 1. 읽는 법` · `## 2. 기능` 머리글 추가 | `contracts` 로더가 `## 2.` 절의 표만 읽는다 |
 | `seed/items_example.csv` | 머리글 `capacity_kg` → `attrs.capacity_kg` 등 | `seed_core` 는 `attrs.` 접두 열만 attrs 로 넣는다 (아니면 조용히 버려진다) |
 | `seed/permissions.csv` | `shp,PROD` 범위 `승인` → `일반·승인` | 범위를 적으면 **그 범위만** 쓸 수 있다(D-13). 시나리오(1-14)의 PROD 출하 등록 · 스캔 · 승인에 둘 다 필요 |
 | `seed/inspection_items.csv` | `metal_detect` · `inspect_qty` · `ng_qty` 의 공정 `P07` → 빈 칸(공정 검사 공통) | 코어 QUA-02 는 **LOT 의 공정**으로 검사 항목을 고른다. 금속검출은 혼합 배치(P06 LOT)에 하므로 P07 전용 행이면 칸이 안 뜬다(§3 요청: 검사 공정 선택) |
 
-고치지 않은 것: `gates.yaml` 의 `expect` 값(아래 "기대값과 다른 실측" 참고 — 기획자 확인 뒤 갱신 요청) · `equipment_example.csv` 의 `equip_type` · `comm_type` · `collect_tags` 열(`seed_core` 설비 시드가 attrs 를 받지 않아 **DB 에는 안 들어간다** — `adapters/collect_tags.py` 가 CSV 를 직접 읽어 보완 · §3 요청) · `processes.csv` 의 `ccp_yn`(같은 이유).
+고치지 않은 것: `gates.yaml` 의 `expect` 값 — 회전 5 에서 S1 이 기획 값(9행 · P1 잔량 150 재고)으로 돌아왔다(아래 표).
 
 ### 기대값과 다른 실측 (gates.yaml `expect` ↔ 코어가 실제로 하는 일)
 
 | 항목 | 기획 | 실측 | 왜 |
 |---|---|---|---|
-| S1 계보 행 | 9 (혼합 2) | **10 (혼합 3)** · 깊이 5 · 원재료 3 · TANK 2 소진 · salinity 2 — 나머지 같다 | 코어 F-POP-03 에 "합병 옵션" 이 없다. 합병(D-12)은 `POST /pop/result/{id}/merge` 가 **새 LOT** 을 만든다. 그래서 양념 투입 실적 LOT(X1′ · M2 · M3 투입)도 혼합의 부모가 된다: `merge([X1′, T1, T2], relation=혼합)` → X1(P06 · 1090). X1′ 를 첫 부모로 두어 X1 이 혼합 공정 · 품목을 잇는다 |
-| S1 `p1_remain_qty` | 150 | **0** (소진) | P1 수량 = 양품 850(출력 중량). 850 − 500 − 350 = 0. 기획의 150 은 P1 을 1000 으로 본 계산 |
-| 한 LOT 을 두 통에 | 투입 2줄 | 투입 2줄 — 단 **두 실적 모두 종료 전에 스캔** | 코어 `v_lot_state` 는 PRODUCT 에 자식 계보가 하나라도 생기면 `소진` 으로 본다(잔량 무관). 첫 통 실적을 종료한 뒤 둘째 통에 스캔하면 422 (§3 요청) |
-| S4 숙성 투입 | `split(relation=숙성)` 1회 · K1 잔량 400 · 계보 +2 | `split(count=2, qtys=[600, 400])` + 잔량 LOT `retag(PRODUCT)` → 숙성 2행 · 잔량은 **새 번호의 포장 LOT**(400 재고) · K1 소진 · 전량이면 `retag(AGING)`(계보 0행) | 코어 `lineage.split` 은 N ≥ 2 (D-503 은 merge 쪽만 N ≥ 1) — 부분 수량 1 → 1 분할이 없다 (§3 요청) |
+| S1 계보 행 | 9 (혼합 2) | **9 (혼합 2)** — 회전 5 기획과 같다 | F-POP-03 종료의 합병 옵션(`merge_lot_ids=T1,T2` · `merge_relation=혼합` → `lineage.make_product_lot(merge_parent_ids=)` · 개발2 `2bf68da`) 이 별도 합병 LOT 없이 혼합 실적 LOT X1 하나에 잇는다 |
+| S1 `p1_remain_qty` | 150 | **150** (재고) — 회전 5 기획과 같다 | P1 = 전처리 실적 양품 **1000**(gates.yaml 「P1 1000 … 500 + 350 투입 → 150」) · in 1000 / out 850 은 손실률 측정값(15 %). **기획자 확인**: 양품을 출력 중량 850 으로 보면 P1 은 0 이 된다 — 기대값을 고르려면 둘 중 하나 |
+| 한 LOT 을 두 통에 | 투입 2줄 | 투입 2줄 — 부분 투입(코어 `v_lot_state` 「투입만 → 잔량」 · 회전 4) | — |
+| S4 숙성 투입 | `split(relation=숙성)` 1회 · K1 잔량 400 · 계보 +2 | `split(count=2, qtys=[600, 400])` + 잔량 LOT `retag(PRODUCT)` → 숙성 2행 · 잔량은 **새 번호의 포장 LOT**(400 재고) · K1 소진 · 전량이면 `retag(AGING)`(계보 0행). 자식 `insp_status` 는 `split` 이 부모에서 잇는다(회전 5 — 직접 `update lot` 0) | 계보 +2 를 맞추려 count=2 유지(코어는 이제 분할 계열 N ≥ 1 도 받는다) |
 | 절임 완료 | `on_result_closed` 가 `x_kimchi_tank.status=완료` 도 | **하지 않는다** — F-X-TANK-03 만 완료 | `function-list` F-X-TANK-03 "완료 전 실적 종료는 422 가 아니다(순서 자유) · 둘 다 끝나야" 를 따랐다. 그래야 종료 뒤 진행 중 배치의 염도 이탈이 TANK LOT(`lot_id`)에 붙는다(S3 `salinity_alarm_lot_kind=TANK`) |
 | 기능 단위 권한(F-X-WSH-02 · TANK-02 · AGE-02 = PROD · ADMIN) | 그 역할만 | **메뉴 단위** — FIELD 도 `wsh` `tank` `age` 입력이라 할 수 있다 | 코어 RBAC 은 메뉴 × 역할 칸. 화면 · 기능 단위 예외는 D-502(코어 변경 요청) 전까지 없다 |
 | 금속검출 NG 의 LOT 투입 | 코어 F-POP-06 422 | **투입된다** (K2 가 만들어지고 출하 승인에서 422) | `lineage.assert_usable` 은 PRODUCT 의 `insp_status` 를 보지 않는다(재고만). 출하 금지는 `validate_shipment` 가 조상까지 보고 막는다 |
@@ -386,7 +388,7 @@
 ### 코어 시드 순서
 
 회전 4 에서 코어 `seed_core` 가 공정 → 품목 → 설비 → `process_params` → `inspection_items` → 나머지 순으로 넣는다(아키텍트 `6c77eb9`). 임시 `seed_bootstrap.py` 는 지웠다 — 새 DB 도 `make pack-db NAME=kimchi`(또는 `MES_PACK=kimchi make db-seed`) 하나로. 빈 DB 에서 2회 실행 행 수 diff 0 · 팩 테스트 26 통과(2026-10-09 임시 DB 실측).
-`equipment_example.csv` 의 `equip_type` · `comm_type` · `collect_tags` · `processes.csv` 의 `ccp_yn` 은 헤더가 `attrs.` 접두가 아니라 DB 에 안 들어간다(시드가 경고) — `adapters/collect_tags.py` 가 CSV 를 직접 읽는다. 헤더를 `attrs.<키>` 로 바꾸는 것은 그 어댑터와 함께 다음 회전.
+`equipment_example.csv` 의 `attrs.equip_type` · `attrs.comm_type` · `attrs.collect_tags` · `processes.csv` 의 `attrs.ccp_yn` 은 회전 5 부터 `bas_equipment.attrs` · `bas_process.attrs` 로 들어간다. `adapters/collect_tags.py` 는 `attrs.` 접두를 떼고 같은 키로 읽는다.
 
 ### 이 팩이 덮어쓴 코어 템플릿 (R10)
 

@@ -39,7 +39,7 @@ def test_rate_and_period():
 
 def test_production_by_item_hand_computed():
     rows = stats.production(D1, D2, by="item")
-    r = next(x for x in rows if x["code"] == "PRD-EX-01")
+    r = next(x for x in rows if x["code"] == "PRD-EX-91")
     assert r["wo_count"] == 1 and r["plan_qty"] == Decimal("100.000") and r["result_count"] == 2
     assert r["good_qty"] == Decimal("100.000") and r["defect_qty"] == Decimal("3.000")
     assert r["good_rate"] == pytest.approx(100 / 103 * 100) and r["achieve_rate"] == pytest.approx(100.0)
@@ -57,7 +57,7 @@ def test_quality_pass_rate_conditional_not_passed():
     rows = stats.quality(D2, D2, by="day")
     r = next(x for x in rows if x["day"] == D2)
     assert r["inspection_count"] >= 2 and r["pass_count"] >= 2 and r["pass_rate"] == pytest.approx(r["pass_count"] / r["inspection_count"] * 100)
-    item = next(x for x in stats.quality(D2, D2, by="item") if x["code"] == "PRD-EX-01")
+    item = next(x for x in stats.quality(D2, D2, by="item") if x["code"] == "PRD-EX-91")
     assert item["pass_count"] >= 2
     assert isinstance(stats.quality(D1, D2, by="defect"), list)
     assert stats.totals("quality", []) is None
@@ -67,7 +67,7 @@ def test_delivery_on_time_from_first_approved_shipment():
     rows = stats.delivery(D1, date(2026, 10, 5), by="day", today=date(2026, 10, 9))
     r = next(x for x in rows if x["day"] == date(2026, 10, 5))
     assert r["due_count"] >= 1 and r["on_time"] >= 1 and r["shipped_count"] >= 1 and r["on_time_rate"] == pytest.approx(r["on_time"] / (r["on_time"] + r["late"]) * 100)
-    partner = next(x for x in stats.delivery(D1, date(2026, 10, 5), by="partner") if x["code"] == "CUST-EX-01")
+    partner = next(x for x in stats.delivery(D1, date(2026, 10, 5), by="partner") if x["code"] == "CUST-EX-91")
     assert partner["on_time"] >= 1
     late = stats.late_orders(today=date(2026, 10, 30), limit=10000)
     assert any(o["order_no"] == "O-EX-0002" for o in late) and all("item_name" in o for o in late)   # 미출하 · 납기 지남
@@ -75,7 +75,7 @@ def test_delivery_on_time_from_first_approved_shipment():
 
 def test_equipment_none_without_logs_and_clipped_seconds():
     rows = stats.equipment(D1, D2)
-    eq = next(x for x in rows if x["code"] == "EQ-EX-01")
+    eq = next(x for x in rows if x["code"] == "EQ-EX-91")
     assert eq["logged_seconds"] >= 0 and (eq["run_rate"] is None or 0 <= eq["run_rate"] <= 100)
     # 가동 구간을 넣고 같은 트랜잭션 밖에서 잴 수 없으므로 커밋 → 측정 → 삭제
     eid = eq["equipment_id"]
@@ -86,6 +86,19 @@ def test_equipment_none_without_logs_and_clipped_seconds():
         assert eq2["run_rate"] == pytest.approx(100.0)
     finally:
         conn.x("delete from eqp_run_log where id = %s", (gid,))
+
+
+def test_equipment_totals_mttr_is_weighted_over_all_fixed_faults():
+    """DEF-QA2-005 — 합계 줄 MTTR = 복구된 고장 전체 평균(Σ 복구 시간 / Σ 복구 건수). 설비별 MTTR 의 평균이 아니다."""
+    base = {"run_seconds": 0.0, "logged_seconds": 0.0, "stop_count": 0}
+    rows = [{**base, "fault_count": 1, "fixed_count": 1, "mttr_hours": 0.5},          # 설비 A: 0.5h 1건
+            {**base, "fault_count": 3, "fixed_count": 2, "mttr_hours": 1 / 3},        # 설비 B: 0.25h · 0.4167h 2건 (미복구 1)
+            {**base, "fault_count": 0, "fixed_count": 0, "mttr_hours": None}]
+    tot = stats.totals("equipment", rows)
+    assert tot["fixed_count"] == 3 and tot["fault_count"] == 4
+    assert tot["mttr_hours"] == pytest.approx((0.5 + 2 / 3) / 3)                      # 0.3889 — 평균의 평균(0.4167)이 아니다
+    assert stats.totals("equipment", [{**base, "fault_count": 1, "fixed_count": 0, "mttr_hours": None}])["mttr_hours"] is None
+    assert all("fixed_count" in r for r in stats.equipment(D1, D2))
 
 
 def test_measure_series_avg_last_and_deviation():
@@ -124,7 +137,7 @@ def test_kpi_extra_hook_merged(monkeypatch):
 
 def test_board_keys_and_dashboard():
     b = stats.board(D2)
-    assert b["today"] == "2026-10-02" and b["source"] == "실시간"
+    assert b["today"] == "2026-10-02" and b["source"] == "실시간" and b["undecided"] == "미확정 (D-602)"   # G-C11 (DEF-QA2-003)
     assert b["quality"]["inspection_count"] >= 2 and b["production"]["good_qty"] is None or b["production"]["good_qty"] >= 0
     assert isinstance(b["work_orders"], list) and b["work_orders_count"] == len(b["work_orders"])
     d = stats.dashboard(D2)

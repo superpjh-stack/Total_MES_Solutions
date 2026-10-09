@@ -1,4 +1,4 @@
-equip_code,equip_name,process_code,collect_yn,use_yn,equip_type,comm_type,collect_tags,note
+equip_code,equip_name,process_code,collect_yn,use_yn,attrs.equip_type,attrs.comm_type,attrs.collect_tags,note
 TK-01,절임통 1호 (예시),P03,N,Y,절임통,,,절임통 8기 (정본). 염도는 센서 SS-01/02 가 보낸다 — 센서↔절임통 매핑 (미확정 D-206)
 TK-02,절임통 2호 (예시),P03,N,Y,절임통,,,
 TK-03,절임통 3호 (예시),P03,N,Y,절임통,,,

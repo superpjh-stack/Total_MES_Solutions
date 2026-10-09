@@ -1,4 +1,4 @@
 item_code,item_name,item_type,spec,unit,use_yn
-PRD-EX-01,제품 1 (예시),제품,규격 A (예시),EA,Y
-RAW-EX-01,원재료 1 (예시),원재료,,kg,Y
-RAW-EX-02,원재료 2 (예시),원재료,,kg,Y
+PRD-EX-91,이관 제품 1 (예시),제품,규격 A (예시),EA,Y
+RAW-EX-91,이관 원재료 1 (예시),원재료,,kg,Y
+RAW-EX-92,이관 원재료 2 (예시),원재료,,kg,Y
