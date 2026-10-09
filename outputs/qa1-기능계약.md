@@ -1,4 +1,111 @@
-# QA1 리포트 — 기능 · 계약 · 용어 (회전 6 재판정 · 2026-10-09)
+# QA1 리포트 — 기능 · 계약 · 용어 (회전 8 재확인 · 2026-10-09)
+
+> 담당 QA1. 회전 8 은 **재확인** — DEF-QA1-011 을 그 재현 절차 그대로 다시 돌리고, 검사기를 코어 단독 + 팩 3 으로 다시 돌리고, 회전 7 의 폼 422 입력값 유지 14곳을 `api-contract.md` §2 에 대조했다. **고치지 않았다** — 고친 것은 내 검사기 `src/mescore/tools/check_screens.py` 와 이 리포트뿐.
+> 기준 커밋 **`d46d441`** (그 앞 `2f39590` 에서 gate-full 42/42 PASS · `outputs/gate-r8-final.txt`). DB `mes_qa_db`(쓰기 · `--reset-db`) · 팩은 `mes_<팩>_db` 읽기 · 호출만(422 · 403 · 404 · GET 만). 서버는 띄우지 않았다(TestClient — 포트 8051 안 씀).
+
+## 회전 8 재확인
+
+### R8-1. 결함 표
+
+| ID | 등급 | 판정 | 고친 커밋 | 실측 (회전 8) | 검증 명령 |
+|---|---|---|---|---|---|
+| DEF-QA1-011 kimchi rename `품질이상` 에 terms 키 `이상` | 경미 | **해결** | `200b3dd` (기획자3 · D-516) · `4d351f0` (개발3 확인) | `packs/kimchi/pack.yaml:49` `qua: 품질 이슈 관리` — 최종 꼴(terms `이상: 품질 이슈` 를 쓴 꼴). 검사기 행 `G-P05 팩 용어 — menus.rename 값에 치환 안 된 terms 키 0 (D-38 ①)` **FAIL → PASS** `[kimchi] rename 값 10 · 키 든 값 0`. 화면 실측: kimchi 관리자 `/qua/issues` HTML 에 `품질 이슈 관리` 2곳 · `품질이상` 0. 화면 글 G-P05 도 PASS(화면 64 · 노출 0) | `MES_PACK=kimchi uv run python src/mescore/tools/check_screens.py` |
+
+새 결함: **없음**.
+
+- 지나간 것(결함 아님): 첫 코어 실행 중 `G-C23 코어 파일 금지어 0 (정적)` 이 한 번 FAIL(`src/mescore/tools/check_data.py:2019 \`숙성\``) — QA2 가 같은 시각 `check_data.py` 를 고치던 중의 작업본을 읽은 것. QA2 커밋 `d46d441` 뒤 다시 돌린 결과 `check_terms.py` · `check_screens` 모두 **파일 160 · 위반 0 PASS**. 남은 것 없음.
+- 관찰(결함 아님 · 회전 7 범위 밖): 디자이너2 README 가 「되채우지 않는 것」으로 적은 폼 — SHP-02 · POP-01 · POP-04 · MAT-03(스캔칸뿐 · S-05 대로) · EQP-01 상태 · QUA-04 조치 · EQP-03 조치 · QUA-01 행 수정(행마다 반복되는 인라인 폼 — 값으로 어느 행인지 못 가름) · QUA-02 판정(대기 판정 여럿일 때). `api-contract.md` §2 는 예외를 적지 않았다 — **아키텍트가 §2 에 「행 인라인 폼 · 가를 수 없는 같은 이름 폼은 되채우지 않음」을 한 줄 적으면** 계약과 구현이 맞는다(제안).
+
+**남은 수 — 치명 0 · 중대 0 · 경미 0** (QA1 결함 001~011 전부 해결).
+
+### R8-2. 회전 7 — 폼 422 입력값 유지 14곳 계약 대조 (검사기 ⑦ `round7_echo` · 새 행 `G-C03 회전 7 계약`)
+
+계약(`api-contract.md` §2 33행): 422 폼 POST → **303** → 원래 화면 + 알림 `values` → 폼이 `flash.values[이름]` 으로 다시 채움 · 비밀 칸은 싣지 않음 · JSON 422 는 `{code, message, fields}` 뿐. 스캔칸은 S-05(docs/design/README) 대로 비움.
+각 곳마다 그 기능의 **입력 칸 역할**(권한 표에서 고름 · POP 화면은 `device=pop` 세션)로 틀린 값을 보내고 다섯 가지를 본다: ① 303 이 **보낸 화면 그대로**(쿼리까지) ② 보낸 값이 **그 폼의 칸**에 되채워짐(input value · select selected · radio checked) ③ 화면의 모든 `data-scan` 칸 · `password` 칸 값이 비어 있음 ④ 고유 표지값이 **그 폼 밖**(조회 조건 · 다른 폼 · 행 인라인 폼)에 없음 — 알림 자체(`<script id="flash-data">`)는 뺌 ⑤ 같은 본문의 JSON 호출이 422 이고 `values` 키 없음. 쓰기 없음(422 만). 코어 QA DB 에서만 전제 데이터(열린 실적 1 · 대기 판정 1건)를 정상 호출로 만든다.
+
+| 곳 (README 표) | 역할 (코어) | 보낸 틀린 값 → 422 원인 | 되채움 확인 | 안 덮음 확인 | 코어 | kimchi | foodservice | printfilm |
+|---|---|---|---|---|---|---|---|---|
+| POP-03 투입 | FIELD · pop | 없는 LOT 바코드 + 투입량 3.25 | `qty` 3.25 (직전 저장값보다 앞섬) | 스캔칸 `barcode` 빈 값 · 보낸 바코드가 어느 input 값에도 없음 | PASS | PASS | PASS | PASS |
+| POP-02 시작 | FIELD · pop | 없는 설비 id | 작업자 radio checked · 비고 | 표지값 시작 폼 밖 0 | PASS | PASS | PASS | PASS |
+| POP-02 종료 | FIELD · pop | 양품 −12 | 양품 −12 · 불량 1 · `merge_lot_ids` · 측정값 `m_<key>` 7.25 (코어 `m_qa_req` · `m_qa_rng` / kimchi `m_pack_weight_kg`) | 폐기 `qty` · 정지 `note` · 합병 `lot_ids` 빈 값 | PASS | PASS | PASS | PASS |
+| POP-02 정지 | FIELD · pop | 없는 정지 사유 코드 | 비고 | 종료 폼 `note` 안 덮음 | PASS | PASS | PASS | PASS |
+| POP-02 폐기 | FIELD · pop | 수량 −3.5 | 폐기 수량 | 합병 `qty` · 종료 `good_qty` 안 덮음(이름 `qty` 겹침) | PASS | PASS | PASS | PASS |
+| POP-02 분할 | FIELD · pop (종료 + 재고 생산 LOT 실적) | 분할 수 `x9` | 분할 수 · 분할 수량 | 표지값 분할 폼 밖 0 | PASS | PASS | PASS | PASS |
+| POP-02 합병 | FIELD · pop (같은 실적) | 없는 LOT 번호 | 합병 LOT · 수량 4.75 | 폐기 `qty` 안 덮음 | PASS | PASS | PASS | PASS |
+| MAT-01 입고 | FIELD · web | 수량 −5 | 품목(입고 선택지) · 수량 · 단위 · 비고 · 입고일 | 조회 조건 · 다른 폼에 표지값 0 | PASS | PASS | PASS | PASS |
+| MAT-02 입고검사 | QA · pop | 판정 `QA1_NOPE` | 판정 폼 비고 (`lot_id` = 이 LOT) | 스캔칸 빈 값 | PASS | PASS | PASS | PASS |
+| MAT-04 재고 조정 | FIELD · web | 수량 `abc` | 품목 · 수량 · 사유 | 조회 조건 안 덮음 | PASS | PASS | PASS | PASS |
+| QUA-01 검사 계획 | QA · web | 유형 `QA1_NOPE` | 품목 · 항목 키 3줄(줄 번호대로) | 행 수정 인라인 폼에 표지값 0 | PASS | PASS | PASS | PASS |
+| QUA-02 검사 결과 · 판정 | QA · web | 유형 · 판정 `QA1_NOPE` | 항목 저장 폼 비고 / 판정 폼 비고(대기 1건일 때) | 서로 안 덮음 | PASS · PASS | PASS · 대상 없음¹ | PASS · PASS | PASS · 대상 없음¹ |
+| QUA-04 품질이상 | QA · web | 내용 비움 | 원인 · LOT · 발생 시각 | 조치 · 종결 인라인 폼 안 덮음 | PASS | PASS | PASS | PASS |
+| EQP-02 점검 · EQP-03 고장 | FIELD · web | 점검 항목 · 증상 비움 | 설비 · 결과 · 점검자 · 비고 / 설비 · 발생 시각 | 조치 인라인 폼 안 덮음 | PASS · PASS | PASS · PASS | PASS · PASS | 숨김² |
+| SHP-01 등록 · 수정 | FIELD · web (`?id=` 등록 상태 출하 — 두 폼 다 그려짐) | 없는 거래처 | 등록 폼 출하일 · 비고 / 수정 폼(`shipment_edit=1`) 출하일 · 비고 | 등록 ↔ 수정 서로 안 덮음 | PASS · PASS | PASS · PASS | PASS · PASS | PASS · PASS |
+| SHP-04 성적서 | FIELD · web | 종류 `QA1_NOPE` | 출하 select (승인 출하) | 표지값 폼 밖 0 | PASS | PASS | PASS | PASS |
+
+¹ 대기 판정이 정확히 1건인 LOT 이 그 팩 DB 에 없다(읽기 전용이라 만들지 않음 · README 의 설계 한계 — 여럿이면 되채우지 않는다). 코어 · foodservice 에서 확인.  ² printfilm 은 eqp 메뉴를 숨김(403 · G-C13 · G-C17 이 본다).
+**JSON 422 에 입력값 없음**: 19 호출 모두 같은 본문의 JSON 호출이 422 · `values` 키 0 (계약 모양 `code · message · fields` 는 G-C03 응답 모양 행이 따로 본다). 비밀 칸: 이 14곳에 `password` 류 칸 없음 · 회전 5 행(`/sys/users`)이 그대로 PASS(비밀 값 화면 · 쿠키 0).
+
+### R8-3. 검사기 원문 판정 줄 (`d46d441` + 이 회전 검사기)
+
+코어 단독 — `MES_PACK= uv run python src/mescore/tools/check_screens.py --reset-db` (종료 0 · 소요 25s)
+```
+G-C02  기능 136 계약 호출 (정상 + 오류 계약)                                                 PASS  PASS 136/136 · FAIL 0 [] · 미검증 0 [] · 검사 677건 · DB mes_qa_db
+G-C17  권한 칸 데이터 = core.yaml                                                      PASS  칸 48 (입력 19 · 조회 22 · 없음 7) · DB 불일치 0
+G-C17  역할 × 기능 전부 (없음 · 조회 쓰기 403 · 입력 통과)                                       PASS  역할 4 ['ADMIN', 'FIELD', 'PROD', 'QA'] · 호출 522 (허용 281 · 거부 241) · 위반 0 []
+G-C17  칸별 판정 (화면 GET + 기능)                                                       PASS  48/48 칸 PASS · FAIL []
+G-C17  범위(scopes) 4종 — 입고검사 · 승인 · 지표 · 재전송                                      PASS  8 조합 · 어긋남 0 (호출 판정은 위 전수에 포함)
+G-C03  화면 51 + 공통 200 · placeholder 0                                            PASS  200 54 · placeholder 0 · 문제 0
+G-C03  응답 모양 · 인증 없는 경로 · 503 (api-contract §2)                                  PASS  검사 31 · 통과 못한 0 []
+G-C02  회전 5 계약 — ?sort= (D-37) · JOB-02 ?wo= (D-604)                             PASS  검사 7 · 통과 못한 0 []
+G-C03  회전 5 계약 — 422 입력값 유지 · POST /logout · /login/as · role_summary            PASS  검사 8 · 통과 못한 0 []
+G-C03  회전 7 계약 — 폼 422 입력값 유지 14곳 (되채움 · 스캔칸 비움 · 다른 폼 안 덮음 · JSON 에 values 없음)  PASS  곳 19 · 통과 못한 0 []
+G-C13  채널 밖 화면 403 (core.yaml: channels)                                         PASS  호출 155 · 위반 0 []
+G-C23  화면 HTML 금지어 0 (DB · 시드 값 포함)                                              PASS  화면 60 · 금지어 44개 · 노출 0 []
+G-C23  코어 파일 금지어 0 (정적)                                                          PASS  파일 160 · 위반 0 []
+G-C23  날것 중립어 0 — 용어 표지 치환 후 화면 글 (t() 누락)                                       PASS  화면 60 · 표지 뒤에도 남은 곳 0 [] · (정적 템플릿 스캔 0)
+```
+
+팩 3 — `MES_PACK=<팩> uv run python src/mescore/tools/check_screens.py` (종료 0 · 3팩 모두 · G-C02 · G-C17 · G-C13 · 회전 7 · G-P05 행만 · 나머지 G-C03 · 회전 5 행도 전부 PASS · G-C23 팩 배포 화면 금지어는 참고 WARN — 팩 용어)
+```
+G-C02  기능 156 계약 호출 (정상 + 오류 계약)                                                 PASS  [kimchi] PASS 156/156 · FAIL 0 [] · 미검증 0 [] · 검사 314건 · DB mes_kimchi_db
+G-C02  팩 기능 F-X 읽기 · 호출                                                          PASS  [kimchi] 팩 기능 24 · 통과 못한 0 []
+G-C17  칸별 판정 (화면 GET + 기능)                                                       PASS  [kimchi] 108/108 칸 PASS · FAIL []
+G-C02  회전 5 계약 — ?sort= (D-37) · JOB-02 ?wo= (D-604)                             PASS  [kimchi] 검사 7 · 통과 못한 0 []
+G-C03  회전 7 계약 — 폼 422 입력값 유지 14곳 (되채움 · 스캔칸 비움 · 다른 폼 안 덮음 · JSON 에 values 없음)  PASS  [kimchi] 곳 19 · 통과 못한 0 []
+G-C13  채널 밖 화면 403 (core.yaml: channels)                                         PASS  [kimchi] 호출 179 · 위반 0 []
+G-P05  팩 용어 — JSON 오류 message · fields.label 치환                                  PASS  [kimchi] 오류 응답 91 · 치환 안 된 0 []
+G-P05  팩 용어 — 치환 안 된 terms 키 노출 0 (화면 글)                                         PASS  [kimchi] 화면 64 · 바뀌는 키 12 · 노출 0 []
+G-P05  팩 용어 — menus.rename 값에 치환 안 된 terms 키 0 (D-38 ①)                          PASS  [kimchi] rename 값 10 · 키 든 값 0 []
+G-C02  기능 132 계약 호출 (정상 + 오류 계약)                                                 PASS  [foodservice] PASS 132/132 · FAIL 0 [] · 미검증 0 [] · 검사 265건 · DB mes_foodservice_db
+G-C17  칸별 판정 (화면 GET + 기능)                                                       PASS  [foodservice] 72/72 칸 PASS · FAIL []
+G-C02  회전 5 계약 — ?sort= (D-37) · JOB-02 ?wo= (D-604)                             PASS  [foodservice] 검사 7 · 통과 못한 0 []
+G-C03  회전 7 계약 — 폼 422 입력값 유지 14곳 (되채움 · 스캔칸 비움 · 다른 폼 안 덮음 · JSON 에 values 없음)  PASS  [foodservice] 곳 19 · 통과 못한 0 []
+G-C13  채널 밖 화면 403 (core.yaml: channels)                                         PASS  [foodservice] 호출 155 · 위반 0 []
+G-P05  팩 용어 — JSON 오류 message · fields.label 치환                                  PASS  [foodservice] 오류 응답 76 · 치환 안 된 0 []
+G-P05  팩 용어 — 치환 안 된 terms 키 노출 0 (화면 글)                                         PASS  [foodservice] 화면 56 · 바뀌는 키 16 · 노출 0 []
+G-P05  팩 용어 — menus.rename 값에 치환 안 된 terms 키 0 (D-38 ①)                          PASS  [foodservice] rename 값 12 · 키 든 값 0 []
+G-C02  기능 156 계약 호출 (정상 + 오류 계약)                                                 PASS  [printfilm] PASS 156/156 · FAIL 0 [] · 미검증 0 [] · 검사 314건 · DB mes_printfilm_db
+G-C02  팩 기능 F-X 읽기 · 호출                                                          PASS  [printfilm] 팩 기능 24 · 통과 못한 0 []
+G-C17  칸별 판정 (화면 GET + 기능)                                                       PASS  [printfilm] 60/60 칸 PASS · FAIL []
+G-C02  회전 5 계약 — ?sort= (D-37) · JOB-02 ?wo= (D-604)                             PASS  [printfilm] 검사 7 · 통과 못한 0 []
+G-C03  회전 7 계약 — 폼 422 입력값 유지 14곳 (되채움 · 스캔칸 비움 · 다른 폼 안 덮음 · JSON 에 values 없음)  PASS  [printfilm] 곳 17 · 통과 못한 0 []
+G-C13  채널 밖 화면 403 (core.yaml: channels)                                         PASS  [printfilm] 호출 164 · 위반 0 []
+G-P05  팩 용어 — JSON 오류 message · fields.label 치환                                  PASS  [printfilm] 오류 응답 88 · 치환 안 된 0 []
+G-P05  팩 용어 — 치환 안 된 terms 키 노출 0 (화면 글)                                         PASS  [printfilm] 화면 59 · 바뀌는 키 9 · 노출 0 []
+G-P05  팩 용어 — menus.rename 값에 치환 안 된 terms 키 0 (D-38 ①)                          PASS  [printfilm] rename 값 10 · 키 든 값 0 []
+```
+
+- 기능 136 **136/136** · 팩 기능 F-X kimchi 24 · printfilm 24 통과(foodservice 는 팩 기능 선언 없음 — 행 없음) · 권한 48칸(코어) · kimchi 108 · foodservice 72 · printfilm 60 칸 전부 PASS · 채널 위반 0 · G-P05 3팩 × 3행 PASS · rename 값 검사 3팩 PASS.
+- `make gate` 영향: 새 행은 `G-C03` 이라 `gate.per_gate` 가 읽는 G-C03 판정(나쁜 쪽 우선)에 들어간다 — 지금 PASS. `check_screens.py` 는 `outputs/core.sha256` 대상이므로 **아키텍트가 `make core-hash` 를 다시 찍어야** 코어 무변경 검사가 이 수정을 코어 변경으로 세지 않는다.
+
+### R8-4. 이 회전에 검사기에서 바꾼 것 (`check_screens.py`)
+- ⑦ `round7_echo()` 새로 — 회전 7 폼 422 입력값 유지 14곳(19 검사). 도우미 `_forms` · `_form_of` · `_val`(input · textarea · select · radio) · `_scan_values`. 역할은 `rbac.can_do` 로 그 기능의 입력 역할을 고른다(코어 ADMIN 은 mat · pop · qua · eqp 가 조회라 403 — 하드코딩하지 않음). 전제 데이터가 없으면 `미검증` 으로 FAIL(조용히 넘기지 않음) · 코어 QA DB 에서만 정상 호출로 전제(열린 실적 · 대기 판정 1건)를 만든다. 팩에서는 쓰기 없음.
+- 출력 행 `G-C03  회전 7 계약 — 폼 422 입력값 유지 14곳 (…)` · `--json` 의 `shapes` 에 19 행 포함.
+
+---
+
+# (회전 6 원문) QA1 리포트 — 기능 · 계약 · 용어 (회전 6 재판정 · 2026-10-09)
+
 
 > 담당 QA1. 회전 6 은 **재판정** — 회전 4 결함 10건을 그 재현 절차 그대로 다시 돌리고, 코어 단독 + 팩 3 으로 검사기를 다시 돌리고, 회전 5 새 기능을 계약에 대조했다. **고치지 않았다** — 고친 것은 내 검사기 `src/mescore/tools/check_screens.py` 와 이 리포트뿐.
 > 기준 커밋 **`967021f`** (gate-full 42/42 PASS · `outputs/gate-r5-final.txt`). DB `mes_qa_db`(쓰기) · 팩은 `mes_<팩>_db` 읽기 · 호출만 · 서버 포트 8051(재현 때만 띄우고 내렸다).

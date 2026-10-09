@@ -10,6 +10,7 @@
   ③ G-C23 — 화면 HTML 전부(시드 · DB 값 포함)에 금지어 0 · 용어 표지 치환으로 찾은 날것 중립어(t() 누락).
   ④ 응답 모양 — 브라우저 303 / 422 재렌더 · JSON 오류 모양 · `/health` 키 · 인증 없이 열리는 경로 · 503.
   ⑤ 채널 — `core.yaml: channels` 밖 화면을 그 채널로 열면 403.
+  ⑦ 회전 7 — 폼 POST 422 입력값 유지 14곳(POP · Web) — 되채움 · 스캔칸 · 비밀 칸 비움 · 다른 폼 안 덮음 · JSON 422 에 values 없음.
 
 DB — **쓰기 검사는 QA 전용 DB 에서만 한다.** 코어 단독(MES_PACK 비움)은 `MES_QA_DSN`(없으면 `postgresql:///mes_qa_db`)에 붙는다 —
 `mes_core_db` 는 다른 사람이 쓴다. 팩(MES_PACK=<팩>)은 `mes_<팩>_db` 에 **읽기 · 호출만**(정상 쓰기 호출은 하지 않는다 · 401/403/404/422 만).
@@ -115,7 +116,7 @@ if not get_settings().seed_password or not _db_exists():
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from mescore.app import contracts, nav, packs, rbac  # noqa: E402
+from mescore.app import contracts, measure, nav, packs, rbac  # noqa: E402
 from mescore.app.main import app  # noqa: E402
 from mescore.db import conn  # noqa: E402
 from mescore.db.seed_core import USERS as SEED_USERS  # noqa: E402
@@ -1473,6 +1474,269 @@ def round5_contracts() -> tuple[list[tuple[str, bool, str]], list[tuple[str, boo
     return f2, f3
 
 
+# ── ⑦ 회전 7 계약 — 폼 POST 422 입력값 유지 14곳 (api-contract §2 · docs/design/README 「회전 7 이식 결과」 · DEF-QA3-008) ──
+def _forms(html: str) -> list[tuple[str, str]]:
+    """(form 여는 태그, 본문) 목록."""
+    return [(m.group(1), m.group(2)) for m in re.finditer(r"(<form\b[^>]*>)(.*?)</form>", html, re.S)]
+
+
+def _form_of(html: str, *, fid: str | None = None, action: str | None = None) -> str:
+    for tag, body in _forms(html):
+        if fid and re.search(rf'\bid="{re.escape(fid)}"', tag):
+            return body
+        if action and re.search(rf'\baction="{re.escape(action)}"', tag) and 'method="post"' in tag:
+            return body
+    return ""
+
+
+def _val(body: str, name: str) -> list[str]:
+    """이 폼 본문에서 name 칸의 값들 — input value · textarea · select 의 selected · radio checked."""
+    out = []
+    for m in re.finditer(r"<input\b[^>]*>", body):
+        tag = m.group(0)
+        if f'name="{name}"' not in tag:
+            continue
+        if 'type="radio"' in tag or 'type="checkbox"' in tag:
+            if " checked" in tag:
+                out.append((re.search(r'value="([^"]*)"', tag) or [None, ""])[1])
+            continue
+        out.append((re.search(r'\bvalue="([^"]*)"', tag) or [None, ""])[1])
+    for m in re.finditer(rf'<textarea\b[^>]*name="{re.escape(name)}"[^>]*>(.*?)</textarea>', body, re.S):
+        out.append(m.group(1))
+    for m in re.finditer(rf'<select\b[^>]*name="{re.escape(name)}"[^>]*>(.*?)</select>', body, re.S):
+        sel = re.search(r'<option value="([^"]*)"[^>]*\bselected', m.group(1))
+        out.append(sel.group(1) if sel else "")
+    import html as _h
+    return [_h.unescape(x) for x in out]
+
+
+def _scan_values(html: str) -> list[str]:
+    """data-scan 칸의 value — 비어야 한다(S-05)."""
+    out = []
+    for m in re.finditer(r"<input\b[^>]*\bdata-scan\b[^>]*>", html):
+        v = re.search(r'\bvalue="([^"]*)"', m.group(0))
+        if v and v.group(1):
+            out.append(v.group(1))
+    return out
+
+
+def round7_echo() -> list[tuple[str, bool, str]]:
+    """폼 POST 422 → 303 → 다시 그린 폼. 각 곳: ① 303 · 같은 화면 ② 보낸 값이 그 폼에 되채움 ③ 스캔칸 · 비밀 칸 비움 ④ 표지(marker)가 그 폼 밖(조회 조건 ·
+    다른 폼 · 행 인라인 폼)에 없음 ⑤ 같은 본문의 JSON 422 에 `values` 없음. 쓰기 없음(422 만 · 팩 DB 에서도 돈다)."""
+    rows: list[tuple[str, bool, str]] = []
+    def who(fid: str, device: str | None = None) -> tuple[TestClient | None, TestClient | None, str]:
+        """그 기능을 쓸 수 있는 역할(입력 칸)의 세션 — 화면용(device) · JSON 용."""
+        for role in sorted(LOGIN_OF, key=lambda r: (r == "ADMIN", r)):
+            if rbac.can_do(role, fid):
+                return login(LOGIN_OF[role], device=device), login(LOGIN_OF[role]), role
+        return None, None, ""
+    tagn = [0]
+
+    def mk() -> str:
+        tagn[0] += 1
+        return f"QA1R8x{tagn[0]:02d}{uuid.uuid4().hex[:4]}"
+
+    def run(place: str, fid: str, device: str | None, post: str, data: dict, screen: str, form: dict, want: dict[str, str | list[str]],
+            markers: list[str], not_in: list[tuple[dict, str]] = (), extra=None) -> None:
+        c, js_c, role = who(fid, device)
+        if c is None:
+            rows.append((place, False, f"미검증 — {fid} 입력 역할 없음"))
+            return
+        r = c.post(post, data=data, headers={**HTML, "referer": "http://testserver" + screen}, follow_redirects=False)
+        loc = r.headers.get("location") or ""
+        if r.status_code != 303:
+            rows.append((place, False, f"POST {post} → {r.status_code} (기대 303) {loc}"))
+            return
+        g = c.get(loc, headers=HTML)
+        html_ = g.text
+        body = _form_of(html_, **form)
+        probs = []
+        if re.sub(r"^https?://[^/]+", "", loc) != screen:
+            probs.append(f"돌아간 화면 {loc}")
+        if not body:
+            probs.append(f"폼 {form} 없음 ({g.status_code})")
+        for k, v in want.items():
+            got = _val(body, k)
+            vs = v if isinstance(v, list) else [v]
+            if got[:len(vs)] != vs if isinstance(v, list) else v not in got:
+                probs.append(f"{k} 기대 {v!r} 실제 {got[:3]!r}")
+        sv = _scan_values(html_)
+        if sv:
+            probs.append(f"스캔칸 값 {sv[:2]}")
+        pw = [x for t_, b_ in _forms(html_) for x in _val(b_, "password") if x]
+        if pw:
+            probs.append(f"password 칸 값 {pw[:1]}")
+        outside = html_.replace(body, "", 1) if body else html_
+        outside = re.sub(r'<script[^>]*id="flash-data"[^>]*>.*?</script>', "", outside, flags=re.S)   # 알림 자체(flash JSON — 폼 칸이 아니다)
+        leak = [m for m in markers if m in outside]
+        if leak:
+            probs.append(f"폼 밖에도 입력값 {leak}")
+        for f2, name in not_in:
+            b2 = _form_of(html_, **f2)
+            if b2 and any(m in " ".join(_val(b2, name)) for m in markers):
+                probs.append(f"다른 폼 {f2} {name} 덮임")
+        if extra:
+            probs += extra(html_, body)
+        rj = js_c.post(post, data=data)
+        if rj.status_code != 422 or "values" in js(rj):
+            probs.append(f"JSON {rj.status_code} 키 {sorted(js(rj))}")
+        rows.append((place, not probs, f"{role} {post} → 303 {loc} · {'; '.join(probs) if probs else '되채움 ' + ','.join(want)}"))
+
+    def skip(place: str, why: str) -> None:
+        rows.append((place, False, f"미검증 — {why}"))
+
+    hidden = {s.screen_id for s in nav.SCREENS if nav.menu(s.menu_code).hidden}
+    P2, P3 = nav.path_of("POP-02"), nav.path_of("POP-03")
+    WO = q1("""select w.id, w.work_order_no from job_work_order w where w.status in ('대기', '진행')
+               and not exists (select 1 from pop_work_result r where r.work_order_id = w.id and r.ended_at is null) order by w.id desc limit 1""")
+    if not WO and "POP-02" not in hidden:                            # 시작할 지시가 없으면 시작 폼이 그려지는 지시(상태 무관 — 422 는 상태 · 설비에서)
+        c0 = who("F-POP-02", "pop")[0]
+        for x in (conn.q("select id, work_order_no from job_work_order order by id desc limit 15") if c0 else []):
+            if 'id="start-form"' in c0.get(f"{P2}?wo={x['id']}", headers=HTML).text:
+                WO = x
+                break
+    wk = q1("select id from bas_worker where use_yn = 'Y' order by id desc limit 1")
+    if WO and wk and "POP-02" not in hidden:
+        m = mk()
+        run("POP-02 시작 — 작업자 · 비고", "F-POP-02", "pop", f"{P2}/start", {"work_order_id": WO["id"], "equipment_id": NOPE_ID, "worker_id": wk["id"], "note": m},
+            f"{P2}?wo={WO['id']}", {"fid": "start-form"}, {"worker_id": str(wk["id"]), "note": m}, [m])
+    else:
+        skip("POP-02 시작", "시작할 수 있는 지시 없음")
+    if WRITE_MODE and WO and not q1("""select 1 from pop_work_result r where r.ended_at is null
+                                      and not exists (select 1 from pop_stop s where s.work_result_id = r.id and s.ended_at is null)"""):
+        cw = who("F-POP-02")[1]                                    # 코어 QA DB(쓰기) — 열린 실적이 없으면 하나 연다(422 검사의 전제)
+        if cw is not None:
+            cw.post(f"{P2}/start", data={"work_order_id": WO["id"]})
+    # 열린 실적 (정지 중 아님) — POP-02 · POP-03
+    R_ = q1("""select r.id, r.process_id from pop_work_result r where r.ended_at is null
+               and not exists (select 1 from pop_stop s where s.work_result_id = r.id and s.ended_at is null) order by r.id desc limit 1""")
+    if R_ and "POP-03" not in hidden:
+        m = mk()
+        run("POP-03 투입 — 투입량 되채움 · 스캔칸 비움", "F-POP-06", "pop", P3, {"work_result_id": R_["id"], "barcode": m, "qty": "3.25"}, f"{P3}?result={R_['id']}",
+            {"action": P3}, {"qty": "3.25"}, [], extra=lambda h, b: ([f"스캔 값 {m} 이 입력칸에"] if re.search(rf'<input[^>]*value="{m}"', h) else []))
+    else:
+        skip("POP-03 투입", "열린 실적 없음")
+    if R_ and "POP-02" not in hidden:
+        rid = R_["id"]
+        scr = f"{P2}?id={rid}"
+        prm = [p for p in measure.params_for(R_["process_id"]) if not p.get("is_collect") and (p.get("value_type") or "number") == "number" and not p.get("recorded_only")]
+        m1, m2 = mk(), mk()
+        d = {"good_qty": "-12", "defect_qty": "1", "merge_lot_ids": m1, "note": m2}
+        w = {"good_qty": "-12", "defect_qty": "1", "merge_lot_ids": m1}
+        for p in prm[:2]:
+            d[p["field"]] = "7.25"
+        run("POP-02 종료 — 양품 · 불량 · 합칠 LOT · 측정값", "F-POP-03", "pop", f"{P2}/{rid}/end", d, scr, {"fid": "end-form"}, w, [m1],
+            not_in=[({"fid": "scrap-form"}, "qty"), ({"fid": "stop-form"}, "note"), ({"fid": "merge-form"}, "lot_ids")],
+            extra=lambda h, b: ([] if not prm[:2] or "7.25" in b else [f"측정값 {prm[0]['field']} 7.25 없음"]) + (["다른 폼 폐기 수량 -12"] if "-12" in " ".join(_val(_form_of(h, fid="scrap-form"), "qty")) else []))
+        m = mk()
+        run("POP-02 정지 — 사유 · 비고", "F-POP-04", "pop", f"{P2}/{rid}/stop", {"reason_code": "QA1_NOPE", "note": m}, scr, {"fid": "stop-form"}, {"note": m}, [m],
+            not_in=[({"fid": "end-form"}, "note")])
+        run("POP-02 폐기 — 수량 · 불량코드", "F-POP-05", "pop", f"{P2}/{rid}/scrap", {"qty": "-3.5", "defect_code_id": ""}, scr, {"fid": "scrap-form"}, {"qty": "-3.5"}, [],
+            extra=lambda h, b: (["합병 수량 덮임"] if "-3.5" in " ".join(_val(_form_of(h, fid="merge-form"), "qty")) else []) + (["양품 덮임"] if "-3.5" in " ".join(_val(_form_of(h, fid="end-form"), "good_qty")) else []))
+    else:
+        for x in ("종료", "정지", "폐기"):
+            skip(f"POP-02 {x}", "열린 실적 없음")
+    # 분할 · 합병 폼은 종료 실적 + 재고 생산 LOT 이 있을 때만 그려진다 — 그런 실적을 화면으로 찾는다
+    cpop = who("F-POP-03", "pop")[0]
+    RS = None
+    if cpop is not None and "POP-02" not in hidden:
+        for x in conn.q("""select r.id from pop_work_result r where r.ended_at is not null
+                           and exists (select 1 from lot l where l.work_order_id = r.work_order_id and l.kind_base = 'PRODUCT') order by r.id desc limit 15"""):
+            if 'id="split-form"' in cpop.get(f"{P2}?id={x['id']}", headers=HTML).text:
+                RS = x["id"]
+                break
+    if RS:
+        scr = f"{P2}?id={RS}"
+        run("POP-02 분할 — 분할 수 · 수량", "F-POP-03", "pop", f"{P2}/{RS}/split", {"count": "x9", "qtys": "1.5,2.5", "lot_id": ""}, scr, {"fid": "split-form"},
+            {"count": "x9", "qtys": "1.5,2.5"}, ["1.5,2.5"])
+        m = mk()
+        run("POP-02 합병 — LOT · 수량", "F-POP-03", "pop", f"{P2}/{RS}/merge", {"lot_ids": m, "qty": "4.75"}, scr, {"fid": "merge-form"}, {"lot_ids": m, "qty": "4.75"}, [m],
+            extra=lambda h, b: (["폐기 수량 덮임"] if "4.75" in " ".join(_val(_form_of(h, fid="scrap-form"), "qty")) else []))
+    else:
+        skip("POP-02 분할 · 합병", "종료 + 재고 생산 LOT 실적 없음")
+    it = q1("select id from bas_item where use_yn = 'Y' order by id limit 1")
+    M1 = nav.path_of("MAT-01")
+    if it and "MAT-01" not in hidden:
+        c0 = who("F-MAT-01")[0]
+        opt = re.findall(r'<option value="(\d+)"', (re.findall(r'<select[^>]*name="item_id".*?</select>', _form_of(c0.get(M1, headers=HTML).text, fid="receipt-form"), re.S) or [""])[0]) if c0 else []
+        it = {"id": int(opt[0])} if opt else it                                    # 입고 품목 선택지(원재료 · 부자재)에서 고른다
+        m1, m2 = mk(), mk()
+        run("MAT-01 입고 — 품목 · 수량 · 단위 · 비고 (조회 조건 안 덮음)", "F-MAT-01", None, M1, {"item_id": it["id"], "qty": "-5", "unit": m1, "note": m2, "receipt_date": "2026-10-01"},
+            M1, {"fid": "receipt-form"}, {"item_id": str(it["id"]), "qty": "-5", "unit": m1, "note": m2, "receipt_date": "2026-10-01"}, [m1, m2])
+    lot = q1("""select l.id, l.lot_no from lot l where l.kind_base = 'MATERIAL'
+                and not exists (select 1 from pop_input x where x.material_lot_id = l.id and x.canceled_yn = 'N') order by l.id desc limit 1""")
+    M2 = nav.path_of("MAT-02")
+    if lot and "MAT-02" not in hidden:
+        m = mk()
+        run("MAT-02 입고검사 — 판정 폼 비고 · 스캔칸 비움", "F-MAT-04", "pop", M2, {"lot_id": lot["id"], "judgement": "QA1_NOPE", "note": m}, f"{M2}?no={lot['lot_no']}",
+            {"fid": "judge-form"}, {"note": m}, [m])
+    else:
+        skip("MAT-02 입고검사", "투입 안 된 원재료 LOT 없음")
+    M4 = nav.path_of("MAT-04")
+    if it and "MAT-04" not in hidden:
+        m = mk()
+        run("MAT-04 재고 조정 — 품목 · 수량 · 사유", "F-MAT-09", None, f"{M4}/adjust", {"item_id": it["id"], "qty": "abc", "reason": m}, M4, {"fid": "adjust-form"},
+            {"item_id": str(it["id"]), "qty": "abc", "reason": m}, [m])
+    Q1 = nav.path_of("QUA-01")
+    if it and "QUA-01" not in hidden:
+        ks = [mk(), mk(), mk()]
+        run("QUA-01 검사 계획 — 품목 · 항목 3줄(줄 번호)", "F-QUA-01", None, Q1, {"insp_type": "QA1_NOPE", "item_id": it["id"], "item_key": ks, "label": ["L1", "L2", "L3"]},
+            Q1, {"fid": "plan-form"}, {"item_id": str(it["id"]), "item_key": ks}, ks)
+    Q2 = nav.path_of("QUA-02")
+    ql = q1("select l.id, l.lot_no from lot l where l.kind_base <> 'SHIPMENT' and l.shipment_id is null order by l.id desc limit 1") if "QUA-02" not in hidden else None
+    if ql:
+        m = mk()
+        run("QUA-02 검사 결과 — 항목 저장 폼 비고 (판정 폼 안 덮음)", "F-QUA-04", None, Q2, {"lot_id": ql["id"], "insp_type": "QA1_NOPE", "note": m}, f"{Q2}?no={ql['lot_no']}",
+            {"fid": "insp-form"}, {"note": m}, [m])
+    else:
+        skip("QUA-02 검사 결과", "LOT 없음")
+    if WRITE_MODE and ql and not q1("select 1 from qua_inspection where lot_id = %s and judgement is null", (ql["id"],)):
+        cq = who("F-QUA-04")[1]                                    # 코어 QA DB(쓰기) — 이 LOT 에 대기 판정 1건(판정 폼 되채움의 전제)
+        if cq is not None:
+            cq.post(Q2, data={"lot_id": ql["id"], "insp_type": "최종"})
+    pj = q1("""select i.id, l.lot_no from qua_inspection i join lot l on l.id = i.lot_id where i.judgement is null
+               and (select count(*) from qua_inspection x where x.lot_id = i.lot_id and x.judgement is null) = 1 order by i.id desc limit 1""") if "QUA-02" not in hidden else None
+    if pj:
+        m = mk()
+        run("QUA-02 판정 — 대기 판정 1건일 때 판정 폼 비고 (항목 폼 안 덮음)", "F-QUA-05", None, f"{Q2}/{pj['id']}/judge", {"judgement": "QA1_NOPE", "note": m},
+            f"{Q2}?no={pj['lot_no']}", {"fid": f"judge-{pj['id']}"}, {"note": m}, [m])
+    else:
+        rows.append(("QUA-02 판정 (대기 1건)", True, "대상 없음 — 대기 판정이 정확히 1건인 LOT 이 이 DB 에 없다(README: 여럿이면 되채우지 않음 · 설계 한계)"))
+    Q4 = nav.path_of("QUA-04")
+    if "QUA-04" not in hidden:
+        m1, m2 = mk(), mk()
+        run("QUA-04 이상 — 원인 · LOT · 발생 시각 (조치 인라인 폼 안 덮음)", "F-QUA-08", None, Q4, {"content": "", "cause": m1, "lot_no": m2, "occurred_at": "2026-10-09T08:15"},
+            Q4, {"fid": "issue-form"}, {"cause": m1, "lot_no": m2, "occurred_at": "2026-10-09T08:15"}, [m1, m2])
+    eq = q1("select id from bas_equipment where use_yn = 'Y' order by id limit 1")
+    E2, E3 = nav.path_of("EQP-02"), nav.path_of("EQP-03")
+    if eq and "EQP-02" not in hidden:
+        m1, m2, m3 = mk(), mk(), mk()
+        run("EQP-02 점검 — 설비 · 결과 · 점검자 · 비고", "F-EQP-03", None, E2, {"equipment_id": eq["id"], "item": "", "result": m1, "checker": m2, "note": m3},
+            E2, {"fid": "check-form"}, {"equipment_id": str(eq["id"]), "result": m1, "checker": m2, "note": m3}, [m1, m2, m3])
+    if eq and "EQP-03" not in hidden:
+        run("EQP-03 고장 — 설비 · 발생 시각 (조치 인라인 폼 안 덮음)", "F-EQP-05", None, E3, {"equipment_id": eq["id"], "symptom": "", "occurred_at": "2026-10-09T07:45"},
+            E3, {"fid": "fault-form"}, {"equipment_id": str(eq["id"]), "occurred_at": "2026-10-09T07:45"}, [])
+    S1, S4 = nav.path_of("SHP-01"), nav.path_of("SHP-04")
+    sreg = q1("select id from shp_shipment where status = '등록' order by id desc limit 1") if "SHP-01" not in hidden else None
+    if sreg:
+        m1, m2 = mk(), mk()
+        run("SHP-01 등록 — 거래처 · 비고 (수정 폼 안 덮음)", "F-SHP-01", None, S1, {"partner_code": m1, "ship_date": "2026-10-20", "note": m2}, f"{S1}?id={sreg['id']}",
+            {"fid": "shipment-new"}, {"ship_date": "2026-10-20", "note": m2}, [m2], not_in=[({"fid": "shipment-edit"}, "note")],
+            extra=lambda h, b: ["수정 폼 출하일 덮임"] if "2026-10-20" in _val(_form_of(h, fid="shipment-edit"), "ship_date") else [])
+        m1, m2 = mk(), mk()
+        run("SHP-01 수정 — shipment_edit 로 가름 (등록 폼 안 덮음)", "F-SHP-02", None, f"{S1}/{sreg['id']}", {"shipment_edit": "1", "partner_code": m1, "ship_date": "2026-10-21", "note": m2},
+            f"{S1}?id={sreg['id']}", {"fid": "shipment-edit"}, {"ship_date": "2026-10-21", "note": m2}, [m2], not_in=[({"fid": "shipment-new"}, "note")],
+            extra=lambda h, b: ["등록 폼 출하일 덮임"] if "2026-10-21" in _val(_form_of(h, fid="shipment-new"), "ship_date") else [])
+    else:
+        skip("SHP-01 등록 · 수정", "등록 상태 출하 없음")
+    sap = q1("select id from shp_shipment where status = '승인' order by id desc limit 1") if "SHP-04" not in hidden else None
+    if sap:
+        run("SHP-04 성적서 — 출하 되채움", "F-SHP-09", None, S4, {"shipment_id": str(sap["id"]), "doc_type": "QA1_NOPE"}, S4, {"fid": "doc-new"}, {"shipment_id": str(sap["id"])}, [])
+    else:
+        skip("SHP-04 성적서", "승인 출하 없음")
+    return rows
+
+
 def channels_check() -> tuple[list[str], int]:
     a = login("admin")
     ch = P.channels
@@ -1578,7 +1842,11 @@ def main() -> int:
     for rows_, gid, title in ((r2, "G-C02", "회전 5 계약 — ?sort= (D-37) · JOB-02 ?wo= (D-604)"), (r3, "G-C03", "회전 5 계약 — 422 입력값 유지 · POST /logout · /login/as · role_summary")):
         b_ = [f"{n}: {m}" for n, ok, m in rows_ if not ok]
         R.row(gid, title, "PASS" if not b_ else "FAIL", f"{tag}검사 {len(rows_)} · 통과 못한 {len(b_)} {b_[:3]}")
-    sh = sh + r2 + r3
+    r7 = round7_echo()
+    b7 = [f"{n}: {m}" for n, ok, m in r7 if not ok]
+    R.row("G-C03", "회전 7 계약 — 폼 422 입력값 유지 14곳 (되채움 · 스캔칸 비움 · 다른 폼 안 덮음 · JSON 에 values 없음)", "PASS" if not b7 else "FAIL",
+          f"{tag}곳 {len(r7)} · 통과 못한 {len(b7)} {b7[:3]}")
+    sh = sh + r2 + r3 + r7
     # ⑤ 채널
     chb, chn = channels_check()
     R.row("G-C13", "채널 밖 화면 403 (core.yaml: channels)", "PASS" if not chb else "FAIL", f"{tag}호출 {chn} · 위반 {len(chb)} {chb[:5]}")
