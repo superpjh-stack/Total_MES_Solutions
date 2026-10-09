@@ -150,7 +150,7 @@
   </div>
   <div class="hdr-r">
     <span class="meta">{{ t('마지막 갱신') if device == 'board' else t('갱신') }} <b id="refreshed-at">{{ now }}</b></span>
-    <span class="meta">{{ t('채널') }} <b>{{ channel }}</b></span>
+    <span class="meta">{{ t('채널') }} <b>{{ t(channel) }}</b></span>
     {% if pack_name %}<span class="meta">{{ t('팩') }} <b>{{ pack_name }}</b></span>{% endif %}
     {% if show_side %}<a class="btn btn-ghost btn-sm menu-jump" href="#side-menu">{{ t('메뉴') }}</a>{% endif %}
     {% if user %}
@@ -180,7 +180,7 @@
       <button type="button" class="mg-h menu-head" aria-expanded="{{ 'true' if m.code == active_menu else 'false' }}"><span>{{ t(m.name) }}{% if m.is_pack %} <i class="tag">{{ t('팩') }}</i>{% endif %}</span><small>{{ m.screens|length }}</small></button>
       <ul>
         {% for s in m.screens %}
-        <li><a href="{{ s.path }}"{% if s.screen_id == screen_id %} class="cur" aria-current="page"{% endif %}>{{ t(s.name) }}{% if s.channels and nav.DEVICE_CHANNEL['web'] not in s.channels %} <i class="ch" title="{{ t('주로 쓰는 채널') }}: {{ s.channels|join(' · ') }}">{{ s.channels[0] }}</i>{% endif %}</a></li>
+        <li><a href="{{ s.path }}"{% if s.screen_id == screen_id %} class="cur" aria-current="page"{% endif %}>{{ t(s.name) }}{% if s.channels and nav.DEVICE_CHANNEL['web'] not in s.channels %} <i class="ch" title="{{ t('주로 쓰는 채널') }}: {{ s.channels|map('t')|join(' · ') }}">{{ t(s.channels[0]) }}</i>{% endif %}</a></li>
         {% endfor %}
       </ul>
     </div>
@@ -230,7 +230,7 @@
     {% if screen %}
     <div class="desc-b">
       <h3>{{ t('주로 쓰는 채널') }}</h3>
-      <p>{{ screen.channels|join(' · ') }}</p>
+      <p>{{ screen.channels|map('t')|join(' · ') }}</p>
     </div>
     {% endif %}
     {% else %}
