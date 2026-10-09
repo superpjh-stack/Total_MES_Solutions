@@ -125,9 +125,13 @@ def create_app() -> FastAPI:
 
     def _login_page(request: Request, *, message: str = "", login_id: str = "", next: str | None = None,
                     device: str | None = None, status_code: int = 200):
+        """로그인 화면 — `GET /login` 은 개발1 `routers/home.login_form`(D-21), `POST /login` 실패 401 재렌더는 여기.
+        두 화면이 같은 ctx 를 갖도록 `home.role_summary()`(권한 표 요약 · 비밀 없음) · `n_menus` 를 같이 싣는다(회전 4)."""
+        from .routers import home as home_router  # noqa — 순환 import 회피 (home 이 templating 을 쓴다)
         return render(request, "login.html",
                       {"message": message, "login_id": login_id, "next": _safe_next(next) or "",
-                       "login_device": device if device in nav.DEVICE_CHANNEL else "web"},
+                       "login_device": device if device in nav.DEVICE_CHANNEL else "web",
+                       "role_summary": home_router.role_summary(), "n_menus": len(nav.MENUS)},
                       screen_id="CMN-01", status_code=status_code)
 
     common = APIRouter()

@@ -99,6 +99,8 @@ def test_login_401_then_ok_and_logout_revokes():
     c = _client()
     assert c.post("/login", data={"login_id": "admin", "password": "틀린-비밀번호"}).status_code == 401
     assert c.post("/login", data={"login_id": "없는계정", "password": "x"}).status_code == 401
+    r401 = c.post("/login", data={"login_id": "없는계정", "password": "x"}, headers=HTML)      # 실패 재렌더도 GET /login 과 같은 권한 표 요약
+    assert r401.status_code == 401 and f"역할 {len(rbac.roles())} ·" in r401.text
     r = c.post("/login", data={"login_id": "admin", "password": get_settings().seed_password}, headers=HTML, follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/"
     assert c.get("/").status_code == 200
