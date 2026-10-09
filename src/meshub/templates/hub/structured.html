@@ -1,0 +1,37 @@
+{# 데이터 허브 › 정형 데이터 — 업무 테이블 카탈로그 (모듈 · 행 수 · 용량 · 최근 변경 · 7일 신규). ctx: tables[TableInfo] s q m error #}
+{% extends "base.html" %}
+{% import "hub/_hub.html" as hb %}
+{% block head %}{{ hb.style() }}{% endblock %}
+{% block body %}
+<section class="panel">
+  {{ hb.tabs(hub_tabs, '/hub/structured') }}
+  {% if error %}<div class="hb-err" role="alert">{{ error }}</div>{% endif %}
+  <form class="hb-filter" method="get" action="/hub/structured">
+    <input type="search" name="q" value="{{ q }}" placeholder="{{ t('테이블 이름 · 설명') }}" aria-label="{{ t('검색') }}">
+    <select name="m" aria-label="{{ t('모듈') }}"><option value="">{{ t('전체 모듈') }}</option>{% for mm in s.modules %}<option value="{{ mm.module }}"{% if m == mm.module %} selected{% endif %}>{{ t(mm.name) }}</option>{% endfor %}</select>
+    <button class="btn" type="submit">{{ t('조회') }}</button>
+    <span class="hb-note">{{ t('지금 역할이 읽을 수 있는 테이블') }} {{ s.tables }} · {{ t('뷰') }} {{ s.views }} · {{ hb.n(s.rows) }}{{ t('행') }} · {{ hb.size(s.bytes) }}</span>
+  </form>
+  <div class="hb-tbl">
+    <table class="grid plain">
+      <thead><tr><th>{{ t('테이블') }}</th><th>{{ t('모듈') }}</th><th>{{ t('설명') }}</th><th class="num">{{ t('행') }}</th><th class="num">{{ t('7일 신규') }}</th><th class="num">{{ t('용량') }}</th><th>{{ t('최근 변경') }}</th><th>{{ t('활용') }}</th></tr></thead>
+      <tbody>
+      {% for x in tables %}
+        <tr>
+          <td><a href="/hub/structured/{{ x.name }}"><code>{{ x.name }}</code></a>{% if x.kind == 'view' %} <span class="badge">{{ t('뷰') }}</span>{% endif %}</td>
+          <td>{{ t(x.module_name) }}</td>
+          <td><span class="hb-snip">{{ x.description }}</span></td>
+          <td class="num">{{ hb.n(x.rows) }}</td>
+          <td class="num">{{ ('+' ~ '{:,}'.format(x.new_7d)) if x.new_7d else '' }}</td>
+          <td class="num">{{ hb.size(x.bytes) if x.kind == 'table' else '' }}</td>
+          <td>{{ x.last_at | dt if x.last_at else '' }}</td>
+          <td><a class="btn btn-sm" href="/hub/structured/{{ x.name }}.csv" download>CSV</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8">{{ t('조회된 테이블 없음') }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

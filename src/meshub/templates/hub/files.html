@@ -1,0 +1,62 @@
+{# 데이터 허브 › 비정형 데이터 — 문서 · 이미지 · PDF 올리기 · 업무 대상 연결 · 본문 검색 · 내려받기. ctx: rows f q category link_kind categories links allowed max_mb is_admin me form errors saved #}
+{% extends "base.html" %}
+{% import "hub/_hub.html" as hb %}
+{% block head %}{{ hb.style() }}{% endblock %}
+{% block body %}
+<section class="panel">
+  {{ hb.tabs(hub_tabs, '/hub/files') }}
+  {% if saved %}<div class="hb-ok" role="status">{{ saved }}</div>{% endif %}
+  {% for k, msg in errors.items() %}<div class="hb-err" role="alert">{{ msg }}</div>{% endfor %}
+
+  <div class="hb-box" style="margin-top:0">
+    <h3>{{ t('파일 올리기') }} <small>{{ t('최대') }} {{ max_mb }}MB · {{ allowed | join(' ') }}</small></h3>
+    <form method="post" action="/hub/files" enctype="multipart/form-data" class="hb-up">
+      <label>{{ t('파일') }} *<input type="file" name="file" required></label>
+      <label>{{ t('제목') }}<input name="title" value="{{ form.title or '' }}" placeholder="{{ t('비우면 파일 이름') }}"></label>
+      <label>{{ t('분류') }} *<select name="category" required><option value="">—</option>{% for c in categories %}<option{% if form.category == c %} selected{% endif %}>{{ c }}</option>{% endfor %}</select>{% if errors.category %}<span class="err">{{ errors.category }}</span>{% endif %}</label>
+      <label>{{ t('연결 대상') }}<select name="link_kind"><option value="">{{ t('없음') }}</option>{% for k, v in links.items() %}<option value="{{ k }}"{% if form.link_kind == k %} selected{% endif %}>{{ t(v) }}</option>{% endfor %}</select></label>
+      <label>{{ t('대상 번호') }}<input name="link_ref" value="{{ form.link_ref or '' }}" placeholder="{{ t('품목코드 · LOT 번호 · 작업지시번호 …') }}">{% if errors.link_ref %}<span class="err">{{ errors.link_ref }}</span>{% endif %}</label>
+      <label>{{ t('태그') }}<input name="tags" value="{{ form.tags or '' }}" placeholder="{{ t('쉼표로 구분') }}"></label>
+      <label style="grid-column:1/-2">{{ t('메모') }}<input name="note" value="{{ form.note or '' }}"></label>
+      <button class="btn btn-primary" type="submit">{{ t('올리기') }}</button>
+    </form>
+    <p class="hb-note" style="margin:8px 0 0">{{ t('텍스트 · PDF · Word · Excel · PowerPoint 는 본문을 뽑아 검색과 AI Agent 문서 검색(RAG)에 쓴다. 파일은 서버의 허브 폴더에 무작위 이름으로 보관한다.') }}</p>
+  </div>
+
+  <div class="hb-box">
+    <h3>{{ t('보관 파일') }} <small>{{ hb.n(f.n) }} · {{ hb.size(f.bytes) }} · {{ t('텍스트 추출') }} {{ f.with_text }}</small></h3>
+    <form class="hb-filter" method="get" action="/hub/files">
+      <input type="search" name="q" value="{{ q }}" placeholder="{{ t('제목 · 본문 · 태그 · 대상 번호') }}" aria-label="{{ t('검색') }}">
+      <select name="category" aria-label="{{ t('분류') }}"><option value="">{{ t('전체 분류') }}</option>{% for c in categories %}<option{% if category == c %} selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+      <select name="link_kind" aria-label="{{ t('연결 대상') }}"><option value="">{{ t('전체 대상') }}</option>{% for k, v in links.items() %}<option value="{{ k }}"{% if link_kind == k %} selected{% endif %}>{{ t(v) }}</option>{% endfor %}</select>
+      <button class="btn" type="submit">{{ t('조회') }}</button>
+    </form>
+    <div class="hb-tbl">
+      <table class="grid plain">
+        <thead><tr><th>{{ t('번호') }}</th><th>{{ t('제목') }}</th><th>{{ t('분류') }}</th><th>{{ t('연결') }}</th><th>{{ t('형식') }}</th><th class="num">{{ t('크기') }}</th><th class="num">{{ t('추출 글자') }}</th><th>{{ t('등록') }}</th><th></th></tr></thead>
+        <tbody>
+        {% for r in rows %}
+          <tr>
+            <td><code>{{ r.file_no }}</code></td>
+            <td><b>{{ r.title }}</b>{% if r.tags %} {% for g in r.tags %}<span class="badge">#{{ g }}</span> {% endfor %}{% endif %}<span class="hb-snip">{{ r.snippet if q and r.snippet else (r.note or r.original_name) }}</span></td>
+            <td>{{ r.category }}</td>
+            <td>{% if r.link_kind %}{{ t(links[r.link_kind]) }} <code>{{ r.link_ref }}</code>{% endif %}</td>
+            <td>{{ r.ext }}</td>
+            <td class="num">{{ hb.size(r.size_bytes) }}</td>
+            <td class="num">{{ hb.n(r.text_chars) if r.text_chars else '—' }}</td>
+            <td>{{ r.created_at | dt }} · {{ r.created_by }}</td>
+            <td style="white-space:nowrap">
+              <a class="btn btn-sm" href="/hub/files/{{ r.id }}/download">{{ t('받기') }}</a>
+              {% if r.ext in ('png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf') %}<a class="btn btn-sm" href="/hub/files/{{ r.id }}/download?inline=1" target="_blank" rel="noopener">{{ t('보기') }}</a>{% endif %}
+              {% if is_admin or r.created_by == me %}<form method="post" action="/hub/files/{{ r.id }}/delete" style="display:inline"><button class="btn btn-sm" type="submit">{{ t('지우기') }}</button></form>{% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="9">{{ t('조회된 파일 없음') }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

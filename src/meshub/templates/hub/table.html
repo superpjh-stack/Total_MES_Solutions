@@ -1,0 +1,35 @@
+{# 데이터 허브 › 정형 데이터 › 테이블 — 컬럼 · 최근 50행 미리보기 · CSV 내보내기. ctx: tb(TableInfo) cols preview{columns rows} export_max #}
+{% extends "base.html" %}
+{% import "hub/_hub.html" as hb %}
+{% block head %}{{ hb.style() }}{% endblock %}
+{% block body %}
+<section class="panel">
+  {{ hb.tabs(hub_tabs, '/hub/structured') }}
+  <h2 style="margin:0 0 6px"><code>{{ tb.name }}</code> <small>{{ t(tb.module_name) }}{% if tb.kind == 'view' %} · {{ t('뷰') }}{% endif %}</small></h2>
+  <p class="hb-note">{{ tb.description }}</p>
+  <div class="hb-big" style="grid-template-columns:repeat(4,minmax(0,1fr));max-width:760px">
+    <div><b>{{ hb.n(tb.rows) }}</b><span>{{ t('행') }}</span></div>
+    <div><b>{{ hb.size(tb.bytes) if tb.kind == 'table' else '—' }}</b><span>{{ t('저장 용량') }}</span></div>
+    <div><b>{{ ('+' ~ '{:,}'.format(tb.new_7d)) if tb.new_7d is not none else '—' }}</b><span>{{ t('최근 7일 신규') }}</span></div>
+    <div><b>{{ tb.last_at | dt if tb.last_at else '—' }}</b><span>{{ t('최근 변경') }}</span></div>
+  </div>
+  <form class="hb-filter" method="get" action="/hub/structured/{{ tb.name }}.csv" style="margin-top:12px">
+    <label class="hb-note">{{ t('기간') }} <select name="days"><option value="0">{{ t('전체') }}</option><option value="1">{{ t('최근 1일') }}</option><option value="7">{{ t('최근 7일') }}</option><option value="30">{{ t('최근 30일') }}</option><option value="90">{{ t('최근 90일') }}</option></select></label>
+    <button class="btn btn-primary" type="submit">{{ t('CSV 내보내기') }}</button>
+    <span class="hb-note">{{ t('최대') }} {{ '{:,}'.format(export_max) }}{{ t('행') }} · {{ t('읽기 전용') }} · {{ t('내보내기는 접근 로그에 남는다') }}</span>
+  </form>
+  <div class="hb-box">
+    <h3>{{ t('컬럼') }} <small>{{ cols | length }}</small></h3>
+    <p class="hb-note" style="margin:0">{% for c in cols %}<code>{{ c }}</code>{% if not loop.last %} · {% endif %}{% endfor %}</p>
+  </div>
+  <div class="hb-box">
+    <h3>{{ t('미리보기') }} <small>{{ t('최근') }} {{ preview.rows | length }}{{ t('행') }}</small></h3>
+    <div class="hb-tbl">
+      <table class="grid plain">
+        <thead><tr>{% for c in preview.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>{% for r in preview.rows %}<tr>{% for c in preview.columns %}<td>{{ r[c] if r[c] is not none else '' }}</td>{% endfor %}</tr>{% else %}<tr><td colspan="{{ preview.columns | length or 1 }}">{{ t('조회된 행 없음') }}</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

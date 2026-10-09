@@ -1,0 +1,69 @@
+{# 데이터 허브 › 저장 현황 — 정형 · 비정형 · 실시간 데이터가 얼마나 · 언제까지 쌓였는지와 쓰는 길. ctx: s(정형 요약) f(파일 통계) rt(실시간 상태 | None) daily_s daily_f daily_r #}
+{% extends "base.html" %}
+{% import "hub/_hub.html" as hb %}
+{% block head %}{{ hb.style() }}{% endblock %}
+{% block body %}
+<section class="panel">
+  {{ hb.tabs(hub_tabs, '/hub') }}
+  <p class="hb-note">{{ t('표준플랫폼의 데이터를 세 갈래로 모아 본다 — 정형(업무 테이블) · 비정형(문서 · 사진 파일) · 실시간(설비 수집값). 정형 · 실시간의 원본은 코어 테이블이고 허브는 복사하지 않는다. 지금 역할이 볼 수 있는 데이터만 센다.') }}</p>
+  <div class="hb-cards">
+    <article class="hb-card">
+      <h3>{{ t('정형 데이터') }} <span class="k">{{ t('업무 테이블') }} · public</span></h3>
+      <div class="hb-big">
+        <div><b>{{ hb.n(s.tables) }}</b><span>{{ t('테이블') }} (+{{ t('뷰') }} {{ s.views }})</span></div>
+        <div><b>{{ hb.n(s.rows) }}</b><span>{{ t('행') }}</span></div>
+        <div><b>{{ hb.size(s.bytes) }}</b><span>{{ t('저장 용량') }}</span></div>
+        <div><b>+{{ hb.n(s.new_7d) }}</b><span>{{ t('최근 7일 신규 행') }}</span></div>
+      </div>
+      {{ hb.bars(daily_s, t('정형 데이터 일별 신규 행')) }}
+      <p class="src">{{ t('출처: 기준정보 · 수주 · 작업지시 · 자재 · 생산실적 · 품질 · 설비 · 출하 · 시스템 테이블과 팩 확장 테이블') }}</p>
+      <div class="use"><a class="btn btn-sm" href="/hub/structured">{{ t('카탈로그 · 내보내기') }}</a>{% if 'agent' in (addon_menus | map(attribute='code') | list) %}<a class="btn btn-sm" href="/agent">{{ t('AI Agent 에 묻기') }}</a>{% endif %}</div>
+    </article>
+    <article class="hb-card">
+      <h3>{{ t('비정형 데이터') }} <span class="k">{{ t('문서 · 이미지 · PDF') }} · hub.file</span></h3>
+      <div class="hb-big">
+        <div><b>{{ hb.n(f.n) }}</b><span>{{ t('파일') }}</span></div>
+        <div><b>{{ hb.size(f.bytes) }}</b><span>{{ t('저장 용량') }}</span></div>
+        <div><b>{{ hb.n(f.with_text) }}</b><span>{{ t('텍스트 추출 · 검색 가능') }}</span></div>
+        <div><b>{{ hb.n(f.linked) }}</b><span>{{ t('업무 대상에 연결') }}</span></div>
+      </div>
+      {{ hb.bars(daily_f, t('비정형 데이터 일별 등록')) }}
+      <p class="src">{% for c in f.categories %}{{ c.category }} {{ c.n }}{% if not loop.last %} · {% endif %}{% else %}{{ t('아직 올린 파일이 없다') }}{% endfor %}</p>
+      <div class="use"><a class="btn btn-sm" href="/hub/files">{{ t('파일 올리기 · 찾기') }}</a></div>
+    </article>
+    <article class="hb-card">
+      <h3>{{ t('실시간 데이터') }} <span class="k">{{ t('설비 수집값') }} · eqp_collect</span></h3>
+      {% if rt %}
+      <div class="hb-big">
+        <div><b>{{ hb.n(rt['values'].total) }}</b><span>{{ t('수집값') }} · {{ t('시계열') }} {{ rt['values'].series }}</span></div>
+        <div><b>{{ hb.n(rt['values'].h24) }}</b><span>{{ t('최근 24시간') }}</span></div>
+        <div><b>{{ hb.size(rt['values'].bytes + rt.raw.bytes + rt.hourly.bytes) }}</b><span>{{ t('저장 용량 (원문 포함)') }}</span></div>
+        <div><b>{{ rt['values'].last_ts | dt if rt['values'].last_ts else '—' }}</b><span>{{ t('마지막 수신') }}</span></div>
+      </div>
+      {{ hb.bars(daily_r, t('실시간 데이터 일별 수신')) }}
+      <p class="src">{{ t('원문') }} {{ hb.n(rt.raw.total) }} ({{ t('거부') }} {{ rt.raw.rejected }}) · {{ t('시간 집계') }} {{ hb.n(rt.hourly.rows) }}{{ t('행') }}{% if rt.last_rollup %} · {{ t('마지막 집계') }} {{ rt.last_rollup.ran_at | dt }}{% endif %}</p>
+      <div class="use"><a class="btn btn-sm" href="/hub/realtime">{{ t('최신값 · 추이 · 내보내기') }}</a></div>
+      {% else %}
+      <p class="src">{{ t('실시간 데이터는 설비 메뉴를 볼 수 있는 역할만 본다') }}</p>
+      {% endif %}
+    </article>
+  </div>
+
+  <div class="hb-box">
+    <h3>{{ t('모듈별 정형 데이터') }} <small>{{ t('행 수 기준') }}</small></h3>
+    {% set mx = (s.modules | map(attribute='rows') | max) if s.modules else 0 %}
+    <ul class="hb-mods">
+      {% for m in s.modules %}<li><a href="/hub/structured?m={{ m.module }}">{{ t(m.name) }}</a><span class="bar"><i style="--w:{{ ((m.rows / mx * 100) if mx else 0) | round(1) }}%"></i></span><span class="v">{{ hb.n(m.rows) }}</span></li>{% endfor %}
+    </ul>
+  </div>
+  <div class="hb-box">
+    <h3>{{ t('활용') }}</h3>
+    <ul class="hb-note" style="margin:0;padding-left:18px;line-height:1.8">
+      <li>{{ t('정형') }} — {{ t('테이블 미리보기 · CSV 내보내기(최근 N일) · AI Agent 의 SQL 조회 · 정형 지표') }}</li>
+      <li>{{ t('비정형') }} — {{ t('품목 · LOT · 작업지시 · 설비 · 거래처에 문서를 연결 · 본문 검색 · AI Agent 문서 검색(RAG)의 근거') }}</li>
+      <li>{{ t('실시간') }} — {{ t('설비 · 태그별 최신값 · 추이 · 시간 집계 보존 · CSV 내보내기') }}</li>
+      <li>{{ t('업종 팩이 확장 테이블을 더하면 정형 카탈로그에 그대로 나타난다 — 허브는 업종을 가리지 않는다') }}</li>
+    </ul>
+  </div>
+</section>
+{% endblock %}

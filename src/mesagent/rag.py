@@ -1,4 +1,4 @@
-"""문서 RAG — 계약 · 스키마 · 결정 · 업무 프로세스 · 도메인 카탈로그를 조각으로 나눠 BM25 로 찾는다(외부 벡터 DB 없음).
+"""문서 RAG — 계약 · 스키마 · 결정 · 업무 프로세스 · 도메인 카탈로그 · 데이터 허브 파일을 조각으로 나눠 BM25 로 찾는다(외부 벡터 DB 없음).
 
 토큰 = 영숫자 단어 + 한글 글자 2-gram (조사 · 띄어쓰기에 덜 민감). 색인은 기동 뒤 첫 질문 때 한 번 만든다.
 """
@@ -125,7 +125,20 @@ def index() -> Index:
         chunks.extend(_md_chunks(s))
     chunks.extend(_guide_chunks())
     chunks.extend(_domain_chunks())
+    chunks.extend(_hub_chunks())
     return Index(chunks)
+
+
+def _hub_chunks() -> list[Chunk]:
+    """데이터 허브(선택 모듈 meshub · D-53)의 비정형 파일 본문 — 허브가 켜져 있을 때만. 파일을 올리거나 지우면 허브가 색인을 비운다."""
+    from mescore.app.settings import get_settings
+    if "hub" not in get_settings().addons:
+        return []
+    try:
+        from meshub import files
+    except ImportError:
+        return []
+    return [Chunk(src, title, text) for src, title, text in files.rag_chunks(CHUNK)]
 
 
 def search(query: str, k: int = 5) -> list[dict]:

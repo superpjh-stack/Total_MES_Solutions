@@ -12,3 +12,5 @@ outputs/e2e/
 # Claude Code 실행 중 잠금 파일
 .claude/*.lock
 .gstack/
+# 데이터 허브 파일 보관 폴더 (로컬 · D-53)
+var/

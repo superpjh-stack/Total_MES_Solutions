@@ -35,7 +35,8 @@ services:
       MES_PG_DSN: postgresql://mes@db:5432/mes
       MES_ENV: prod
       MES_PACK: ${MES_PACK:-}
-      MES_ADDONS: ${MES_ADDONS:-agent}
+      MES_ADDONS: ${MES_ADDONS:-agent,hub}
+      MES_HUB_DIR: /data/hub
       MES_SAMPLE: ${MES_SAMPLE:-0}
       MES_SESSION_SECRET: ${MES_SESSION_SECRET:-}
       MES_SEED_PASSWORD: ${MES_SEED_PASSWORD:-}

@@ -71,7 +71,7 @@ make sample-today                                                       # 오늘
 | `MES_PG_DSN` | DB 접속 문자열. 비우면 `mes_core_db` 또는 `mes_<팩>_db` |
 | `MES_ENV` | `prod`(기본) 또는 `dev` |
 | `MES_SESSION_SECRET` · `MES_SEED_PASSWORD` | 세션 서명 비밀 · 시드 계정 비밀번호 (`make setup` 이 만든다) |
-| `MES_ADDONS` | 코어 밖 선택 모듈. `agent` = MES AI Agent |
+| `MES_ADDONS` | 코어 밖 선택 모듈(쉼표 · 메뉴 순서). `agent` = MES AI Agent · `hub` = 데이터 허브 |
 | `ANTHROPIC_API_KEY` | AI Agent 의 자유 질문 · 답변용 Claude API 키 (선택) |
 
 ## 업종 팩 만들기
@@ -122,6 +122,19 @@ docker compose logs app | grep "첫 기동"      # 시드 계정 비밀번호 (�
   ```bash
   cd /docker/<앱 이름> && docker compose up -d --build
   ```
+
+## 데이터 허브 (선택 모듈)
+
+`MES_ADDONS=agent,hub` 면 MES AI Agent 아래에 **데이터 허브** 메뉴가 생깁니다. 코어 밖 패키지 `src/meshub` 이며 코어 테이블 52 는 그대로입니다(허브 테이블은 `hub` 스키마).
+
+| 화면 | 쌓는 곳 · 원천 | 활용 |
+|---|---|---|
+| 저장 현황 | 세 갈래의 건수 · 용량 · 최근 14일 증가 | 한눈에 보기 |
+| 정형 데이터 | 코어 · 팩 업무 테이블 (복사하지 않음) | 카탈로그 · 미리보기 · CSV 내보내기 · AI Agent SQL |
+| 비정형 데이터 | `hub.file` + 파일 폴더 `MES_HUB_DIR` | 업무 대상 연결 · 본문 검색 · AI Agent 문서 검색(RAG) |
+| 실시간 데이터 | `eqp_collect` (코어 수집 인터페이스) + 시간 집계 `hub.ts_hourly` | 최신값 · 추이 · 5초 갱신 · CSV |
+
+보이는 데이터는 지금 역할이 읽을 수 있는 모듈의 것뿐입니다.
 
 ## 검증
 

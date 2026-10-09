@@ -1,0 +1,74 @@
+{# 데이터 허브 › 실시간 데이터 — 수집 저장 현황 · 설비/태그별 최신값 · 추이 · 시간 집계 · CSV. ctx: st series sel trend hours spark spark_min spark_max is_admin error #}
+{% extends "base.html" %}
+{% import "hub/_hub.html" as hb %}
+{% block head %}{{ hb.style() }}{% endblock %}
+{% block body %}
+<section class="panel" data-hub-live>
+  {{ hb.tabs(hub_tabs, '/hub/realtime') }}
+  {% if error %}<div class="hb-err" role="alert">{{ error }}</div>{% else %}
+  <p class="hb-note">{{ t('원천: 코어 수집 인터페이스') }} <code>POST /ifc/collect</code> → <code>ifc_collect_raw</code>({{ t('원문') }}) → <code>eqp_collect</code>({{ t('태그별 값') }}). {{ t('허브는 원천에 쓰지 않고, 시간 단위 집계만') }} <code>hub.ts_hourly</code>{{ t('에 둔다.') }} <span class="hb-live" data-live-status>{{ t('5초마다 새로 고침') }}</span></p>
+  <div class="hb-cards">
+    <article class="hb-card"><h3>{{ t('수집값') }}</h3><div class="hb-big">
+      <div><b data-live="values.total">{{ hb.n(st['values'].total) }}</b><span>{{ t('전체') }}</span></div>
+      <div><b data-live="values.h1">{{ hb.n(st['values'].h1) }}</b><span>{{ t('최근 1시간') }}</span></div>
+      <div><b data-live="values.h24">{{ hb.n(st['values'].h24) }}</b><span>{{ t('최근 24시간') }}</span></div>
+      <div><b data-live="values.last_ts">{{ st['values'].last_ts | dt if st['values'].last_ts else '—' }}</b><span>{{ t('마지막 수신') }}</span></div>
+    </div></article>
+    <article class="hb-card"><h3>{{ t('수신 원문') }}</h3><div class="hb-big">
+      <div><b data-live="raw.total">{{ hb.n(st.raw.total) }}</b><span>{{ t('전체') }}</span></div>
+      <div><b data-live="raw.h24">{{ hb.n(st.raw.h24) }}</b><span>{{ t('최근 24시간') }}</span></div>
+      <div><b data-live="raw.rejected">{{ hb.n(st.raw.rejected) }}</b><span>{{ t('거부') }}</span></div>
+      <div><b data-live="raw.resent">{{ hb.n(st.raw.resent) }}</b><span>{{ t('재전송') }}</span></div>
+    </div></article>
+    <article class="hb-card"><h3>{{ t('보존 · 집계') }}</h3><div class="hb-big">
+      <div><b>{{ hb.n(st.hourly.rows) }}</b><span>{{ t('시간 집계 행') }}</span></div>
+      <div><b>{{ hb.size(st['values'].bytes + st.raw.bytes + st.hourly.bytes) }}</b><span>{{ t('저장 용량') }}</span></div>
+      <div><b>{{ st.hourly.first_hour | dt if st.hourly.first_hour else '—' }}</b><span>{{ t('집계 시작') }}</span></div>
+      <div><b>{{ st.last_rollup.ran_at | dt if st.last_rollup else '—' }}</b><span>{{ t('마지막 집계') }}</span></div>
+    </div>
+    {% if is_admin %}<form method="post" action="/hub/realtime/rollup" class="hb-filter" style="margin:0">
+      <select name="hours" aria-label="{{ t('집계 범위') }}"><option value="24">{{ t('최근 24시간') }}</option><option value="72" selected>{{ t('최근 3일') }}</option><option value="720">{{ t('최근 30일') }}</option></select>
+      <button class="btn btn-sm" type="submit">{{ t('시간 집계 적재') }}</button></form>{% endif %}
+    </article>
+  </div>
+
+  <div class="hb-box">
+    <h3>{{ t('설비 · 태그별 최신값') }} <small>{{ series | length }} {{ t('시계열') }}</small>
+      <a class="btn btn-sm" style="margin-left:auto" href="/hub/realtime.csv?hours={{ hours }}">{{ t('CSV 내보내기') }} ({{ hours }}h)</a></h3>
+    <div class="hb-tbl">
+      <table class="grid plain">
+        <thead><tr><th>{{ t('설비') }}</th><th>{{ t('태그') }}</th><th class="num">{{ t('최신값') }}</th><th>{{ t('수신 시각') }}</th><th class="num">{{ t('24시간 건수') }}</th><th class="num">{{ t('최소') }}</th><th class="num">{{ t('최대') }}</th><th class="num">{{ t('평균') }}</th><th></th></tr></thead>
+        <tbody data-live-series>
+        {% for x in series %}
+          <tr{% if sel and x.equipment_id == sel.equipment_id and x.tag == sel.tag %} aria-current="true" style="background:var(--c-accent-tint)"{% endif %}>
+            <td><code>{{ x.equip_code }}</code> {{ x.equip_name }}</td><td><code>{{ x.tag }}</code></td>
+            <td class="num">{{ x.last_num if x.last_num is not none else (x.last_text or '') }}</td><td>{{ x.last_ts | dt }}</td>
+            <td class="num">{{ x.n24 or 0 }}</td><td class="num">{{ x.vmin if x.vmin is not none else '' }}</td><td class="num">{{ x.vmax if x.vmax is not none else '' }}</td><td class="num">{{ x.vavg if x.vavg is not none else '' }}</td>
+            <td><a class="btn btn-sm" href="/hub/realtime?equipment_id={{ x.equipment_id }}&tag={{ x.tag | urlencode }}&hours={{ hours }}">{{ t('추이') }}</a></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="9">{{ t('수집된 값이 없다 — 설비 수집(BAS-05 수집 설비 · /ifc/collect)을 연결하면 여기에 쌓인다') }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if sel %}
+  <div class="hb-box">
+    <h3>{{ t('추이') }} — <code>{{ sel.equip_code }}</code> · <code>{{ sel.tag }}</code> <small>{{ t('최근') }} {{ hours }}{{ t('시간') }} · {{ t('원천') }} {{ trend.points | length }}{{ t('점') }} · {{ t('시간 집계') }} {{ trend.hourly | length }}{{ t('행') }}</small>
+      <span style="margin-left:auto">{% for h in (1, 24, 168, 720) %}<a class="btn btn-sm{% if h == hours %} btn-primary{% endif %}" href="/hub/realtime?equipment_id={{ sel.equipment_id }}&tag={{ sel.tag | urlencode }}&hours={{ h }}">{{ h }}h</a> {% endfor %}</span></h3>
+    {% if spark %}
+    <svg class="hb-spark" viewBox="0 0 640 120" preserveAspectRatio="none" role="img" aria-label="{{ t('추이 그래프') }}"><polyline points="{{ spark }}"/></svg>
+    <p class="hb-note">{{ t('최소') }} {{ spark_min }} · {{ t('최대') }} {{ spark_max }}</p>
+    {% else %}<p class="hb-note">{{ t('그릴 숫자 값이 2개 미만이다') }}</p>{% endif %}
+    {% if trend.hourly %}
+    <div class="hb-tbl" style="max-height:260px"><table class="grid plain"><thead><tr><th>{{ t('시간') }}</th><th class="num">{{ t('건수') }}</th><th class="num">{{ t('최소') }}</th><th class="num">{{ t('최대') }}</th><th class="num">{{ t('평균') }}</th></tr></thead>
+      <tbody>{% for h in trend.hourly | reverse %}<tr><td>{{ h.hour | dt }}</td><td class="num">{{ h.n }}</td><td class="num">{{ h.v_min }}</td><td class="num">{{ h.v_max }}</td><td class="num">{{ h.v_avg }}</td></tr>{% endfor %}</tbody></table></div>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% endif %}
+</section>
+<script src="/hub/hub.js" defer></script>
+{% endblock %}

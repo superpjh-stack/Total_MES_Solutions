@@ -12,3 +12,4 @@ outputs/e2e
 .gstack
 *.log
 .DS_Store
+var
