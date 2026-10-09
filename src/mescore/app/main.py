@@ -294,6 +294,10 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def on_validation_error(request: Request, exc: RequestValidationError):
+        # 경로 키 형식 오류(숫자여야 하는데 아닌 것 · `/ord/orders/abc`)는 "없는 대상" — 404 (api-contract §1 · DEF-QA1-004).
+        # 요청 본문 · 쿼리 검증 오류는 그대로 422. 라우터는 `id: int` 선언을 그대로 둔다.
+        if any((e.get("loc") or ("",))[0] == "path" for e in exc.errors()):
+            return await on_http_error(request, StarletteHTTPException(404))
         fields = [{"name": ".".join(str(x) for x in e.get("loc", [])[1:]) or "입력",
                    "reason": _REASONS.get(e.get("type", ""), e.get("msg", ""))} for e in exc.errors()]
         return _invalid_input(request, http.status_message(422), fields)

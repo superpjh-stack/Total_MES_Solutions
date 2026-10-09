@@ -281,3 +281,26 @@ def test_dev_login_only_dev_and_loopback(monkeypatch):
     finally:
         monkeypatch.undo()
         st.reset_cache()
+
+
+def test_non_numeric_path_key_is_404_but_bad_body_is_422():
+    """api-contract §1 · DEF-QA1-004 — 숫자여야 하는 경로 키가 숫자가 아니면 404(없는 대상). 본문 · 쿼리 검증 오류는 422 그대로."""
+    from fastapi import APIRouter, Form
+
+    probe = APIRouter()
+
+    @probe.post("/_arch_probe/{item_id}")
+    def _p(item_id: int, qty: int = Form(...)):
+        return {"id": item_id, "qty": qty}
+
+    app.include_router(probe)
+    try:
+        c = TestClient(app, raise_server_exceptions=False)
+        r = c.post("/_arch_probe/abc", data={"qty": "1"})
+        assert r.status_code == 404 and r.json()["code"] == "not_found"
+        assert c.post("/_arch_probe/abc", data={"qty": "x"}).status_code == 404
+        r = c.post("/_arch_probe/7", data={"qty": "x"})
+        assert r.status_code == 422 and r.json()["fields"][0]["name"] == "qty"
+        assert c.post("/_arch_probe/7", data={"qty": "2"}).json() == {"id": 7, "qty": 2}
+    finally:
+        app.router.routes[:] = [rt for rt in app.router.routes if not getattr(rt, "path", "").startswith("/_arch_probe")]
