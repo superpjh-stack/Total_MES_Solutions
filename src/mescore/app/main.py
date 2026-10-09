@@ -142,7 +142,8 @@ def create_app() -> FastAPI:
         return render(request, "login.html",
                       {"message": message, "login_id": login_id, "next": _safe_next(next) or "",
                        "login_device": device if device in nav.DEVICE_CHANNEL else "web",
-                       "role_summary": home_router.role_summary(), "n_menus": len(nav.MENUS)},
+                       "role_summary": home_router.role_summary(), "n_menus": len(nav.MENUS),
+                       "dev_login": dev_login_allowed(request)},
                       screen_id="CMN-01", status_code=status_code)
 
     common = APIRouter()
