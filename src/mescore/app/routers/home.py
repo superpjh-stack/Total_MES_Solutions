@@ -17,7 +17,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from .. import auth, contracts, guide, nav, packs, rbac, stats, templating
+from .. import auth, contracts, domains, guide, nav, packs, rbac, stats, templating
 from ..settings import get_settings
 from ..util import http
 
@@ -71,7 +71,7 @@ def main_page(request: Request, user: rbac.User = Depends(rbac.require_login)) -
 
 
 # ── 메인(IA) 하위 메뉴 — 기능표 · 업무 프로세스 (읽기 전용 안내 · 어떤 테이블에도 쓰지 않는다) ──
-MAIN_TABS = (("/", "모듈 지도"), ("/main/functions", "기능표"), ("/main/processes", "업무 프로세스"))
+MAIN_TABS = (("/", "모듈 지도"), ("/main/functions", "기능표"), ("/main/processes", "업무 프로세스"), ("/main/domains", "도메인별 프로세스"))
 
 
 def _screen_link(screen_id: str, user: rbac.User) -> dict:
@@ -140,6 +140,21 @@ def main_processes(request: Request, code: str = "", user: rbac.User = Depends(r
     current = next((p for p in items if p["code"] == code), None)
     return templating.render(request, "home/processes.html", {
         "tabs": MAIN_TABS, "tab": "/main/processes", "processes": items, "kinds": kinds, "current": current, "code": code,
+    }, screen_id="CMN-02")
+
+
+@router.get("/main/domains", include_in_schema=False)
+def main_domains(request: Request, d: str = "", p: str = "", user: rbac.User = Depends(rbac.require_login)) -> HTMLResponse:
+    """메인 › 도메인별 프로세스 — 저장소 `domains/*.yaml`(D-46). 업종마다 공정 흐름 · LOT 모델 · 확장 지점 · 프로세스 유형 · 단계별 화면."""
+    all_d = domains.all_domains()
+    if d and domains.by_code(d) is None:
+        raise http.not_found()
+    cur = domains.by_code(d) if d else (all_d[0] if all_d else None)
+    cards = [{"code": x["code"], "name": x.get("name"), "industry": x.get("industry"), "status": x.get("status"), "pack": x.get("pack"),
+              "n_processes": len(x.get("processes") or []), "flow": list(x.get("flow") or [])} for x in all_d]
+    return templating.render(request, "home/domains.html", {
+        "tabs": MAIN_TABS, "tab": "/main/domains", "domains": cards, "domain": domains.view(cur, user, p) if cur else None,
+        "current_pack": packs.current().name,
     }, screen_id="CMN-02")
 
 

@@ -1,0 +1,74 @@
+# 도메인별 MES 프로세스 — 인쇄 공장 (참조 팩 packs/printfilm · 근거: 엘컴화인 MES 설계도)
+code: printfilm
+seq: 3
+name: 인쇄 공장 (필름 · 연포장)
+industry: 인쇄 · 후가공 (그라비아 · 플렉소)
+pack: printfilm
+status: 참조 팩 구현됨
+summary: 고객 Job 마다 판 · 아니록스 · 잉크를 맞춰 필름에 인쇄하고, 롤을 이어 붙이고(splice) 잘라(슬리팅) 출하한다. 롤이 합쳐지고 나뉘어도 출하 롤에서 원재료 LOT 까지 거슬러 올라가는 Job-Lot-Roll 계보가 핵심이다.
+flow: [Job 등록, 판사양 · 아니록스 · 잉크 준비, 원재료 입고 · 검사, 조색, 인쇄 (POP), 후가공 · splice, 슬리팅, 품질 검사 (ΔE), 출하 · COA]
+lot_model: 원재료 LOT → 인쇄 Roll → 후가공 Roll(splice N:1) → 슬리팅 Roll(1:N) → 출하 LOT
+controls:
+  - 색차 ΔE — 조색 기록과 인쇄 롤 검사
+  - 판사양 · 아니록스 · 잉크조성이 Job 에 고정
+  - 롤 폭 · 길이 · 슬리팅 순번
+  - 불합격 롤 · 다른 Job 롤 출하 차단
+kpi: [평균 ΔE, 불합격 롤 수, 재고 롤 수, splice 수]
+equipment: [인쇄기, 후가공기, 슬리터, 라벨 프린터 · 바코드 스캐너]
+extensions:
+  - { point: E1 설정, what: "용어 — 작업지시→Job, 생산 LOT→Roll, 성적서→COA, 분할→슬리팅, 합병→splice" }
+  - { point: E2 속성, what: "롤 폭 · 길이(표시) · Job 의 판사양 · 아니록스 · 잉크 FK(확장 테이블)" }
+  - { point: E3 측정값, what: "ΔE · 인쇄 속도 · 길이" }
+  - { point: E4 팩 화면, what: "판사양 · 아니록스 · 잉크조성 · 조색 기록 · 후가공 · 슬리팅 · 롤 이력" }
+  - { point: E5 훅, what: "실적 종료 → Roll 지정 · Job 인쇄 기준 필수 · 불합격/다른 Job 롤 출하 차단 · ΔE KPI" }
+  - { point: E6 계보, what: "ROLL · splice(합병) · 후가공(합병) · 슬리팅(분할)" }
+  - { point: E7 양식, what: "롤 라벨 3종 · COA · 작업지시서(판사양 표시)" }
+processes:
+  - code: R01
+    name: Job 인쇄 생산
+    when: 고객 Job 을 받아 인쇄 롤을 만들 때
+    goal: Job 하나에 판 · 잉크 · 원재료 · 인쇄 조건이 묶여 남는다
+    steps:
+      - { screen: ORD-01, role: PROD, action: "고객 · 품목 · 수량 · 납기로 수주(영업관리)", output: 수주 }
+      - { screen: X-PRT-01, role: PROD, action: "판사양 · 아니록스 · 잉크조성 확인", output: 인쇄 기준 }
+      - { screen: JOB-01, role: PROD, action: "Job 등록 — 판사양 · 아니록스 · 잉크 지정", output: Job 번호 }
+      - { screen: MAT-01, role: FIELD, action: "필름 · 잉크 원재료 입고 · 라벨", output: 원재료 LOT }
+      - { screen: MAT-02, role: QA, action: "입고검사 판정", output: 합격 LOT }
+      - { screen: X-CLR-01, role: QA, action: "조색 기록 — 배합비 · ΔE", output: 조색 기록 }
+      - { screen: POP-02, role: FIELD, action: "인쇄 시작 → 원재료 투입 스캔 → 종료", output: 인쇄 Roll }
+      - { screen: POP-04, role: FIELD, action: "롤 라벨 출력", output: 롤 라벨 }
+    checks: [Job 에 인쇄 기준이 없으면 등록이 막힌다]
+  - code: R02
+    name: 후가공 · splice · 슬리팅
+    when: 인쇄 롤을 이어 붙이고 폭에 맞춰 자를 때
+    goal: 롤이 합쳐지고 나뉘어도 부모 → 자식 한 줄씩 계보가 남는다
+    steps:
+      - { screen: X-RLL-01, role: FIELD, action: "인쇄 롤 여러 개를 스캔해 후가공 롤로 splice (N:1)", output: 후가공 Roll · splice 계보 }
+      - { screen: X-RLL-02, role: FIELD, action: "후가공 롤을 폭별로 슬리팅 (1:N)", output: 슬리팅 Roll · 라벨 }
+      - { screen: X-RLL-03, role: PROD, action: "롤 이력 — 부모 · 자식 한 단계씩 확인", output: — }
+    checks: [잔량을 넘는 슬리팅 · 이미 쓰인 롤은 422]
+  - code: R03
+    name: 품질 검사 (ΔE) · 불량 롤 차단
+    when: 슬리팅 롤을 검사하고 출하 가능 여부를 정할 때
+    goal: 불합격 롤은 출하되지 않고, 불량 유형 · 위치가 집계된다
+    steps:
+      - { screen: QUA-02, role: QA, action: "롤 스캔 → ΔE · 불량 유형 · 위치 → 판정", output: 검사 결과 }
+      - { screen: QUA-03, role: QA, action: "불량 유형별 집계", output: — }
+      - { screen: QUA-04, role: QA, action: "반복 불량은 이상 등록 · 조치", output: 이상 }
+  - code: R04
+    name: 출하 · COA
+    when: 고객 납품 롤을 출하할 때
+    goal: 출하 롤의 검사 값으로 COA 가 발행되고 발행본은 바뀌지 않는다
+    steps:
+      - { screen: SHP-01, role: PROD, action: "수주를 지정해 출하 등록", output: 출하 번호 }
+      - { screen: SHP-02, role: FIELD, action: "출하 롤 스캔 → 관리자 승인", output: 출하 LOT }
+      - { screen: SHP-04, role: PROD, action: "COA 발행 · 출력 (롤별 ΔE · 판정)", output: COA }
+    checks: [불합격 롤 · 다른 Job 롤 스캔은 승인 단계에서 막힌다]
+  - code: R05
+    name: Job-Lot-Roll 역추적
+    when: 고객 클레임이 들어왔을 때
+    goal: 출하 롤 하나에서 원재료 LOT ①② 까지 거슬러 올라간다
+    steps:
+      - { screen: TRC-03, role: QA, action: "출하 LOT · 롤 번호 검색", output: — }
+      - { screen: TRC-02, role: QA, action: "슬리팅 → 후가공 → 인쇄 → 원재료 역추적", output: 원재료 · 공급처 }
+      - { screen: TRC-01, role: QA, action: "같은 원재료가 간 다른 롤 · 출하 확인", output: 영향 범위 }

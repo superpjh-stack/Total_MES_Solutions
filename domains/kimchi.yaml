@@ -1,0 +1,84 @@
+# 도메인별 MES 프로세스 — 김치 공장 (참조 팩 packs/kimchi · 근거: 임진강김치 MES 산출물)
+# 단계 screen: 코어 화면 ID(BAS-01 …) 또는 팩 화면 ID(X-…). role: ADMIN · PROD · QA · FIELD (팩 역할은 코어 4 역할로 대응해 적는다)
+code: kimchi
+seq: 1
+name: 김치 공장
+industry: 식품 · 발효 (HACCP)
+pack: kimchi
+status: 참조 팩 구현됨
+summary: 배추 · 무 같은 원물을 절이고 양념과 버무려 포장한 뒤 냉장 숙성해 출하한다. 절임 염도와 금속검출(CCP)이 품질의 중심이고, 원물 로트에서 출하 로트까지 추적이 HACCP 요구다.
+flow: [원부자재 입고 · 보관, 절단 · 전처리, 세척 · 절임, 세척 · 선별, 탈수, 혼합(버무림), 금속검출 (CCP), 포장, 냉장 숙성, 출하]
+lot_model: 원부자재 로트 → 절임통 배치(TANK) → 혼합 배치 → 숙성 배치(AGING) → 출하 로트
+controls:
+  - 절임 염도 · 절임 시간 (절임통별 센서 + 수기)
+  - 금속검출 CCP — 미통과 배치는 출하 승인에서 막힌다
+  - 냉장고 온습도 — 범위 이탈 시 알람 · 확인 · 해제 이력
+  - 소독수 농도 — 위생 기준 미달 기록
+  - 전처리 손실률 (투입 중량 대비 전처리 후 중량)
+kpi: [시간당 생산량 kg/h (목표 700), 완제품 불량률 % (목표 1.30)]
+equipment: [절임통 8 · 염도센서 2, 냉장고 온습도센서 10 · 온도조절기 4, 금속검출기, 중량 저울, 아이스박스 자동포장기]
+extensions:
+  - { point: E1 설정, what: "용어 — 생산 LOT→배치, 측정값→공정 조건, 이상→품질 이슈 · 역할 6 · 메뉴 이름" }
+  - { point: E3 측정값, what: "염도 · 절임 시간 · 세척 횟수 · 양념 계량값 · 손실률 (공정별 선언)" }
+  - { point: E4 팩 화면, what: "절임통 운영 · 염도 추이 · 공정 조건 기준 · 소독수 로그 · 테이핑 실적 · 숙성 재고 · 냉장고 입출고 · 알람 이력" }
+  - { point: E5 훅, what: "금속검출 미통과 출하 차단 · CCP 이탈 → 품질 이슈 자동 · 센서 이탈 → 알람" }
+  - { point: E6 계보, what: "절임통 배치(TANK) · 숙성 배치(AGING) · 혼합(합병) · 숙성(분할)" }
+  - { point: E7 어댑터, what: "염도 · 온습도 센서 태그 ↔ 설비 · 측정값 키 매핑" }
+processes:
+  - code: K01
+    name: 김치 생산 표준 흐름
+    when: 수주를 받아 원물 입고부터 숙성 · 출하까지 한 바퀴 돌릴 때
+    goal: 출하 로트 하나에서 절임통 · 원물 로트 · 공급처까지 거슬러 올라간다
+    steps:
+      - { screen: ORD-01, role: PROD, action: "거래처 · 품목(포기김치 등) · 수량 · 납기로 수주 등록", output: 수주 }
+      - { screen: JOB-01, role: PROD, action: "확정 계획으로 작업지시서 발행 (레시피BOM 고정)", output: 작업지시서 }
+      - { screen: MAT-01, role: FIELD, action: "배추 · 무 · 양념 원부자재 입고", output: 원부자재 로트 }
+      - { screen: MAT-02, role: QA, action: "입고검사 — 외관 · 이물 · 신선도 판정", output: 합격 로트 }
+      - { screen: POP-02, role: FIELD, action: "전처리 실적 — 투입 중량 · 전처리 후 중량 (손실률)", output: 전처리 배치 }
+      - { screen: X-TANK-01, role: FIELD, action: "절임통에 배치를 넣고 절임 시작 · 염도 목표 확인", output: 절임통 배치(TANK) }
+      - { screen: POP-02, role: FIELD, action: "혼합 실적 — 절임 배치 + 양념을 합쳐 버무림 (종료 합병)", output: 혼합 배치 · 혼합 계보 }
+      - { screen: QUA-02, role: QA, action: "금속검출 CCP 검사 · 판정", output: 합격 · 불합격 }
+      - { screen: X-PKG-01, role: FIELD, action: "포장 · 테이핑 실적", output: 포장 배치 }
+      - { screen: X-AGE-01, role: FIELD, action: "숙성 — 수량을 나눠 숙성 배치로 냉장 보관", output: 숙성 배치(AGING) }
+      - { screen: SHP-02, role: FIELD, action: "출하 로트 스캔 → 관리자 승인", output: 출하 로트 }
+      - { screen: TRC-02, role: QA, action: "출하 로트에서 원물까지 역추적", output: 추적 결과 }
+    checks: [금속검출 미통과 · CCP 불합격 배치는 출하 승인이 422 로 막힌다, 숙성 완료 전 배치 출하는 막힌다]
+  - code: K02
+    name: 절임 공정 관리
+    when: 절임통별 염도 · 시간을 맞추고 편차를 잡을 때
+    goal: 품목별 절임 기준 대비 실적 염도를 남기고 이탈을 바로 안다
+    steps:
+      - { screen: X-COND-01, role: ADMIN, action: "품목별 절임 염도 · 시간 기준 등록", output: 공정 조건 기준 }
+      - { screen: BAS-04, role: ADMIN, action: "절임 공정의 측정값(염도 · 절임 시간) 선언", output: 측정값 정의 }
+      - { screen: X-TANK-01, role: FIELD, action: "절임통 투입 · 시작 · 종료 기록", output: 절임통 운영 }
+      - { screen: X-TANK-02, role: QA, action: "센서 염도 추이와 기준선 비교", output: 염도 추이 }
+      - { screen: X-ALM-01, role: QA, action: "염도 이탈 알람 확인 · 해제(조치 필수)", output: 알람 이력 }
+    checks: [센서 값은 수집으로 자동 · 수기 염도는 실적 종료 때 입력, 기준이 미확정이면 판정하지 않는다]
+  - code: K03
+    name: CCP · 금속검출 · 출하 차단
+    when: HACCP 중요관리점을 기록하고 부적합을 막을 때
+    goal: CCP 기록 없이는 출하가 안 되는 구조로 심사 대응 기록을 남긴다
+    steps:
+      - { screen: QUA-01, role: QA, action: "CCP 검사 항목(금속검출 · 중량) 계획", output: 검사 계획 }
+      - { screen: QUA-02, role: QA, action: "배치마다 금속검출 결과 판정", output: 검사 결과 }
+      - { screen: QUA-04, role: QA, action: "불합격이면 품질 이슈 자동 생성 → 시정 조치", output: 품질 이슈 }
+      - { screen: SHP-02, role: ADMIN, action: "출하 승인 — 미통과 배치가 있으면 422", output: 승인 또는 차단 }
+    checks: [CCP 이탈은 훅이 품질 이슈를 자동으로 만든다]
+  - code: K04
+    name: 냉장 숙성 · 온습도 관리
+    when: 숙성 재고와 냉장고 환경을 관리할 때
+    goal: 숙성 일수 · 냉장고 이동 · 온습도 이탈이 배치에 붙어 남는다
+    steps:
+      - { screen: X-AGE-02, role: FIELD, action: "냉장고 입고 · 이동 · 출고 기록", output: 냉장고 입출고 }
+      - { screen: EQP-04, role: PROD, action: "냉장고 온습도 수집값 확인", output: 수집값 }
+      - { screen: X-ALM-01, role: QA, action: "온습도 이탈 알람 확인 · 해제", output: 알람 이력 }
+      - { screen: X-AGE-01, role: PROD, action: "숙성 재고 · 예정 완료일 확인", output: 숙성 재고 }
+    checks: [같은 이탈이 이어지면 알람 한 건으로 합쳐 센다]
+  - code: K05
+    name: 위생 관리 (소독수)
+    when: 세척 공정 소독수 농도를 관리할 때
+    goal: 농도 미달을 기록하고 세척 공정과 연결한다
+    steps:
+      - { screen: X-WSH-01, role: FIELD, action: "소독수 농도 수기 기록 (센서 값과 함께)", output: 소독수 로그 }
+      - { screen: X-ALM-01, role: QA, action: "기준 미달 알람 확인 · 조치", output: 알람 이력 }
+      - { screen: QUA-04, role: QA, action: "반복되면 품질 이슈로 등록", output: 품질 이슈 }

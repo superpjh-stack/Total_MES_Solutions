@@ -1,0 +1,133 @@
+{# 메인 › 도메인별 프로세스 — routers/home.py main_domains · 데이터 domains/*.yaml(D-46) · 로더 app/domains.py.
+   ctx: domains[{code name industry status pack n_processes flow}] domain{code name industry pack status summary flow lot_model controls kpi equipment
+        extensions[{point what}] terms processes[{code name when goal checks steps[{no screen_id name path open kind menu role role_name mine action output}]
+        n_core n_pack n_proposed}] current active file} current_pack.
+   업종 문장은 데이터 파일의 말 그대로 보인다(t() 를 걸지 않는다 — 이미 그 업종 말이다). 화면 틀 문구만 t(). 읽기 전용. #}
+{% extends "base.html" %}
+{% block head %}
+<style>
+.dm-intro h2{margin:0;font-size:var(--fs-xl)}.dm-intro p{margin:4px 0 14px;color:var(--c-ink-2);font-size:var(--fs-sm)}
+.dm-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-bottom:18px}
+.dm-card{display:flex;flex-direction:column;gap:6px;padding:14px;border:var(--bw) solid var(--c-line);border-radius:var(--r-lg);background:var(--c-surface);color:inherit;text-decoration:none}
+.dm-card:hover{border-color:var(--c-accent);box-shadow:var(--sh-2);text-decoration:none}
+.dm-card[aria-current="page"]{border-color:var(--c-accent);box-shadow:inset 0 0 0 1px var(--c-accent)}
+.dm-card b{font-size:var(--fs-lg)}.dm-card .ind{font-size:var(--fs-sm);color:var(--c-ink-2)}
+.dm-badge{align-self:flex-start;font-size:var(--fs-xs);padding:1px 8px;border-radius:999px;border:var(--bw) solid var(--c-line);color:var(--c-ink-2)}
+.dm-badge.ok{border-color:var(--c-ok);color:var(--c-ok)}.dm-badge.prop{border-style:dashed;color:var(--c-ink-3)}
+.dm-card .n{font-size:var(--fs-xs);color:var(--c-ink-3);margin-top:auto}
+.dm-head{border-top:var(--bw) solid var(--c-line);padding-top:16px}
+.dm-head h3{margin:0;font-size:var(--fs-xl);display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.dm-head .sum{margin:8px 0 12px;color:var(--c-ink-2);font-size:var(--fs-md);max-width:980px}
+.dm-flow{display:flex;flex-wrap:wrap;gap:6px 4px;align-items:center;margin:0 0 14px;padding:0;list-style:none}
+.dm-flow li{font-size:var(--fs-sm);padding:4px 10px;border-radius:999px;background:var(--c-surface-2);border:var(--bw) solid var(--c-line)}
+.dm-flow li:not(:last-child)::after{content:"→";margin-left:8px;color:var(--c-ink-3)}
+.dm-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}
+@media (max-width:1100px){.dm-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.dm-grid{grid-template-columns:minmax(0,1fr)}}
+.dm-box{border:var(--bw) solid var(--c-line);border-radius:var(--r-md);padding:10px 14px;background:var(--c-surface);min-width:0}
+.dm-box h4{margin:0 0 6px;font-size:var(--fs-md)}.dm-box ul{margin:0;padding-left:18px;font-size:var(--fs-sm);color:var(--c-ink-2)}
+.dm-box p{margin:0;font-size:var(--fs-sm);color:var(--c-ink-2)}
+.dm-ext{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}.dm-ext td{padding:4px 6px;border-bottom:var(--bw) solid var(--c-line);vertical-align:top}
+.dm-ext td:first-child{white-space:nowrap;font-weight:600;color:var(--c-ink)}
+.dm-terms{display:flex;flex-wrap:wrap;gap:4px 8px;font-size:var(--fs-xs)}.dm-terms span{padding:1px 6px;border-radius:var(--r-sm);background:var(--c-surface-2)}
+.dm-ptabs{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 14px}
+.dm-ptabs a{padding:6px 12px;border:var(--bw) solid var(--c-line);border-radius:999px;font-size:var(--fs-sm);color:var(--c-ink-2);text-decoration:none;background:var(--c-surface)}
+.dm-ptabs a[aria-current="page"]{border-color:var(--c-accent);color:var(--c-ink);font-weight:700}
+.dm-meta{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0 0 14px;font-size:var(--fs-sm)}.dm-meta dt{color:var(--c-ink-3)}.dm-meta dd{margin:0}
+.dm-steps{display:flex;flex-wrap:wrap;gap:22px 30px;list-style:none;padding:0;margin:0 0 14px}
+.dm-steps li{position:relative;width:210px}
+.dm-steps li:not(:last-child)::after{content:"→";position:absolute;right:-24px;top:34px;color:var(--c-ink-3);font-size:18px}
+@media (max-width:820px){.dm-steps li{width:100%}.dm-steps li:not(:last-child)::after{content:"↓";right:auto;left:50%;top:auto;bottom:-22px}}
+.dm-step{display:flex;flex-direction:column;gap:5px;height:100%;padding:10px 12px;border:var(--bw) solid var(--c-line);border-radius:var(--r-md);background:var(--c-surface);color:inherit;text-decoration:none}
+a.dm-step:hover{border-color:var(--c-accent);text-decoration:none}
+.dm-step.mine{border-color:var(--c-accent);background:var(--c-accent-tint)}
+.dm-step.pack{border-left:4px solid var(--c-info)}
+.dm-step.proposed{border-style:dashed;background:transparent}
+.dm-step .top{display:flex;gap:6px;align-items:center;font-size:var(--fs-xs);color:var(--c-ink-3)}
+.dm-step .num{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--c-ink);color:var(--c-ink-inverse);font-weight:700}
+.dm-step .role{margin-left:auto;padding:0 6px;border-radius:999px;border:var(--bw) solid var(--c-line)}
+.dm-step .scr{font-weight:700;font-size:var(--fs-md)}.dm-step .scr code{font-weight:400;font-size:var(--fs-xs);color:var(--c-ink-3)}
+.dm-step .kind{font-size:var(--fs-xs)}.dm-step .act{font-size:var(--fs-sm);color:var(--c-ink-2)}
+.dm-step .out{font-size:var(--fs-xs);color:var(--c-ink-3);border-top:var(--bw) dashed var(--c-line);padding-top:5px;margin-top:auto}
+.dm-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:var(--fs-xs);color:var(--c-ink-3);margin:0 0 12px}
+.dm-legend i{display:inline-block;width:14px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px;border:var(--bw) solid var(--c-line)}
+.dm-legend .m{background:var(--c-accent-tint);border-color:var(--c-accent)}.dm-legend .p{border-left:4px solid var(--c-info)}.dm-legend .x{border-style:dashed}
+.dm-src{font-size:var(--fs-xs);color:var(--c-ink-3);margin-top:12px}
+</style>
+{% endblock %}
+{% block body %}
+{% include "home/_main_tabs.html" %}
+<section class="panel">
+  <div class="dm-intro">
+    <h2>{{ t('도메인별 프로세스') }}</h2>
+    <p>{{ t('업종마다 같은 코어 화면을 어떻게 엮고 무엇을 팩으로 더하는지') }} — {{ t('도메인') }} {{ domains|length }}. {{ t('도메인을 고르면 공정 흐름 · LOT 모델 · 관리점 · 확장 지점 · 프로세스 유형이 보인다') }}</p>
+  </div>
+
+  <div class="dm-cards">
+    {% for x in domains %}
+    <a class="dm-card" href="/main/domains?d={{ x.code }}"{% if domain and domain.code == x.code %} aria-current="page"{% endif %}>
+      <b>{{ x.name }}</b>
+      <span class="ind">{{ x.industry }}</span>
+      <span class="dm-badge {{ 'ok' if x.pack else 'prop' }}">{{ x.status }}</span>
+      <span class="n">{{ t('공정') }} {{ x.flow|length }} · {{ t('프로세스 유형') }} {{ x.n_processes }}{% if x.pack %} · {{ t('팩') }} <code>{{ x.pack }}</code>{% endif %}</span>
+    </a>
+    {% endfor %}
+  </div>
+
+  {% if domain %}
+  <div class="dm-head" id="domain">
+    <h3>{{ domain.name }} <span class="dm-badge {{ 'ok' if domain.pack else 'prop' }}">{{ domain.status }}</span>{% if domain.active %}<span class="dm-badge ok">{{ t('지금 올라간 팩') }}</span>{% endif %}</h3>
+    <p class="sum">{{ domain.summary }}</p>
+    <ol class="dm-flow" aria-label="{{ t('공정 흐름') }}">{% for f in domain.flow or [] %}<li>{{ f }}</li>{% endfor %}</ol>
+
+    <div class="dm-grid">
+      <div class="dm-box"><h4>{{ t('LOT 모델') }}</h4><p>{{ domain.lot_model }}</p></div>
+      <div class="dm-box"><h4>{{ t('핵심 관리점') }}</h4><ul>{% for c in domain.controls or [] %}<li>{{ c }}</li>{% endfor %}</ul></div>
+      <div class="dm-box"><h4>{{ t('지표 · 설비') }}</h4><ul>{% for k in domain.kpi or [] %}<li>{{ k }}</li>{% endfor %}{% for e in domain.equipment or [] %}<li>{{ e }}</li>{% endfor %}</ul></div>
+    </div>
+    <div class="dm-grid">
+      <div class="dm-box" style="grid-column:span 2"><h4>{{ t('코어 위에 더하는 것 (확장 지점)') }}</h4>
+        <table class="dm-ext">{% for x in domain.extensions or [] %}<tr><td>{{ x.point }}</td><td>{{ x.what }}</td></tr>{% endfor %}</table>
+      </div>
+      <div class="dm-box"><h4>{{ t('용어 치환 (팩 terms)') }}</h4>
+        {% if domain.terms %}<div class="dm-terms">{% for k, v in domain.terms.items() if k != v %}<span>{{ k }} → <b>{{ v }}</b></span>{% endfor %}</div>
+        {% else %}<p>{{ t('팩이 없어 아직 정하지 않았다 — 확장 지점의 E1 설정 제안을 본다') }}</p>{% endif %}
+      </div>
+    </div>
+
+    <h3 class="sub">{{ t('프로세스 유형') }}</h3>
+    <nav class="dm-ptabs" aria-label="{{ t('프로세스 유형') }}">
+      {% for pr in domain.processes %}<a href="/main/domains?d={{ domain.code }}&p={{ pr.code }}#flow"{% if domain.current and pr.code == domain.current.code %} aria-current="page"{% endif %}>{{ pr.code }} {{ pr.name }}</a>{% endfor %}
+    </nav>
+
+    {% set p = domain.current %}
+    {% if p %}
+    <div id="flow">
+      <dl class="dm-meta"><dt>{{ t('언제') }}</dt><dd>{{ p.when }}</dd><dt>{{ t('얻는 것') }}</dt><dd>{{ p.goal }}</dd>
+        <dt>{{ t('화면') }}</dt><dd>{{ t('코어') }} {{ p.n_core }} · {{ t('팩') }} {{ p.n_pack }}{% if p.n_proposed %} · {{ t('제안') }} {{ p.n_proposed }}{% endif %}</dd></dl>
+      <div class="dm-legend">
+        <span><i class="m"></i>{{ t('지금 역할이 맡는 단계') }} ({{ user.role_name }})</span>
+        <span><i class="p"></i>{{ t('팩 화면 — 그 팩을 올렸을 때 열린다') }}</span>
+        <span><i class="x"></i>{{ t('제안 화면 — 팩을 만들 때 추가') }}</span>
+      </div>
+      <ol class="dm-steps">
+        {% for s in p.steps %}
+        <li>
+          {% set cls = 'dm-step' ~ (' mine' if s.mine else '') ~ (' pack' if s.kind == 'pack' else '') ~ (' proposed' if s.kind == 'proposed' else '') %}
+          {% if s.open and s.path %}<a class="{{ cls }}" href="{{ s.path }}">{% else %}<div class="{{ cls }}">{% endif %}
+            <span class="top"><span class="num">{{ s.no }}</span>{{ s.menu or (t('팩 화면') if s.kind == 'pack' else (t('제안') if s.kind == 'proposed' else '')) }}<span class="role">{{ s.role_name }}</span></span>
+            <span class="scr">{% if s.kind == 'proposed' %}{{ t('제안 화면') }}{% else %}{{ s.name }}{% endif %} <code>{{ s.screen_id }}</code></span>
+            <span class="act">{{ s.action }}</span>
+            <span class="out">{{ t('남는 것') }}: {{ s.output }}</span>
+          {% if s.open and s.path %}</a>{% else %}</div>{% endif %}
+        </li>
+        {% endfor %}
+      </ol>
+      {% if p.checks %}<div class="dm-box"><h4>{{ t('확인 포인트') }}</h4><ul>{% for c in p.checks %}<li>{{ c }}</li>{% endfor %}</ul></div>{% endif %}
+    </div>
+    {% endif %}
+    <p class="dm-src">{{ t('출처') }}: <code>{{ domain.file }}</code>{% if domain.pack %} · {{ t('팩') }} <code>packs/{{ domain.pack }}/</code>{% endif %} — {{ t('파일 하나를 더하면 도메인이 하나 늘어난다') }}</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

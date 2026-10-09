@@ -6,7 +6,7 @@
 .main-tabs a[aria-current="page"]{color:var(--c-ink);font-weight:700;background:var(--c-surface);border-color:var(--c-line)}
 </style>
 <nav class="main-tabs" aria-label="{{ t('메인') }}">
-  {% for href, label in (tabs or (('/', '모듈 지도'), ('/main/functions', '기능표'), ('/main/processes', '업무 프로세스'))) %}
+  {% for href, label in (tabs or (('/', '모듈 지도'), ('/main/functions', '기능표'), ('/main/processes', '업무 프로세스'), ('/main/domains', '도메인별 프로세스'))) %}
   <a href="{{ href }}"{% if (tab or '/') == href %} aria-current="page"{% endif %}>{{ t(label) }}</a>
   {% endfor %}
 </nav>

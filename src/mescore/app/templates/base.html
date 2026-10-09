@@ -176,9 +176,9 @@
   <nav class="side" id="side-menu" aria-label="{{ t('메뉴') }}">
     {% set main_path = request.url.path if request is defined else '/' %}
     <div class="mg menu-group{% if screen_id == 'CMN-02' %} on{% endif %}" data-menu="main">
-      <button type="button" class="mg-h menu-head" aria-expanded="{{ 'true' if screen_id == 'CMN-02' else 'false' }}"><span>{{ t('메인') }}</span><small>3</small></button>
+      <button type="button" class="mg-h menu-head" aria-expanded="{{ 'true' if screen_id == 'CMN-02' else 'false' }}"><span>{{ t('메인') }}</span><small>4</small></button>
       <ul>
-        {% for href, label in (('/', '모듈 지도'), ('/main/functions', '기능표'), ('/main/processes', '업무 프로세스')) %}
+        {% for href, label in (('/', '모듈 지도'), ('/main/functions', '기능표'), ('/main/processes', '업무 프로세스'), ('/main/domains', '도메인별 프로세스')) %}
         <li><a href="{{ href }}"{% if screen_id == 'CMN-02' and main_path == href %} class="cur" aria-current="page"{% endif %}>{{ t(label) }}</a></li>
         {% endfor %}
       </ul>

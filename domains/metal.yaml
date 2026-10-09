@@ -1,0 +1,78 @@
+# 도메인별 MES 프로세스 — 금속 가공 공장 (팩 없음 · 설계 제안 — 실제 회사 산출물이 오면 그것이 우선)
+# 단계 screen 이 X- 로 시작하는 것은 팩을 만들 때 추가할 화면의 제안 이름이다(아직 없다).
+code: metal
+seq: 4
+name: 금속 가공 공장
+industry: 금속 · 기계가공 (절단 · CNC · 프레스 · 열처리 · 표면처리)
+pack: null
+status: 팩 없음 — 설계 제안 (코어 + 설정으로 바로 시작 · 고유 기능은 팩으로)
+summary: 도면 품번별 수주를 받아 원자재(봉재 · 판재)를 절단하고 CNC · 프레스로 가공한 뒤 열처리 · 표면처리(외주 포함)를 거쳐 치수 검사 후 출하한다. 원자재 Heat No(밀시트)에서 출하 품까지의 추적과 열처리 조건 · 치수 검사 기록이 중심이다.
+flow: [수주(도면 품번), 원자재 입고 (Heat No · 밀시트), 절단, CNC · 프레스 가공, 열처리, 표면처리 (외주), 치수 · 외관 검사, 포장, 출하 · 성적서]
+lot_model: 원자재 LOT(Heat No) → 절단 LOT(분할) → 가공 LOT → 열처리 LOT(합병 가능 — 로 투입 단위) → 출하 LOT
+controls:
+  - 원자재 Heat No · 밀시트(성분 · 기계적 성질) 보관
+  - 열처리 온도 · 유지 시간 · 경도
+  - 치수 검사 (공차 상한 · 하한) · 초품 · 중품 · 종품
+  - 공구 수명 · 설비 가동
+  - 외주 표면처리 반출 · 반입 수량
+kpi: [설비 가동률 %, 공정 불량률 %, 납기 준수율 %, 공구 교체 주기]
+equipment: [밴드쏘 · 절단기, CNC 선반 · 머시닝센터, 프레스, 열처리로, 3차원 측정기 · 경도계]
+extensions:
+  - { point: E1 설정, what: "용어 — 품목→품번, 원재료 LOT→원자재 Heat LOT, 성적서→검사 성적서 · 역할(가공 · 품질 · 외주 담당)" }
+  - { point: E2 속성, what: "품번 도면 번호 · 재질 · 리비전 / LOT 의 Heat No · 밀시트 번호 (확장 테이블)" }
+  - { point: E3 측정값, what: "열처리 온도 · 시간 · 경도 · 치수 항목(검사 계획) · 가공 사이클타임" }
+  - { point: E4 팩 화면, what: "밀시트 관리 · 외주 반출/반입 · 공구 수명 (제안)" }
+  - { point: E5 훅, what: "Heat No 없는 원자재 투입 차단 · 치수 불합격 출하 차단 · 공구 교체 알림" }
+  - { point: E6 계보, what: "절단(분할) · 열처리 로 투입(합병) · 외주(생산 1:1)" }
+  - { point: E7 수집, what: "CNC 가동 · 카운트 · 열처리로 온도 (Data Gateway)" }
+processes:
+  - code: M01
+    name: 도면 품번 수주 가공 생산
+    when: 고객 도면 품번으로 주문을 받아 가공 · 출하할 때
+    goal: 출하 품 하나에서 가공 실적 · 열처리 조건 · 원자재 Heat No 까지 이어진다
+    steps:
+      - { screen: BAS-01, role: ADMIN, action: "품번 등록 — 도면 번호 · 재질 · 리비전(속성)", output: 품번 }
+      - { screen: ORD-01, role: PROD, action: "고객 · 품번 · 수량 · 납기로 수주", output: 수주 }
+      - { screen: JOB-01, role: PROD, action: "공정별 작업지시 (절단 · 가공 · 열처리)", output: 작업지시 }
+      - { screen: MAT-01, role: FIELD, action: "원자재 입고 — Heat No · 밀시트 번호", output: 원자재 LOT }
+      - { screen: POP-02, role: FIELD, action: "절단 실적 — 원자재를 길이별로 분할", output: 절단 LOT }
+      - { screen: POP-02, role: FIELD, action: "CNC · 프레스 가공 실적 (사이클타임 · 양품/불량)", output: 가공 LOT }
+      - { screen: QUA-02, role: QA, action: "초품 · 중품 · 종품 치수 검사", output: 치수 판정 }
+      - { screen: SHP-02, role: FIELD, action: "출하 LOT 스캔 → 승인", output: 출하 LOT }
+      - { screen: SHP-04, role: PROD, action: "검사 성적서 발행 (치수 · 경도 · Heat No)", output: 성적서 }
+  - code: M02
+    name: 원자재 Heat No · 밀시트 추적
+    when: 고객이 재질 증명을 요구하거나 재질 불량이 의심될 때
+    goal: 출하 품에서 원자재 Heat No 와 밀시트까지 바로 찾는다
+    steps:
+      - { screen: X-MILL-01, role: QA, action: "밀시트 등록 — Heat No · 성분 · 인장강도 (제안 화면)", output: 밀시트 }
+      - { screen: MAT-02, role: QA, action: "입고검사 — 밀시트 대조 판정", output: 판정 }
+      - { screen: TRC-02, role: QA, action: "출하 LOT → 원자재 Heat No 역추적", output: Heat No · 밀시트 }
+      - { screen: TRC-01, role: QA, action: "같은 Heat 가 들어간 다른 출하 확인", output: 영향 범위 }
+  - code: M03
+    name: 열처리 조건 관리
+    when: 열처리로 투입 단위로 온도 · 시간 · 경도를 관리할 때
+    goal: 로 투입 배치마다 조건 · 경도가 남고 이탈은 바로 보인다
+    steps:
+      - { screen: BAS-04, role: ADMIN, action: "열처리 공정 측정값 선언 (온도 · 유지 시간 · 경도 범위)", output: 측정값 정의 }
+      - { screen: POP-02, role: FIELD, action: "여러 가공 LOT 을 로에 넣어 열처리 (종료 합병)", output: 열처리 LOT }
+      - { screen: EQP-04, role: PROD, action: "열처리로 온도 수집값 확인", output: 수집값 }
+      - { screen: QUA-02, role: QA, action: "경도 검사 판정", output: 판정 }
+  - code: M04
+    name: 외주 표면처리
+    when: 도금 · 도장 등을 외주로 보내고 받을 때
+    goal: 반출 · 반입 수량과 외주처가 LOT 에 이어진다
+    steps:
+      - { screen: X-OUT-01, role: PROD, action: "외주 반출 — LOT 스캔 · 외주처 (제안 화면)", output: 반출 기록 }
+      - { screen: X-OUT-01, role: PROD, action: "외주 반입 — 수량 · 불량 확인 (생산 1:1 계보)", output: 표면처리 LOT }
+      - { screen: QUA-02, role: QA, action: "반입 검사 (외관 · 도금 두께)", output: 판정 }
+    checks: [코어에 외주 모듈이 없다 — 팩 화면 + 생산 계보로 표현하는 제안. 다른 업종도 필요하면 코어 변경 요청 후보]
+  - code: M05
+    name: 공구 수명 · 설비 보전
+    when: CNC 공구 교체 주기와 설비 고장을 관리할 때
+    goal: 가공 카운트로 공구 교체 시점을 알고 고장 · 가동률을 집계한다
+    steps:
+      - { screen: X-TOOL-01, role: FIELD, action: "공구별 사용 카운트 · 교체 기록 (제안 화면)", output: 공구 수명 }
+      - { screen: EQP-02, role: FIELD, action: "설비 정기 점검", output: 점검 기록 }
+      - { screen: EQP-03, role: FIELD, action: "고장 등록 · 조치", output: 고장 구간 }
+      - { screen: KPI-02, role: ADMIN, action: "설비 가동률 · MTTR", output: 지표 }

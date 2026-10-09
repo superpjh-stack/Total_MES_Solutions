@@ -1,0 +1,73 @@
+# 도메인별 MES 프로세스 — 급식 공장 (참조 팩 packs/foodservice · 근거: 니즈푸드 MES 산출물)
+code: foodservice
+seq: 2
+name: 급식 공장
+industry: 식품 · 단체급식 (위탁 · 이동급식)
+pack: foodservice
+status: 참조 팩 구현됨
+summary: 수주 식수를 받아 D-3~D-1 새벽에 원료를 들이고, 당일 솥 단위로 조리 · 포장해 출고한다. 안전재고가 거의 없어 식수 × 1인량 소요량 계산과 조리 조건(교반기) 기록이 중심이다.
+flow: [수주(식수), 원료 입고, 수입검사, 가공(무침), 가공(취사), 가공(조리), 가공(볶음), 공정중 검사, 최종검사(검식), 포장 · 출고]
+lot_model: 원료 LOT → 배치(솥) BATCH → 출고 LOT
+controls:
+  - 레시피 표준화 — 1솥 배합량 고정 · 지시 시점 레시피 스냅샷
+  - 교반기 RPM · 교반시간 · 조리 온도 (설비 수집)
+  - 검식 · 관능 평가 · 중심 온도
+  - 원료 유통기한 FIFO 투입
+kpi: [시간당 생산량 인분/h (300 → 350), 완제품 불량률 % (7.5 → 6.5), 레시피 표준화율 % (0 → 90)]
+equipment: [EV형 인덕션 교반기 2 (PLC 수집), 온습도센서 5, 온도조절기 7, Edge Collector 1, 터치PC 3]
+extensions:
+  - { point: E1 설정, what: "용어 — 품목→메뉴, BOM→레시피, 작업지시→조리 지시, 생산 LOT→배치(솥), 검사→검식 · 역할 6(영양사 등)" }
+  - { point: E2 속성, what: "메뉴 식수 · 1인량 · 급식 유형 · 납품 시각 (확장 테이블)" }
+  - { point: E3 측정값, what: "교반 RPM · 교반시간 · 온도(수집) · 조리시간(수기)" }
+  - { point: E5 훅, what: "조리 지시 등록 시 식수 × 1인량 → 소요량 자동 · 배치 측정값 대표값 · KPI 7지표" }
+  - { point: E6 계보, what: "배치(솥) BATCH" }
+  - { point: E7 양식, what: "조리 지시서 — 레시피 · 조리순서 · 주의사항 · 투입 LOT 추천" }
+processes:
+  - code: F01
+    name: 식수 기반 조리 생산
+    when: 고객사 식수 주문을 받아 당일 조리 · 출고할 때
+    goal: 식수만 넣으면 원료 소요량이 계산되고, 솥마다 조리 조건이 남는다
+    steps:
+      - { screen: ORD-01, role: PROD, action: "고객사 · 메뉴 · 식수 · 납품 시각으로 수주 등록", output: 수주 }
+      - { screen: ORD-04, role: PROD, action: "생산계획 확정", output: 계획 }
+      - { screen: JOB-01, role: PROD, action: "조리 지시 등록 — 레시피 고정 · 식수 × 1인량 소요량 자동", output: 조리 지시 · 소요량 }
+      - { screen: MAT-05, role: PROD, action: "원료 소요량 · 부족 확인", output: 부족 원료 }
+      - { screen: JOB-03, role: PROD, action: "조리 지시서(레시피 · 투입 LOT 추천) 출력", output: 조리 지시서 }
+      - { screen: POP-02, role: FIELD, action: "솥마다 조리 시작 → 원료 투입 → 조리 완료", output: 배치(솥) }
+      - { screen: QUA-02, role: QA, action: "검식 — 관능 · 중심 온도 판정", output: 검식 결과 }
+      - { screen: SHP-02, role: FIELD, action: "출고 LOT 스캔 → 관리자 승인", output: 출고 LOT }
+    checks: [확정되지 않은 계획은 지시로 이어지지 않는다, 검식 불합격 배치는 출고가 막힌다]
+  - code: F02
+    name: 원료 수입검사 · FIFO 투입
+    when: 새벽 원료 입고와 수입검사를 할 때
+    goal: 유통기한이 빠른 원료부터 쓰고 부적합 원료는 투입되지 않는다
+    steps:
+      - { screen: MAT-01, role: FIELD, action: "원료 입고 (유통기한 · 원산지 속성)", output: 원료 LOT }
+      - { screen: MAT-02, role: QA, action: "수입검사 — 온도 · 외관 · 표시사항", output: 판정 }
+      - { screen: POP-03, role: FIELD, action: "조리 지시서의 추천 LOT 순서로 투입 스캔", output: 투입 기록 }
+      - { screen: MAT-04, role: PROD, action: "원료 잔량 · 재고 확인", output: 재고 }
+  - code: F03
+    name: 조리 조건 (교반기) 관리
+    when: 솥별 교반 · 온도 조건을 표준화할 때
+    goal: 레시피 표준화율 KPI 를 조리 조건 기록으로 뒷받침한다
+    steps:
+      - { screen: BAS-04, role: ADMIN, action: "조리 공정 측정값 선언 (RPM · 교반시간 · 온도 = 수집)", output: 측정값 정의 }
+      - { screen: EQP-04, role: PROD, action: "교반기 수집값 확인", output: 수집값 }
+      - { screen: POP-02, role: FIELD, action: "조리 완료 때 수집 대표값이 자동으로 채워짐", output: 조리 조건 기록 }
+      - { screen: KPI-02, role: ADMIN, action: "조리 조건 추이 · 레시피 표준화율", output: 지표 }
+  - code: F04
+    name: 공정중 검사 · 검식
+    when: 조리 중간 · 완료 시 품질을 확인할 때
+    goal: 검사 · 검식 결과가 배치에 붙어 출고 판단에 쓰인다
+    steps:
+      - { screen: QUA-01, role: QA, action: "공정중 · 최종 검사 항목 계획 (관능 점수 · 중심 온도)", output: 검사 계획 }
+      - { screen: QUA-02, role: QA, action: "배치 검사 · 검식 판정", output: 판정 }
+      - { screen: QUA-04, role: QA, action: "부적합이면 품질 이슈 · 조치", output: 품질 이슈 }
+  - code: F05
+    name: 배치 추적 · 회수
+    when: 고객사에서 이상 신고가 들어왔을 때
+    goal: 출고 LOT 에서 솥 · 원료 LOT · 공급처를 찾고 같은 원료가 간 다른 출고를 찾는다
+    steps:
+      - { screen: TRC-03, role: QA, action: "출고 LOT 번호 검색", output: — }
+      - { screen: TRC-02, role: QA, action: "배치(솥) → 원료 LOT → 공급처 역추적", output: 원인 후보 }
+      - { screen: TRC-01, role: QA, action: "같은 원료 LOT 이 들어간 다른 출고 정방향 추적", output: 회수 대상 }

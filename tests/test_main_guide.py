@@ -37,3 +37,19 @@ def test_process_pages_render_and_dim_screens_the_role_cannot_open():
     html = client("admin").get("/main/processes?code=P01", headers=HTML).text
     assert 'class="main-tabs"' in html and "/main/functions" in html
     assert client().get("/main/processes").status_code in (401, 303)
+
+
+def test_domain_catalog_data_is_consistent():
+    from mescore.app import domains
+    assert {d["code"] for d in domains.all_domains()} >= {"kimchi", "foodservice", "printfilm", "metal"}
+    assert domains.problems() == []
+
+
+def test_domain_pages_render_core_pack_and_proposed_steps():
+    c = client("admin")
+    assert c.get("/main/domains", headers=HTML).status_code == 200
+    assert c.get("/main/domains", params={"d": "nope"}).status_code == 404
+    k = c.get("/main/domains", params={"d": "kimchi", "p": "K01"}).json()["domain"]["current"]
+    assert k["n_core"] > 0 and k["n_pack"] > 0                       # 코어 화면 + 김치 팩 화면이 섞인다
+    m = c.get("/main/domains", params={"d": "metal", "p": "M02"}).json()["domain"]["current"]
+    assert m["n_proposed"] == 1 and m["steps"][0]["kind"] == "proposed" and not m["steps"][0]["open"]

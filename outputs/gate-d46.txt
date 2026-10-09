@@ -1,0 +1,54 @@
+게이트 판정 — MES 표준플랫폼 · 2026-10-09 21:53 · 시드 재실행 포함
+
+[코어 단독 MES_PACK=]
+G-C01  메뉴 — 코어 12 · 공통 5 · nav = core.yaml                    PASS  검사 7 전부 PASS
+G-C02  기능 — 132 + 이관 4 · 계약 = API = 테스트 · 고아 0                PASS  검사 10 전부 PASS ‖ check_screens: 검사 2 전부 PASS
+G-C03  화면 — 51 + 공통 5 전부 200 · placeholder 0                  PASS  200: 56/56 · placeholder 0 (기대 0) ‖ check_screens: 검사 4 전부 PASS
+G-C04  스키마 — 테이블 52 · 계약 = 실제 DB · 공통 컬럼                      PASS  검사 8 전부 PASS
+G-C05  쓰기 경계 — trc · kpi 쓰기 0 · lot_genealogy 는 lineage 만     PASS  검사 5 전부 PASS
+G-C06  계보 재현 — 코어 시나리오 lot_genealogy 10행 (API)                PASS  검사 2 전부 PASS
+G-C07  추적 — 역방향 · 정방향 재귀 · 깊이 20 분기 100 2초                    PASS  검사 7 전부 PASS
+G-C08  키 연결 — LOT 번호 → 지시 · 실적 · 측정값 · 검사 · 출하 · 채번 한 곳       PASS  검사 3 전부 PASS
+G-C09  시드 멱등 — 2회 실행 행 수 diff 0 · (예시) 표기                     PASS  검사 2 전부 PASS
+G-C10  집계 — stats = QA 별도 SQL · measure_series                PASS  검사 6 전부 PASS
+G-C11  빈 화면 — 미수집 / 미확정 (D-nn)                                PASS  검사 2 전부 PASS
+G-C12  범위 밖 0 — 설비 제어 · 업종 전용 기능 없음                           PASS  라우트 149 중 제어 · 명령성 0 · /eqp 쓰기 ['/eqp/checks', '/eqp/faults', '/eqp/faults/{id}/fix', '/eqp/status'] (상태 기록 · 점검 · 고장만) · DB 테이블 52 = spec §2.2 52 (빠짐 0 · 더함 0) · 경로/테이블/컬럼/메뉴/화면 이름의 금지어 0 · 외부 장치 · 연계 · AI 라이브러리 import 0
+G-C13  4채널 — POP 스캔 · 모바일 390px · 현황판 새로고침                    PASS  검사 8 전부 PASS ‖ check_screens: 호출 155 · 위반 0 []
+G-C14  출력물 4종 — 작업지시서 · 라벨 2 · 성적서 · 바코드 SVG                  PASS  검사 3 전부 PASS
+G-C15  이관 배치 4 — Import 파일 · 멱등 · 리포트                         PASS  검사 2 전부 PASS
+G-C16  ERP — 어댑터 + 501 명시 · 조용한 폴백 0                          PASS  검사 2 전부 PASS
+G-C17  RBAC — 48칸 데이터 · 없음 403 · 조회 = 쓰기 403 · scopes         PASS  품질 검사 등록 403→200 · 생산계획 등록(QA 조회 칸) →403 · 세션 재로그인 없이 다음 요청에서 바뀜 (48칸 전수는 QA1 check_screens) ‖ check_screens: 검사 4 전부 PASS
+G-C18  접근 로그 — 로그인 · 조회 · 변경 · SYS-04                         PASS  검사 3 전부 PASS
+G-C19  비밀 — 저장소 · 문서에 비밀 값 없음                                 PASS  검사 2 전부 PASS
+G-C20  백업 — make backup · restore-check                       PASS  backup rc=0 · restore-check rc=0 · ['판정: PASS — 테이블 52개 전부 복구 · 테이블별 행 수 일치 (행 171,096)'] · 출력에 비밀 False
+G-C21  빌드 — pytest 전건 · check-routes · /health 200            PASS  pytest passed 328 · failed 0 · check-routes PASS · /health 200
+G-C22  브라우저 한 바퀴 — outputs/e2e/core 캡처 · QA3 판정               PASS  검사 2 전부 PASS · outputs/e2e/core 파일 120개
+G-C23  용어 중립 — 코어 금지어 0 · t() 누락 0                            PASS  검사 2 전부 PASS ‖ check_screens: 검사 3 전부 PASS
+G-C24  측정값 — bas_process_param 선언 → POP 폼 → pop_measure → 집계  PASS  폼 칸 ['m_qa2_req', 'm_qa2_rng', 'm_qa2_col'] · HTML 입력 ['m_qa2_req', 'm_qa2_rng'] · 수집 칸 라벨 있음 · 필수 누락 422 · 저장 측정값 0 · LOT None · 범위 이탈 25 → 200 · deviated True · 화면 '이탈' 있음 · collect 수신 [200, 200, 200] → 대표값(avg) 3.0 (기대 3 — 구간 밖 9 제외) · 수신 0 실적 종료 200 · collect 값 None · 화면 미수집 있음 · 선언 변경 뒤 새 실적 폼 ['m_qa2_req', 'm_qa2_rng', 'm_qa2_new'] · 범위 칸 필수화 → 누락 422 · stats.measure_series(day · avg) 불일치 0 
+
+[팩 foodservice · mes_foodservice_db]
+G-P01  격리 — 코어 해시 변동 0 · ALTER 0 · 경로 재정의 0 · scope 밖 쓰기 0  PASS  검사 8 전부 PASS
+G-P02  규모 — 팩 화면 · 테이블 · 기능 수 = gates.yaml                  PASS  검사 2 전부 PASS
+G-P03  추적표 — 산출물 ID ↔ 화면 매핑 · 고아 0                          PASS  산출물 49 · 매핑 41 · 범위 밖 8 · 고아 0 · N:1 8 · 1:N 6 · 모르는 화면 ID 0 (import_design --pack)
+G-P04  시나리오 — gates.yaml: scenarios 재현                      PASS  [foodservice] 시나리오 8 · 실행 8 · 실패 0
+G-P05  용어 — terms 키 치환 안 된 노출 0                             PASS  [foodservice] 화면 56 · 바뀌는 terms 키 16 · 치환 안 된 노출 0 ‖ check_screens: 검사 3 전부 PASS
+G-P06  착수 시간 — outputs/pack-timing.md ≤ 4h                  PASS  pack-new → pack.yaml 3줄 → pack-check OK → 스키마 · 시드 1초 → 기동 0.6초 → 로그인 · 메뉴 용어 치환 확인 1.6초 · 합계 약 20초 ≤ 4h (2026-10-09 QA3 실측 · mes_qa3_db · 8054)
+
+[팩 kimchi · mes_kimchi_db]
+G-P01  격리 — 코어 해시 변동 0 · ALTER 0 · 경로 재정의 0 · scope 밖 쓰기 0  PASS  검사 8 전부 PASS
+G-P02  규모 — 팩 화면 · 테이블 · 기능 수 = gates.yaml                  PASS  검사 2 전부 PASS
+G-P03  추적표 — 산출물 ID ↔ 화면 매핑 · 고아 0                          PASS  산출물 64 · 매핑 52 · 범위 밖 12 · 고아 0 · N:1 14 · 1:N 15 · 모르는 화면 ID 0 (import_design --pack)
+G-P04  시나리오 — gates.yaml: scenarios 재현                      PASS  [kimchi] 시나리오 4 · 실행 4 · 실패 0
+G-P05  용어 — terms 키 치환 안 된 노출 0                             PASS  [kimchi] 화면 64 · 바뀌는 terms 키 12 · 치환 안 된 노출 0 ‖ check_screens: 검사 3 전부 PASS
+G-P06  착수 시간 — outputs/pack-timing.md ≤ 4h                  PASS  pack-new → pack.yaml 3줄 → pack-check OK → 스키마 · 시드 1초 → 기동 0.6초 → 로그인 · 메뉴 용어 치환 확인 1.6초 · 합계 약 20초 ≤ 4h (2026-10-09 QA3 실측 · mes_qa3_db · 8054)
+
+[팩 printfilm · mes_printfilm_db]
+G-P01  격리 — 코어 해시 변동 0 · ALTER 0 · 경로 재정의 0 · scope 밖 쓰기 0  PASS  검사 8 전부 PASS
+G-P02  규모 — 팩 화면 · 테이블 · 기능 수 = gates.yaml                  PASS  검사 2 전부 PASS
+G-P03  추적표 — 산출물 ID ↔ 화면 매핑 · 고아 0                          PASS  산출물 32 · 매핑 31 · 범위 밖 1 · 고아 0 · N:1 2 · 1:N 3 · 모르는 화면 ID 0 · 설계 원본에 없는 매핑 3 (import_design --pack)
+G-P04  시나리오 — gates.yaml: scenarios 재현                      PASS  [printfilm] 시나리오 3 · 실행 3 · 실패 0
+G-P05  용어 — terms 키 치환 안 된 노출 0                             PASS  [printfilm] 화면 59 · 바뀌는 terms 키 9 · 치환 안 된 노출 0 ‖ check_screens: 검사 3 전부 PASS
+G-P06  착수 시간 — outputs/pack-timing.md ≤ 4h                  PASS  pack-new → pack.yaml 3줄 → pack-check OK → 스키마 · 시드 1초 → 기동 0.6초 → 로그인 · 메뉴 용어 치환 확인 1.6초 · 합계 약 20초 ≤ 4h (2026-10-09 QA3 실측 · mes_qa3_db · 8054)
+
+PASS 42 · FAIL 0 · WARN 0 · BLOCKED 0 · 미검증 0 / 전체 42
+※ WARN · 미검증은 통과가 아니다. 「QA 대조 대기」 가 붙은 PASS 는 아키텍트 증거 판정 — QA 검사기(check_data · check_security)가 생기면 그 출력이 우선한다. BLOCKED 는 decisions.md 에 D-번호와 사유가 있어야 종료 조건(goal.md §4.4)을 만족한다.
