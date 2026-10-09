@@ -130,3 +130,60 @@ def test_permissions_csv_must_cover_every_cell(temp_pack):
 def test_requires_core_ranges():
     assert packs.requires_ok("0.1.0", ">=0.1,<1.0") and packs.requires_ok("0.1.0", "0.1.0") and packs.requires_ok("0.1.0", None)
     assert not packs.requires_ok("0.1.0", ">=0.2") and not packs.requires_ok("1.0.0", "<1.0")
+
+
+def test_terms_longest_first_and_no_doubled_words(temp_pack):
+    """긴 키 우선 · 한 번 훑기 · 겹말 방지(「LOT LOT 추적」 금지) · menus.rename 값은 다시 치환하지 않는다 (개발1 ⑤)."""
+    name = temp_pack("_t_terms", terms={"추적": "LOT 추적", "실적": "조리 실적", "생산 LOT": "배치", "출하 LOT": "출고 LOT", "출하": "출고"},
+                     menus={"rename": {"pop": "조리 실적 (POP)", "trc": "LOT 추적", "shp": "출하"}})
+    packs.load(name)
+    nav.rebuild()
+    assert packs.t("추적") == "LOT 추적" and packs.t("LOT 추적") == "LOT 추적" and packs.t("LOT 추적 화면") == "LOT 추적 화면"
+    assert packs.t("역방향 추적") == "역방향 LOT 추적"
+    assert packs.t("실적 (POP)") == "조리 실적 (POP)" and packs.t("조리 실적 (POP)") == "조리 실적 (POP)"
+    assert packs.t("출하 LOT 스캔") == "출고 LOT 스캔" and packs.t("출하 등록") == "출고 등록"     # 긴 키(출하 LOT)가 먼저 · 결과를 다시 치환하지 않음
+    assert packs.t("생산 LOT 번호") == "배치 번호"
+    assert packs.t(nav.menu("pop").name) == "조리 실적 (POP)" and packs.t(nav.menu("trc").name) == "LOT 추적"   # 업종어로 쓴 rename 값 그대로
+    assert packs.t(nav.menu("shp").name) == "출고"                                                                   # 치환 전 꼴도 같은 결과
+
+
+def test_channels_accept_codes_and_labels(temp_pack):
+    name = temp_pack("_t_ch", menus={"add": [{"code": "exm", "name": "예시", "after": "pop", "channels": ["web", "pop"]}]},
+                     screens=[{"id": "X-EXM-01", "name": "예시 화면", "module": "exm", "path": "/exm/example", "channels": ["pop", "현황판"]}],
+                     channels={"현장 POP": ["POP-01", "X-EXM-01"], "board": ["KPI-01", "X-EXM-01"], "mobile": []})
+    p = packs.load(name)
+    nav.rebuild()
+    assert p.pack_modules[0]["channels"] == ["관리자 Web", "현장 POP"] and p.pack_screens[0]["channels"] == ["현장 POP", "현황판"]
+    assert p.channels == {"pop": ["POP-01", "X-EXM-01"], "board": ["KPI-01", "X-EXM-01"], "mobile": []}
+    assert nav.channel_allowed("X-EXM-01", "pop") and not nav.channel_allowed("X-EXM-01", "mobile")
+
+
+def test_unknown_channel_is_refused(temp_pack):
+    name = temp_pack("_t_ch_bad", menus={"add": [{"code": "exm", "name": "예시", "channels": ["kiosk"]}]})
+    with pytest.raises(packs.PackError) as exc:
+        packs.load(name)
+    assert "kiosk" in str(exc.value)
+
+
+def test_read_attrs_reads_form_from_request(temp_pack):
+    """`Request` 는 Mapping 이라 예전엔 폼을 안 읽고 {} 였다 (개발1 ①). 동기 라우터에서 `attr_<key>` · `attrs.<key>` 를 읽는다."""
+    from fastapi import FastAPI, Form, Request
+    from fastapi.testclient import TestClient
+
+    name = temp_pack("_t_attrs", attrs={"ord_order": [{"key": "due_time", "label": "납기 시각", "type": "text"},
+                                                      {"key": "serve", "label": "식수", "type": "number", "required": True}]})
+    packs.load(name)
+    app = FastAPI()
+
+    @app.post("/x")
+    def x(request: Request, note: str = Form("")):
+        try:
+            return {"attrs": packs.read_attrs(request, "ord_order"), "note": note}
+        except ValueError as exc:
+            return {"error": str(exc)}
+
+    c = TestClient(app)
+    assert c.post("/x", data={"note": "n", "attr_due_time": "11:30", "attrs.serve": "120"}).json() == {"attrs": {"due_time": "11:30", "serve": 120.0}, "note": "n"}
+    assert "필수" in c.post("/x", data={"attr_due_time": "11:30"}).json()["error"]
+    with pytest.raises(TypeError):
+        packs.read_attrs(object(), "ord_order")

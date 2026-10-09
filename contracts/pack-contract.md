@@ -29,17 +29,17 @@ packs/<팩>/
 | `pack` | ✓ | 폴더명과 같다. `^[a-z][a-z0-9_]*$`. `_` 로 시작하면 템플릿/더미(게이트 면제) |
 | `name` · `company` | ✓ | UI 표기 · 회사명(없으면 `name`) |
 | `requires_core` | ✓ | semver 범위. `core.yaml: core_version` 이 밖이면 기동 거부 |
-| `terms` | | `{코어 중립어: 업종어}`. 키는 `core.yaml: terms_keys` 에 있어야 한다. 값은 자유(업종어 허용) |
+| `terms` | | `{코어 중립어: 업종어}`. 키는 `core.yaml: terms_keys` 에 있어야 한다. 값은 자유(업종어 허용). 치환(`packs.t`)은 **한 번 훑기 · 같은 자리에서 긴 키 먼저**(`출하 LOT` 이 `출하` 보다 먼저) · 치환 결과를 다시 치환하지 않는다 · **겹말 방지** — 값이 키를 품고(`추적: LOT 추적`) 원문 그 자리가 이미 그 값이면 그대로(`LOT 추적` → `LOT LOT 추적` 이 되지 않는다) |
 | `menus.hide` | | 코어 메뉴 코드 목록. 숨긴 메뉴의 화면은 403 + 메뉴 없음. 테이블 · 테스트는 남는다 |
-| `menus.rename` | | `{코드: 이름}` |
+| `menus.rename` | | `{코드: 이름}`. 이름은 화면에서 `t()` 를 한 번 더 거치지만 겹말 방지 때문에 업종어로 쓴 최종 이름(`조리 실적 (POP)`)과 치환 전 꼴(`실적 (POP)`)이 같은 결과다 — **최종 이름으로 쓴다** |
 | `menus.order` | | 코어 + 팩 메뉴 코드 전체 순서. 빠진 것은 뒤에 코어 순서로 |
-| `menus.add[]` | | `{code, name, after}`. `code` 는 코어 12 와 다르게 |
-| `screens[]` | E4 때 | `{id: X-<MOD>-nn, name, module, path, channels[], owner}`. `module` 은 `menus.add` 로 더한 팩 모듈 코드, `path` 는 `/<module>/…`, 코어 경로와 겹치지 않게 |
+| `menus.add[]` | | `{code, name, after, owner, channels[]}`. `code` 는 코어 12 와 다르게. `owner` 는 팩 `function-list.md` 담당 검사에 쓴다(없으면 팩 이름). `channels` 는 아래 채널 표기(없으면 `관리자 Web`) |
+| `screens[]` | E4 때 | `{id: X-<MOD>-nn, name, module, path, channels[], owner}`. `module` 은 `menus.add` 로 더한 팩 모듈 코드, `path` 는 `/<module>/…`, 코어 경로와 겹치지 않게. **채널 표기는 코드(`web` · `pop` · `mobile` · `board`)와 라벨(`관리자 Web` · `현장 POP` · `모바일` · `현황판`) 둘 다 받는다** — 병합본에는 라벨로 정규화된다. 그 밖 값은 `PackError` |
 | `roles[]` | | `{code, name}`. 주면 코어 기본 4 를 **대체**(관리자 `ADMIN` 은 반드시 포함) |
 | `permissions` | | `seed/permissions.csv` 경로. 열 `menu_code,role_code,level,scopes`(scopes 는 `일반·승인` 처럼 `·` 또는 `,` 구분). 코어 + 팩 메뉴 × 역할 **전 칸** 있어야 한다(빈 칸 → `PackError`). 주지 않으면 코어 칸은 `core.yaml` 기본값, 팩 모듈 칸은 전부 `없음`(`pack.warnings`) |
 | `numbering` | | `{KIND: {prefix, date, digits}}`. 코어 종류는 형식만 바꾼다. 새 종류 추가 가능 |
-| `channels` | | `{pop: [...], mobile: [...], board: [...]}` 화면 ID. 주면 코어 기본을 **대체** |
-| `attrs` | E2 | `{테이블: [{key, label, type(number|text|bool|date|select), required, choices[]}]}`. 코어 테이블만. `ui.attrs_fields` 가 폼을 만들고 `packs.read_attrs` 가 읽는다 |
+| `channels` | | `{pop: [...], mobile: [...], board: [...]}` 화면 ID. 주면 코어 기본을 **대체**. 키도 코드 · 라벨 둘 다(`현장 POP:` = `pop:`) — 병합본은 코드 키 |
+| `attrs` | E2 | `{테이블: [{key, label, type(number|text|bool|date|select), required, choices[]}]}`. 코어 테이블만. `ui.attrs_fields` 가 폼(`attr_<key>`)을 만들고 `packs.read_attrs(form 또는 request, 테이블)` 가 읽는다 — 폼 이름 `attr_<key>` · `attrs.<key>` 둘 다. `Request` 를 넘기면 동기 라우터에서 `request.form()` 을 읽는다 |
 | `process_params` · `inspection_items` | E3 | CSV 경로(`migration-files.md` §2 의 `04_process_params.csv` 형식 · 검사 항목은 `qua_insp_plan` 시드) |
 | `lineage.lot_kinds[]` | E6 | `{kind, base(MATERIAL|PRODUCT|SHIPMENT), label}` |
 | `lineage.relations[]` | E6 | `{name, base(투입|생산|분할|합병|출하)}` |

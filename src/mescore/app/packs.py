@@ -36,6 +36,9 @@ PACK_NAME_RE = re.compile(r"^[a-z_][a-z0-9_]*$")
 MODULE_CODE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 PACK_SCREEN_ID_RE = re.compile(r"^X-[A-Z0-9]+-\d{2}$")
 LEVELS = ("없음", "조회", "입력")
+#: 채널 — 코드(`web/pop/mobile/board`)와 라벨(`관리자 Web` …) 둘 다 받는다 (pack-contract.md §2). nav.DEVICE_CHANNEL 과 같은 값(nav 가 이 모듈을 import 하므로 여기 둔다)
+CHANNEL_LABEL: dict[str, str] = {"web": "관리자 Web", "pop": "현장 POP", "mobile": "모바일", "board": "현황판"}
+CHANNEL_CODE: dict[str, str] = {v: k for k, v in CHANNEL_LABEL.items()}
 NOOP_HOOK: Callable[..., None] = lambda *a, **k: None  # noqa: E731
 
 
@@ -91,6 +94,7 @@ class Pack:
     warnings: list[str] = field(default_factory=list)
     _hooks: Any = None
     _terms_sorted: list[tuple[str, str]] = field(default_factory=list)
+    _values_sorted: list[str] = field(default_factory=list)      # 키를 품은 치환값 — 겹말 방지 (t)
 
     @property
     def is_core_only(self) -> bool:
@@ -170,6 +174,31 @@ def requires_ok(core_version: str, spec: str | None) -> bool:
     return True
 
 
+def channel_label(value: Any) -> str | None:
+    """`pop` · `POP` · `현장 POP` → `현장 POP`. 모르면 None."""
+    v = str(value).strip()
+    if v in CHANNEL_CODE:
+        return v
+    return CHANNEL_LABEL.get(v.lower())
+
+
+def channel_code(value: Any) -> str | None:
+    """`현장 POP` · `pop` → `pop`. 모르면 None."""
+    label = channel_label(value)
+    return CHANNEL_CODE[label] if label else None
+
+
+def _channel_labels(values: Any, where: str, errs: list[str]) -> list[str]:
+    out: list[str] = []
+    for v in values or [CHANNEL_LABEL["web"]]:
+        label = channel_label(v)
+        if label is None:
+            errs.append(f"{where} 채널 {v!r} — web | pop | mobile | board (또는 {' | '.join(CHANNEL_CODE)})")
+        elif label not in out:
+            out.append(label)
+    return out
+
+
 def _read_permissions_csv(path: Path, general: str) -> dict[str, dict[str, dict]]:
     out: dict[str, dict[str, dict]] = {}
     with path.open(encoding="utf-8-sig", newline="") as f:
@@ -218,7 +247,7 @@ def load(name: str | None) -> Pack:
 
     name = (name or "").strip() or None
     if name is None:
-        pack._terms_sorted = []
+        _index_terms(pack)
         _CURRENT = pack
         return pack
 
@@ -287,7 +316,7 @@ def load(name: str | None) -> Pack:
         if after is not None and after not in core_codes + added:
             errs.append(f"menus.add {code!r} 의 after {after!r} 는 모르는 모듈")
         modules.append({"code": code, "name": str(add.get("name", code)), "owner": str(add.get("owner", name)),
-                        "channels": list(add.get("channels") or ["관리자 Web"]), "is_pack": True, "after": after})
+                        "channels": _channel_labels(add.get("channels"), f"menus.add {code!r}", errs), "is_pack": True, "after": after})
         added.append(code)
     if menus.get("order"):
         order_in = [str(c) for c in menus["order"]]
@@ -317,7 +346,7 @@ def load(name: str | None) -> Pack:
             errs.append(f"screens {sid!r}: path {path!r} — 코어 경로와 겹치거나 /{mod}/ 로 시작하지 않는다 (R4 · R5)")
         seen_ids.add(sid)
         screens.append({"id": sid, "name": str(s.get("name", sid)), "module": mod, "path": path,
-                        "channels": list(s.get("channels") or ["관리자 Web"]), "owner": str(s.get("owner", name)), "is_pack": True})
+                        "channels": _channel_labels(s.get("channels"), f"screens {sid!r}", errs), "owner": str(s.get("owner", name)), "is_pack": True})
 
     # roles (대체 — ADMIN 필수)
     if p.get("roles"):
@@ -362,13 +391,16 @@ def load(name: str | None) -> Pack:
     if p.get("channels"):
         all_ids = {s["id"] for s in screens}
         ch = {}
-        for dev, ids in p["channels"].items():
+        for dev_in, ids in p["channels"].items():
+            dev = channel_code(dev_in)                   # 키도 코드 · 라벨 둘 다 (`pop` · `현장 POP`)
             if dev not in ("pop", "mobile", "board"):
-                errs.append(f"channels {dev!r} — pop | mobile | board")
-            bad = [i for i in ids if i not in all_ids]
+                errs.append(f"channels {dev_in!r} — pop | mobile | board (또는 현장 POP | 모바일 | 현황판)")
+                continue
+            bad = [i for i in (ids or []) if i not in all_ids]
             if bad:
                 errs.append(f"channels.{dev} 에 모르는 화면 {bad}")
-            ch[str(dev)] = [str(i) for i in ids]
+            ch.setdefault(dev, [])
+            ch[dev] += [str(i) for i in (ids or []) if str(i) not in ch[dev]]
         pack.channels = ch
 
     # attrs (E2 — 코어 테이블만)
@@ -441,7 +473,7 @@ def load(name: str | None) -> Pack:
 
     if errs:
         raise PackError(f"팩 {name!r} 병합 규칙 위반 {len(errs)}건:\n  - " + "\n  - ".join(errs))
-    pack._terms_sorted = sorted(pack.terms.items(), key=lambda kv: -len(kv[0]))
+    _index_terms(pack)
     _CURRENT = pack
     return pack
 
@@ -460,20 +492,48 @@ def reset() -> None:
 
 
 # ── 용어 · 훅 · 속성 ───────────────────────────────────────────────────
+def _index_terms(pack: Pack) -> None:
+    pack._terms_sorted = sorted(pack.terms.items(), key=lambda kv: (-len(kv[0]), kv[0]))
+    pack._values_sorted = sorted({v for k, v in pack.terms.items() if k in v and k != v}, key=lambda v: (-len(v), v))
+
+
+def translate(text: str, terms: Mapping[str, str], terms_sorted: list[tuple[str, str]] | None = None,
+              values_sorted: list[str] | None = None) -> str:
+    """한 번 훑는 치환 — 같은 자리에서 **긴 키가 먼저**, 치환한 결과를 다시 치환하지 않는다.
+    겹말 방지: 치환값이 키를 품고(`추적` → `LOT 추적`) 원문 그 자리가 이미 그 치환값이면 그대로 둔다(`LOT 추적` → `LOT LOT 추적` 금지)."""
+    if not text or not terms:
+        return text or ""
+    if text in terms:
+        return terms[text]
+    keys = terms_sorted if terms_sorted is not None else sorted(terms.items(), key=lambda kv: (-len(kv[0]), kv[0]))
+    vals = values_sorted if values_sorted is not None else sorted({v for k, v in terms.items() if k in v and k != v}, key=lambda v: (-len(v), v))
+    out: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        hit = next((v for v in vals if text.startswith(v, i)), None)
+        if hit is not None:                       # 이미 업종어 — 그대로 건너뛴다
+            out.append(hit)
+            i += len(hit)
+            continue
+        kv = next(((k, v) for k, v in keys if text.startswith(k, i)), None)
+        if kv is not None:
+            out.append(kv[1])
+            i += len(kv[0])
+            continue
+        out.append(text[i])
+        i += 1
+    return "".join(out)
+
+
 def t(text: str) -> str:
-    """용어 치환 (E1 · D-07). 사전에 키가 그대로 있으면 그 값, 아니면 긴 키부터 부분 치환. 사전이 비면 원문."""
+    """용어 치환 (E1 · D-07). 사전에 키가 그대로 있으면 그 값, 아니면 긴 키부터 한 번 훑어 부분 치환(겹말 방지 — `translate`).
+    `menus.rename` 값은 업종어로 쓴 최종 이름(`조리 실적 (POP)`)도, 치환 전 꼴(`실적 (POP)`)도 같은 결과 — 겹말 방지가 이중 치환을 막는다(개발1 ⑤). 사전이 비면 원문."""
     if text is None:
         return ""
     pack = current()
     if not pack.terms:
         return text
-    if text in pack.terms:
-        return pack.terms[text]
-    out = text
-    for k, v in pack._terms_sorted:
-        if k in out:
-            out = out.replace(k, v)
-    return out
+    return translate(text, pack.terms, pack._terms_sorted, pack._values_sorted)
 
 
 def _hooks_module(pack: Pack):
@@ -503,15 +563,29 @@ def attrs_of(table: str) -> list[AttrSpec]:
     return list(current().attrs.get(table, []))
 
 
+def _is_request(obj: Any) -> bool:
+    """starlette `Request` 는 **Mapping**(ASGI scope 를 감싼다)이라 isinstance(Mapping) 로는 못 가른다 (개발1 ①)."""
+    try:
+        from starlette.requests import HTTPConnection
+    except ImportError:                       # pragma: no cover — starlette 는 fastapi 의존성
+        return False
+    return isinstance(obj, HTTPConnection)
+
+
 def read_attrs(form: Mapping[str, Any] | Any, table: str) -> dict[str, Any]:
-    """폼에서 `attr_<key>` 칸을 읽어 attrs dict 로. `form` 은 Mapping(폼 값) 또는 Request(동기 라우터에서는 `await` 없이 읽는다).
+    """폼에서 `attr_<key>`(또는 `attrs.<key>`) 칸을 읽어 attrs dict 로. `form` 은 Mapping(폼 값 · FormData) 또는 `Request`
+    (동기 라우터 — 스레드풀에서 `await` 없이 `request.form()` 을 읽는다. FastAPI 가 `Form()` 인자로 이미 읽었으면 캐시를 쓴다).
     필수 키가 비면 ValueError(라우터가 422 로 바꾼다). 형식 변환: number → float, bool → True/False."""
-    if not isinstance(form, Mapping):
+    if _is_request(form):
         import anyio
         form = anyio.from_thread.run(form.form)
+    elif not isinstance(form, Mapping):
+        raise TypeError(f"read_attrs 는 폼 값(Mapping) 또는 Request 를 받는다 — {type(form).__name__}")
     out: dict[str, Any] = {}
     for spec in attrs_of(table):
         raw = form.get(f"attr_{spec.key}")
+        if raw is None:
+            raw = form.get(f"attrs.{spec.key}")
         if raw is None or str(raw).strip() == "":
             if spec.required:
                 raise ValueError(f"{t(spec.label)} 은(는) 필수입니다")
