@@ -1,10 +1,12 @@
-"""멀티에이전트 파이프라인 — 라우터 → 스키마 탐색 → SQL 작성 ⇄ SQL 실행(자기수정) → 문서 검색 → 답변.
+"""멀티에이전트 파이프라인 — 호출어 → 오케스트레이터 → (정형 지표 | 스키마 탐색 → SQL 작성 ⇄ SQL 실행 | 문서 검색) → 답변.
 
 각 단계는 trace 한 줄을 남겨 화면이 "누가 무엇을 했는지" 그대로 보인다. 근거(조회 행 · 문서)가 없으면 답변 에이전트는 '판단 불가' 라고 말한다.
+「로뎀」 이라고 부르지 않은 질문은 답하지 않는다(wake). 음성으로 읽을 짧은 문장은 `speech` 에 둔다.
 """
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
 
@@ -12,7 +14,7 @@ import psycopg
 
 from mescore.app import rbac
 
-from . import llm, rag, schema, sqlguard
+from . import llm, metrics, orchestrator, rag, schema, sqlguard, wake
 
 MAX_SQL_TRIES = 3
 ROUTER_SCHEMA = {
@@ -77,6 +79,11 @@ class Result:
     trace: list[dict] = field(default_factory=list)
     model: str = ""
     error: str = ""
+    heard: str = ""                       # 들은 그대로(호출어 포함)
+    route: str = ""                       # 오케스트레이터가 고른 길: metric | sql | rag | both | chat | ignored | wake
+    ignored: bool = False                 # 호출어가 없어 답하지 않음
+    speech: str = ""                      # 음성으로 읽을 짧은 답
+    tables: list[dict] = field(default_factory=list)   # [{title sql data}] — 정형 지표는 여러 개
 
     def step(self, agent: str, title: str, status: str, detail: str = "", t0: float | None = None) -> None:
         self.trace.append({"agent": agent, "title": title, "status": status, "detail": detail,
@@ -91,38 +98,123 @@ def _history_messages(history: list[dict]) -> list[dict]:
     return out
 
 
+ROUTE_LABEL = {"metric": "정형 지표 SQL", "sql": "DB · SQL 조회", "rag": "RAG 문서 조회", "both": "SQL + RAG", "chat": "일반 대화"}
+INTENT_OF = {"sql": "data", "rag": "docs", "metric": "metric", "both": "both", "chat": "chat"}
+
+
+def _pretty(sql: str) -> str:
+    return re.sub(r"\n\s+", "\n  ", sql.strip())
+
+
+def to_speech(text: str, limit: int = 260) -> str:
+    """화면 답에서 읽을 부분만 — 표 · 기호 · 근거 줄을 빼고 앞 문장 몇 개."""
+    lines = [ln for ln in (text or "").splitlines() if ln.strip() and not ln.lstrip().startswith(("|", "근거", "```", "-", "*", "#"))]
+    t = re.sub(r"[`*_#>|]", "", " ".join(lines))
+    t = re.sub(r"\s+", " ", t).strip()
+    if len(t) <= limit:
+        return t
+    cut = max(t.rfind(". ", 0, limit), t.rfind("다 ", 0, limit), t.rfind("요 ", 0, limit))
+    return t[: cut + 1].strip() if cut > 40 else t[:limit].strip() + " …"
+
+
+def _run_metrics(res: Result, plan: orchestrator.Plan, allowed: list[str], known: set[str]) -> None:
+    says = []
+    for m in plan.metrics:
+        t0 = time.perf_counter()
+        p = plan.period
+        missing = [t for t in m.tables if t not in allowed]
+        if missing:
+            says.append(f"{m.label}은 지금 역할로 볼 수 없는 데이터입니다.")
+            res.step("정형 지표", m.label, "fail", f"권한 없는 테이블: {', '.join(missing)}", t0)
+            continue
+        summary = sqlguard.run(sqlguard.check(m.summary(p), known, set(allowed)))
+        detail_sql = sqlguard.check(m.detail(p), known, set(allowed))
+        detail = sqlguard.run(detail_sql)
+        says.append(m.say(p, summary["rows"]))
+        title = f"{m.label} · {p.label if m.uses_period else '현재'}"
+        res.tables.append({"title": title, "sql": _pretty(detail_sql), "data": detail, "summary": summary["rows"]})
+        res.step("정형 지표", title, "ok", f"요약 + 상세 {detail['row_count']}행 · {summary['ms'] + detail['ms']}ms · 읽기 전용", t0)
+    if res.tables:
+        res.sql, res.data = res.tables[0]["sql"], res.tables[0]["data"]
+        res.sql_explanation = res.tables[0]["title"]
+    res.answer = " ".join(says)
+    res.speech = res.answer
+
+
+def _extractive(res: Result) -> None:
+    """LLM 없이 문서 조각을 그대로 보여 주는 답."""
+    if not res.docs:
+        res.answer = "문서에서 관련 내용을 찾지 못했습니다."
+    else:
+        top = res.docs[0]
+        body = re.sub(r"\s+", " ", top["text"]).strip()
+        res.answer = f"문서에서 찾은 내용입니다 — {top['title']}: {body[:400]}{'…' if len(body) > 400 else ''}\n근거: " + " · ".join(d["title"][:40] for d in res.docs[:3])
+    res.speech = f"문서에서 찾은 내용입니다. {res.docs[0]['title']}." if res.docs else res.answer
+
+
 def ask(question: str, user: rbac.User, history: list[dict] | None = None) -> Result:
-    q = (question or "").strip()
-    res = Result(question=q)
-    if not q:
+    heard = (question or "").strip()
+    res = Result(question=heard, heard=heard)
+    if not heard:
         res.status, res.error = 422, "질문이 비었다"
         return res
+
+    # ⓪ 호출어 — 부르지 않으면 답하지 않는다
+    called, q = wake.parse(heard)
+    if not called:
+        res.ignored, res.route, res.intent = True, "ignored", "ignored"
+        res.step("호출어", f"「{wake.name()}」 호출 없음 — 답하지 않는다", "skip", f"예) {wake.name()}, 오늘의 재고량?")
+        return res
+    res.question = q
+    res.step("호출어", f"「{wake.name()}」 호출 확인", "ok")
+    if not q:
+        res.route = res.intent = "wake"
+        res.answer = res.speech = "네, 말씀하세요."
+        return res
+
     allowed = schema.allowed(user)
     known = set(schema.relations())
-
-    # ⑤ 문서 검색은 LLM 없이도 된다 — 미구성일 때도 보여 준다
-    t0 = time.perf_counter()
-    res.docs = rag.search(q, k=5)
-    res.step("문서 검색", f"RAG 조각 {len(res.docs)}개", "ok", " · ".join(d["title"][:40] for d in res.docs[:3]), t0)
-
-    if not llm.configured():
-        res.status, res.error = 501, "LLM 미구성 (D-47) — .env 에 ANTHROPIC_API_KEY 를 넣으면 SQL 조회 · 답변까지 한다. 지금은 문서 검색 결과만 보인다"
-        res.step("라우터", "건너뜀 — LLM 미구성", "skip")
-        return res
     hist = _history_messages(history or [])
     try:
-        # ① 라우터
+        # ① 오케스트레이터 — 정형 지표 SQL · LLM SQL · RAG 중 어디로 갈지
         t0 = time.perf_counter()
-        r, res.model = llm.json_call(system=ROUTER_SYSTEM.format(tables=schema.table_list_text(allowed)), user=q, schema=ROUTER_SCHEMA,
-                                     effort="low", max_tokens=4000, history=hist)
-        res.intent = r["intent"]
-        picked = [t for t in r.get("tables", []) if t in allowed][:6]
-        res.step("라우터", f"의도 {res.intent} · 테이블 {', '.join(picked) or '없음'}", "ok", r.get("reason", ""), t0)
-        restated = r.get("restated") or q
+        plan = orchestrator.by_rule(q)
+        if plan is None and llm.configured():
+            r, res.model = llm.json_call(system=ROUTER_SYSTEM.format(tables=schema.table_list_text(allowed)), user=q, schema=ROUTER_SCHEMA,
+                                         effort="low", max_tokens=4000, history=hist)
+            plan = orchestrator.from_router(r, allowed)
+        elif plan is None:
+            plan = orchestrator.fallback(q)
+        res.route, res.intent = plan.route, INTENT_OF[plan.route]
+        extra = f" · 테이블 {', '.join(plan.tables)}" if plan.tables else ""
+        res.step("오케스트레이터", f"경로 → {ROUTE_LABEL[plan.route]}{extra}", "ok", f"{plan.by} — {plan.reason}", t0)
 
-        if res.intent in ("data", "both"):
+        if plan.route == "metric":
+            _run_metrics(res, plan, allowed, known)
+            return res
+
+        # ⑤ 문서 검색 — rag · both · chat, 그리고 SQL 이 실패했을 때의 근거
+        t0 = time.perf_counter()
+        res.docs = rag.search(q, k=5)
+        if plan.route != "sql":
+            res.step("문서 검색", f"RAG 조각 {len(res.docs)}개", "ok", " · ".join(d["title"][:40] for d in res.docs[:3]), t0)
+
+        if not llm.configured():
+            if plan.route == "sql":
+                res.status = 501
+                res.error = "LLM 미구성 (D-47) — 자유 형식 데이터 질문은 SQL 작성 에이전트(LLM)가 필요하다. .env 에 ANTHROPIC_API_KEY 를 넣는다. 정형 지표(오늘의 재고량 · 출하량 · 생산량 · 입고량 · 불량률 · 작업지시 현황)는 지금도 답한다"
+                res.speech = "이 질문은 언어 모델이 있어야 답할 수 있습니다. 오늘의 재고량, 출하량, 생산량 같은 질문은 지금도 답할 수 있어요."
+                res.step("SQL 작성", "건너뜀 — LLM 미구성", "skip")
+                return res
+            _extractive(res)
+            res.step("답변", "문서 발췌(LLM 미구성)", "ok")
+            return res
+
+        restated = plan.restated or q
+        if plan.route in ("sql", "both"):
             # ② 스키마 탐색 — 라우터가 고른 테이블 + 설명 검색으로 보탠 테이블
             t0 = time.perf_counter()
+            picked = list(plan.tables)
             if len(picked) < 3:
                 for t in allowed:
                     if t not in picked and any(w in (schema.descriptions().get(t, "") + t) for w in restated.split() if len(w) >= 2):
@@ -146,6 +238,7 @@ def ask(question: str, user: rbac.User, history: list[dict] | None = None) -> Re
                     safe = sqlguard.check(sql, known, set(allowed))
                     res.data = sqlguard.run(safe)
                     res.sql, res.sql_explanation = safe, draft.get("explanation", "")
+                    res.tables = [{"title": res.sql_explanation or "조회 결과", "sql": safe, "data": res.data}]
                     res.step("SQL 실행", f"{res.data['row_count']}행{' (상한에서 잘림)' if res.data['truncated'] else ''}", "ok", f"{res.data['ms']}ms · 읽기 전용", t0)
                     break
                 except sqlguard.SqlRejected as exc:
@@ -164,11 +257,13 @@ def ask(question: str, user: rbac.User, history: list[dict] | None = None) -> Re
         if res.data is not None:
             preview = res.data["rows"][:40]
             evidence.append(f"[SQL 조회 결과] {res.sql_explanation}\nSQL: {res.sql}\n행 수: {res.data['row_count']}{' (상한 ' + str(sqlguard.MAX_ROWS) + '행에서 잘림)' if res.data['truncated'] else ''}\n열: {res.data['columns']}\n행(앞 40): {preview}")
-        elif res.intent in ("data", "both"):
+        elif plan.route in ("sql", "both"):
             evidence.append("[SQL 조회 결과] 조회 실패 — 데이터를 가져오지 못했다")
-        if res.intent in ("docs", "both") or res.data is None:
+        if plan.route in ("rag", "both", "chat") or res.data is None:
             evidence.append("[문서 조각]\n" + "\n\n".join(f"({d['title']} · {d['source']})\n{d['text']}" for d in res.docs))
-        res.answer, _ = llm.text_call(system=ANSWER_SYSTEM, user=f"질문: {q}\n\n" + "\n\n".join(evidence), effort="low", max_tokens=4000, history=hist)
+        res.answer, m = llm.text_call(system=ANSWER_SYSTEM, user=f"질문: {q}\n\n" + "\n\n".join(evidence), effort="low", max_tokens=4000, history=hist)
+        res.model = res.model or m
+        res.speech = to_speech(res.answer)
         res.step("답변", "근거로 답 작성", "ok", f"모델 {res.model}", t0)
     except llm.LlmUnavailable as exc:
         res.status, res.error = 501, f"{exc} (D-47)"

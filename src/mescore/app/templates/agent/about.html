@@ -1,4 +1,4 @@
-{# MES AI Agent › 에이전트 구성 — 선택 모듈 mesagent(D-47). ctx: configured model allowed blocked never sources[(path, n)] n_chunks max_rows timeout_ms. 쓰기 0. #}
+{# MES AI Agent › 에이전트 구성 — 선택 모듈 mesagent(D-47). ctx: configured model wake_words metric_list[(label tables uses_period)] allowed blocked never sources[(path, n)] n_chunks max_rows timeout_ms. 쓰기 0. #}
 {% extends "base.html" %}
 {% block head %}
 <style>
@@ -18,13 +18,17 @@
 <section class="panel">
   <h2>{{ t('에이전트 구성') }} <small>{{ ('LLM ' ~ model) if configured else t('LLM 미구성 — .env 에 ANTHROPIC_API_KEY') }}</small></h2>
   <div class="ab-agents">
-    <div class="ab-agent"><b>① {{ t('라우터') }}</b><span class="k">LLM · {{ t('구조화 출력') }}</span><p>{{ t('질문 의도(데이터 · 문서 · 둘 다)를 가르고, 읽을 수 있는 테이블 중 필요한 것을 고른다.') }}</p></div>
-    <div class="ab-agent"><b>② {{ t('스키마 탐색') }}</b><span class="k">{{ t('코드') }}</span><p>{{ t('고른 테이블의 실제 컬럼 · 외래키와 계약 문서의 테이블 설명을 모은다.') }}</p></div>
-    <div class="ab-agent"><b>③ {{ t('SQL 작성') }}</b><span class="k">LLM · {{ t('구조화 출력') }}</span><p>{{ t('PostgreSQL SELECT 한 문장을 쓴다. 실행이 실패하면 오류를 받아 다시 쓴다(최대 3회).') }}</p></div>
-    <div class="ab-agent"><b>④ {{ t('SQL 실행') }}</b><span class="k">{{ t('코드') }}</span><p>{{ t('검사 관문을 지난 SQL 만 읽기 전용 트랜잭션에서 실행하고 되돌린다.') }}</p></div>
-    <div class="ab-agent"><b>⑤ {{ t('문서 검색') }}</b><span class="k">RAG · BM25</span><p>{{ t('계약 · 스키마 · 결정 · 업무 프로세스 · 도메인 문서에서 근거 조각을 찾는다.') }}</p></div>
-    <div class="ab-agent"><b>⑥ {{ t('답변') }}</b><span class="k">LLM</span><p>{{ t('조회 결과와 문서 조각만 근거로 답한다. 근거가 없으면 판단 불가라고 말한다.') }}</p></div>
+    <div class="ab-agent"><b>⓪ {{ t('호출어') }}</b><span class="k">{{ t('코드') }}</span><p>「{{ wake_words[0] }}」{{ t('이라고 부른 질문만 받는다. 부르지 않으면 답하지 않는다. 음성 인식 변형') }}: {{ wake_words[1:]|join(', ') }}</p></div>
+    <div class="ab-agent"><b>① {{ t('오케스트레이터') }}</b><span class="k">{{ t('규칙') }} + LLM</span><p>{{ t('정형 지표 SQL · LLM 이 쓰는 DB 조회 SQL · RAG 문서 조회 중 어느 길로 풀지 정한다. 지표 질문은 규칙으로 바로, 나머지는 LLM 라우터가 고른다.') }}</p></div>
+    <div class="ab-agent"><b>② {{ t('정형 지표') }}</b><span class="k">{{ t('검증된 SQL') }}</span><p>{{ t('오늘의 재고량 · 출하량 · 생산량처럼 자주 묻는 질문은 미리 검증한 SQL 로 답한다. LLM 이 숫자를 다시 쓰지 않는다.') }}</p></div>
+    <div class="ab-agent"><b>③ {{ t('스키마 탐색') }}</b><span class="k">{{ t('코드') }}</span><p>{{ t('고른 테이블의 실제 컬럼 · 외래키와 계약 문서의 테이블 설명을 모은다.') }}</p></div>
+    <div class="ab-agent"><b>④ {{ t('SQL 작성') }}</b><span class="k">LLM · {{ t('구조화 출력') }}</span><p>{{ t('PostgreSQL SELECT 한 문장을 쓴다. 실행이 실패하면 오류를 받아 다시 쓴다(최대 3회).') }}</p></div>
+    <div class="ab-agent"><b>⑤ {{ t('SQL 실행') }}</b><span class="k">{{ t('코드') }}</span><p>{{ t('검사 관문을 지난 SQL 만 읽기 전용 트랜잭션에서 실행하고 되돌린다.') }}</p></div>
+    <div class="ab-agent"><b>⑥ {{ t('문서 검색') }}</b><span class="k">RAG · BM25</span><p>{{ t('계약 · 스키마 · 결정 · 업무 프로세스 · 도메인 문서에서 근거 조각을 찾는다.') }}</p></div>
+    <div class="ab-agent"><b>⑦ {{ t('답변') }}</b><span class="k">LLM</span><p>{{ t('조회 결과와 문서 조각만 근거로 답한다. 근거가 없으면 판단 불가라고 말한다.') }}</p></div>
+    <div class="ab-agent"><b>⑧ {{ t('음성') }}</b><span class="k">{{ t('브라우저') }}</span><p>{{ t('브라우저 내장 음성 인식으로 듣고 음성 합성으로 답을 읽는다. 답을 읽는 동안은 마이크를 멈춘다.') }}</p></div>
   </div>
+  <div class="ab-box" style="margin-bottom:14px"><h3>{{ t('정형 지표') }} ({{ metric_list|length }})</h3><ul>{% for label, tables, per in metric_list %}<li><b>{{ label }}</b> — {{ t('기간') if per else t('현재 기준') }}{% if per %} ({{ t('오늘 · 어제 · 이번 주 · 지난주 · 이번 달 · 지난달 · 최근 N일') }}){% endif %} · <code>{{ tables }}</code></li>{% endfor %}</ul></div>
   <div class="ab-two">
     <div class="ab-box"><h3>{{ t('안전 장치') }}</h3><ul>
       <li>{{ t('SELECT · WITH 한 문장만 · 쓰기/관리/파일/네트워크 키워드와 시스템 카탈로그 차단') }}</li>

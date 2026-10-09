@@ -1,6 +1,6 @@
 # MES 표준플랫폼 — 명령 (CLAUDE.md 「명령」). 전부 `uv run …` — 시스템 python 을 쓰지 않는다.
 # 팩은 `MES_PACK=<팩> make …` 로 고른다. DB 는 코어 단독 mes_core_db · 팩 mes_<팩>_db (한 번에 하나만 시드 · 스키마 재생성).
-.PHONY: setup db-create db-schema db-seed db-reset pack-new pack-check pack-db contracts run test check-routes check-trace check-schema check-data check-security check-terms check-pack gate gate-full backup restore-check core-hash kpi-snapshot erp-flush
+.PHONY: sample-today setup db-create db-schema db-seed db-reset pack-new pack-check pack-db contracts run test check-routes check-trace check-schema check-data check-security check-terms check-pack gate gate-full backup restore-check core-hash kpi-snapshot erp-flush
 
 TOOLS := src/mescore/tools
 PGHOST ?= /tmp
@@ -94,6 +94,9 @@ gate:            # G-C01~G-C24 (코어 단독 MES_PACK=) → packs/ 의 팩마�
 
 gate-full:       # 시드를 한 번 더 돌려 행 수 diff 를 잰다 — 다른 사람이 시드 · 스키마를 돌리는 중에는 쓰지 않는다. 종료 판정은 이것으로
 	@MES_PACK= MES_ADDONS= uv run python $(TOOLS)/gate.py --run-seeds
+
+sample-today:    # 오늘 날짜 샘플(입고 · 생산 · 검사 · 출하) — AI Agent 추천 질의용 · 하루 한 번 · DB=mes_demo_db (D-48)
+	MES_PG_DSN=postgresql:///$${DB:-mes_demo_db} MES_ADDONS= uv run python scripts/sample_today.py
 
 kpi-snapshot:    # KPI 스냅샷 배치 (kpi_snapshot — 개발3 stats.snapshot). 날짜를 주려면 DAY=YYYY-MM-DD
 	uv run python -m mescore.app.stats snapshot $(DAY)

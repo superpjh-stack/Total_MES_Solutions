@@ -1,5 +1,6 @@
-{# MES AI Agent › 질문하기 — 선택 모듈 mesagent(D-47) 의 화면. ctx: history[{q a sql rows}] result{question status intent answer sql sql_explanation data{columns rows row_count truncated ms} docs[{source title text score}] trace[{agent title status detail ms}] model error} examples configured model n_tables question.
-   스크립트 없음 — 폼 POST 후 서버가 다시 그린다. 쓰기 0. #}
+{# MES AI Agent › 질문하기 — 선택 모듈 mesagent(D-47 · D-48) 의 화면. ctx: history[{q a sql rows route}] result{question heard status route intent ignored answer speech tables[{title sql data}] docs[{source title text score}] trace[{agent title status detail ms}] model error}
+   examples wake_name wake_pattern n_metric configured model n_tables question voice_mode. 폼 POST 후 서버가 다시 그린다.
+   음성(인식 · 합성)은 브라우저 내장 기능 — 스크립트는 선택 모듈이 /agent/voice.js 로 준다(코어 app.js 와 따로). 쓰기 0. #}
 {% extends "base.html" %}
 {% block head %}
 <style>
@@ -34,48 +35,71 @@
 .ag-hist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
 .ag-hist li{font-size:var(--fs-sm);border-bottom:var(--bw) dashed var(--c-line);padding-bottom:8px}
 .ag-hist li .a{white-space:pre-wrap;color:var(--c-ink-2);max-height:7.5em;overflow:hidden}
+.ag-voice{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:14px 0 0;padding:10px 12px;border:var(--bw) solid var(--c-line);border-radius:var(--r-md);background:var(--c-surface-2)}
+.ag-mic{display:inline-flex;align-items:center;gap:6px;min-width:150px;justify-content:center}
+.ag-mic::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--c-ink-3)}
+.ag-mic.on::before{background:var(--c-err);box-shadow:0 0 0 4px color-mix(in srgb,var(--c-err) 25%,transparent);animation:agpulse 1.4s infinite}
+@keyframes agpulse{50%{box-shadow:0 0 0 8px transparent}}
+.ag-vstat{font-size:var(--fs-sm);color:var(--c-ink-2)}
+.ag-vstat[data-state=on]{color:var(--c-ok)}.ag-vstat[data-state=armed]{color:var(--c-accent);font-weight:700}
+.ag-vstat[data-state=ignored],.ag-vstat[data-state=err]{color:var(--c-warn)}
+.ag-heard{flex-basis:100%;font-size:var(--fs-xs);color:var(--c-ink-3);min-height:1.2em}
+.ag-read{font-size:var(--fs-xs);color:var(--c-ink-2);display:inline-flex;gap:4px;align-items:center;margin-left:auto}
+.ag-route{display:inline-block;font-size:var(--fs-xs);padding:1px 8px;border-radius:999px;background:var(--c-accent);color:var(--c-ink-inverse);margin-left:6px;vertical-align:middle}
+.ag-ignored{padding:10px 12px;border-radius:var(--r-md);border:var(--bw) dashed var(--c-line-strong);color:var(--c-ink-2);font-size:var(--fs-sm);margin-top:12px}
+.ag-ex .metric{border-color:var(--c-accent)}
+.ag-wake{font-weight:700;color:var(--c-accent)}
 </style>
 {% endblock %}
 {% block body %}
-<section class="panel">
+<section class="panel" data-agent data-wake="{{ wake_pattern }}" data-wake-name="{{ wake_name }}" data-speech="{{ (result.speech if result else '') or '' }}" data-voice-mode="{{ '1' if voice_mode else '0' }}">
   <div class="ag-top">
     <div>
-      <h2>MES AI Agent</h2>
-      <p>{{ t('MES 데이터를 SQL 로 조회하고 문서를 찾아 답하는 멀티 에이전트') }} — {{ t('라우터') }} → {{ t('스키마 탐색') }} → {{ t('SQL 작성') }} ⇄ {{ t('SQL 실행') }} → {{ t('문서 검색') }} → {{ t('답변') }}. {{ t('지금 역할로 읽을 수 있는 테이블') }} {{ n_tables }} · {{ t('DB 는 읽기만 한다') }}</p>
+      <h2>MES AI Agent <small class="ag-wake">「{{ wake_name }}」</small></h2>
+      <p>{{ t('MES 데이터를 SQL 로 조회하고 문서를 찾아 답하는 멀티 에이전트') }} — {{ t('오케스트레이터') }} → {{ t('정형 지표') }} | {{ t('스키마 탐색') }} → {{ t('SQL 작성') }} ⇄ {{ t('SQL 실행') }} | {{ t('문서 검색') }} → {{ t('답변') }}.
+        <b>「{{ wake_name }}」</b>{{ t('이라고 부른 질문에만 답한다') }} · {{ t('지금 역할로 읽을 수 있는 테이블') }} {{ n_tables }} · {{ t('DB 는 읽기만 한다') }}</p>
     </div>
-    <span class="ag-state {{ 'on' if configured else 'off' }}">{{ ('LLM ' ~ model) if configured else t('LLM 미구성 — 문서 검색만') }}</span>
+    <span class="ag-state {{ 'on' if configured else 'off' }}">{{ ('LLM ' ~ model) if configured else t('LLM 미구성 — 정형 지표 · 문서 검색만') }}</span>
+  </div>
+
+  <div class="ag-voice" role="group" aria-label="{{ t('음성 질의') }}">
+    <button type="button" class="btn ag-mic" data-mic aria-pressed="false"><span>{{ t('음성 질의 켜기') }}</span></button>
+    <button type="button" class="btn" data-speak>{{ t('답 읽어 주기') }}</button>
+    <span class="ag-vstat" data-voice-status aria-live="polite">{{ t('음성 질의를 준비하는 중') }}</span>
+    <label class="ag-read"><input type="checkbox" data-autoread checked> {{ t('답을 소리로 읽기') }}</label>
+    <span class="ag-heard" data-heard aria-live="polite"></span>
   </div>
 
   <form class="ag-form" method="post" action="/agent/ask">
-    <textarea name="question" required placeholder="{{ t('예: 이번 주 불합격 판정이 난 검사를 품목별로 알려줘') }}" aria-label="{{ t('질문') }}">{{ question or '' }}</textarea>
+    <input type="hidden" name="voice" value="">
+    <textarea name="question" required placeholder="{{ wake_name }}, {{ t('오늘의 생산량?') }}" aria-label="{{ t('질문') }}">{{ question or '' }}</textarea>
     <button type="submit" class="btn primary">{{ t('질문') }}</button>
   </form>
-  <form class="ag-ex" method="post" action="/agent/ask" aria-label="{{ t('예시 질문') }}">
-    {% for ex in examples %}<button type="submit" name="question" value="{{ ex }}">{{ ex }}</button>{% endfor %}
+  <form class="ag-ex" method="post" action="/agent/ask" aria-label="{{ t('추천 질의') }}">
+    {% for ex in examples %}<button type="submit" name="question" value="{{ ex }}"{% if loop.index <= n_metric %} class="metric" title="{{ t('정형 지표 — LLM 없이 바로 답한다') }}"{% endif %}>{{ ex }}</button>{% endfor %}
   </form>
 
-  {% if result %}
+  {% if result and result.ignored %}
+  <div class="ag-ignored" role="status">「{{ wake_name }}」{{ t('라고 부르지 않아 답하지 않았다') }} — {{ t('질문 앞에 호출어를 붙인다') }}: <b>{{ wake_name }}, {{ result.heard }}</b></div>
+  {% elif result %}
   <div class="ag-grid">
     <div class="ag-box">
-      <p class="ag-q">Q. {{ result.question }}</p>
+      <p class="ag-q">Q. {{ result.question }}{% if result.route %}<span class="ag-route">{{ {'metric': t('정형 지표 SQL'), 'sql': t('DB · SQL 조회'), 'rag': t('RAG 문서 조회'), 'both': 'SQL + RAG', 'chat': t('일반 대화'), 'wake': t('호출')}.get(result.route, result.route) }}</span>{% endif %}</p>
       {% if result.error %}<div class="ag-err" role="alert">{{ result.error }}</div>{% endif %}
       {% if result.answer %}<div class="ag-answer">{{ result.answer }}</div>{% endif %}
-      {% if result.sql %}
-      <h3 style="margin-top:14px">SQL <small>{{ result.sql_explanation }}</small></h3>
-      <pre class="ag-sql">{{ result.sql }}</pre>
-      {% endif %}
-      {% if result.data %}
-      <h3 style="margin-top:14px">{{ t('조회 결과') }} <small>{{ result.data.row_count }}{{ t('행') }}{% if result.data.truncated %} · {{ t('상한에서 잘림') }}{% endif %} · {{ result.data.ms }}ms</small></h3>
+      {% for tb in result.tables %}
+      <h3 style="margin-top:14px">{{ tb.title }} <small>{{ tb.data.row_count }}{{ t('행') }}{% if tb.data.truncated %} · {{ t('상한에서 잘림') }}{% endif %} · {{ tb.data.ms }}ms</small></h3>
+      <details><summary>SQL</summary><pre class="ag-sql">{{ tb.sql }}</pre></details>
       <div class="ag-tbl">
         <table class="grid plain">
-          <thead><tr>{% for c in result.data.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
-          <tbody>{% for r in result.data.rows %}<tr>{% for c in result.data.columns %}<td>{{ r[c] if r[c] is not none else '' }}</td>{% endfor %}</tr>{% else %}<tr><td colspan="{{ result.data.columns|length or 1 }}">{{ t('조회된 행 없음') }}</td></tr>{% endfor %}</tbody>
+          <thead><tr>{% for c in tb.data.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+          <tbody>{% for r in tb.data.rows %}<tr>{% for c in tb.data.columns %}<td>{{ r[c] if r[c] is not none else '' }}</td>{% endfor %}</tr>{% else %}<tr><td colspan="{{ tb.data.columns|length or 1 }}">{{ t('조회된 행 없음') }}</td></tr>{% endfor %}</tbody>
         </table>
       </div>
-      {% endif %}
+      {% endfor %}
     </div>
     <div class="ag-box">
-      <h3>{{ t('에이전트 진행') }} <small>{{ result.intent or '—' }}</small></h3>
+      <h3>{{ t('에이전트 진행') }} <small>{{ result.route or '—' }}</small></h3>
       <ol class="ag-trace">
         {% for s in result.trace %}
         <li class="{{ s.status }}"><span class="dot">{{ loop.index }}</span><div><b>{{ s.agent }}</b> — {{ s.title }}{% if s.ms is not none %} <small>({{ s.ms }}ms)</small>{% endif %}{% if s.detail %}<span class="d">{{ s.detail }}</span>{% endif %}</div></li>
@@ -97,4 +121,5 @@
   </div>
   {% endif %}
 </section>
+<script src="/agent/voice.js" defer></script>
 {% endblock %}
