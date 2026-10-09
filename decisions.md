@@ -160,6 +160,15 @@
 ## D-35 `Makefile` `kpi-snapshot` · `erp-flush` · `pack-db NAME=` · 상태: 가설
 - 개발3 요청. `pack-db` = `createdb` + 코어 스키마(+ `schema_ext.sql`) + `seed_core`(코어 → 팩 → 개발 시드). 팩이 `PackError` 면 팩 시드 단계에서 멈춘다(지어낸 폴백 없음). 회전 3 에 `mes_printfilm_db` 는 아키텍트가 코어 스키마 + 코어 시드만 넣었다(`MES_PACK=` + `MES_PG_DSN` 지정) — 팩 시드는 개발2 가 `MES_PACK=printfilm make db-reset`.
 
+
+## 아키텍트 (회전 4 · 웨이브 D-2 · 2026-10-09)
+
+## D-36 R9 범위 — 코어 단독 `tests/` 전건 + 팩을 올린 채 `tests/test_arch_*.py` · 상태: 가설
+- 세 팩 공통 CR-11(개발1 ⑧ · 개발2 CR-11 · 개발3). 옛 R9 "팩을 올린 채 코어 테스트 전건" 은 E1(역할 대체 · 권한 칸 · 채번 접두) · E3(시드 공정)와 양립하지 않는다 — 코어 업무 테스트는 `prod · qa · field` 계정 · goal.md §6 권한 표 · `M/W` 접두 · `PRC-EX-01` 측정값을 **정의상** 가정한다(팩에서 foodservice 35 · printfilm 57+6 실패). 그 가정을 병합본에서 끌어오게 고치면 테스트가 무엇을 증명하는지 흐려진다.
+- **정의**: R9 = ① 코어 단독(`MES_PACK=`)에서 `tests/` 전건(gate G-C21) ② 팩을 올린 채 `tests/test_arch_*.py` 전건(구조 · 병합 · 스키마 · 오류 계약 · 로그인 — 팩이 바꿀 수 없는 것만 단언, 코어 권한 표 · 접두를 보는 단언은 `is_core_only` 일 때만). 팩의 업무 흐름은 G-P04(팩 테스트)가 본다. "팩 폴더를 지운 채" 는 ① 과 같다(코어 단독은 팩을 읽지 않는다).
+- 판정: `check_pack` R9 — `MES_PACK=<팩> pytest tests/test_arch_*.py`(G-P01 에 들어간다 · `--no-r9` 로 건너뜀). `tests/test_arch_packs.py` 의 임시 팩 픽스처는 끝나고 **그 실행의 팩**(`MES_PACK`)으로 되돌린다(전엔 코어 단독으로 돌려 같은 실행의 뒤 테스트가 팩 DB 를 코어 병합본으로 보았다).
+- 게이트를 낮춘 것이 아니다 — 코어 단독 전건은 그대로이고, 팩에서 무엇을 보는지를 확장 지점과 맞췄다. 바뀌면 고칠 곳: `contracts/pack-contract.md` §4 R9 · `tools/check_pack.py` · `tests/test_arch_*.py`.
+
 ---
 
 ## 개발1 (웨이브 A R1·R2 · 2026-10-09 — `progress-dev1.md` §2 「계약과 달라진 점」 을 아키텍트가 옮겼다 · D-101 은 개발3 의견으로 바꿨다)

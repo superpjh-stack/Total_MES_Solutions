@@ -1,7 +1,7 @@
 """팩 로더 — 병합 규칙 R4~R6 (contracts/pack-contract.md §4) · 용어 치환 · 메뉴 숨김 · 계보 선언 (아키텍트).
 
 임시 팩을 `packs/_t_<이름>/` 에 만들어 `packs.load` 를 부르고 끝나면 지운다. 참조 팩 3개 폴더는 건드리지 않는다(D-24).
-`_template` 팩은 그대로 로드돼야 한다. 끝에 코어 단독으로 되돌린다 — 다른 테스트가 코어 병합본을 본다.
+`_template` 팩은 그대로 로드돼야 한다. 끝에 **이 실행의 팩(`MES_PACK` — 비면 코어 단독)** 으로 되돌린다 — 다른 테스트가 그 병합본을 본다(R9 · CR-11).
 """
 
 import shutil
@@ -32,7 +32,12 @@ def temp_pack():
     yield make
     for d in made:
         shutil.rmtree(d, ignore_errors=True)
-    packs.load(None)
+    _restore()
+
+
+def _restore() -> None:
+    from mescore.app.settings import get_settings
+    packs.load(get_settings().pack)
     nav.rebuild()
 
 
@@ -40,6 +45,7 @@ def test_template_pack_loads_and_core_only_restores():
     p = packs.load("_template")
     assert p.name == "_template" and len(p.core_modules) == 12 and len(p.core_screens) == 51
     assert packs.load(None).is_core_only
+    _restore()
 
 
 def test_terms_hide_rename_order_and_add(temp_pack):

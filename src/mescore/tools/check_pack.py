@@ -1,11 +1,12 @@
 #!/usr/bin/env python
-"""G-P01 팩 격리 — `MES_PACK=<팩> make check-pack` (`contracts/pack-contract.md` §4 R1 · R2 · R4~R8 · R10).
+"""G-P01 팩 격리 — `MES_PACK=<팩> make check-pack` (`contracts/pack-contract.md` §4 R1 · R2 · R4~R10).
 
   R1  코어 파일(src/mescore/**) 해시 변동 0 — outputs/core.sha256 대비 (tools/core_hash.py)
   R2  schema_ext.sql 에 코어 테이블 ALTER · DROP · 트리거 · 코어 이름 CREATE 없음 · 팩 테이블은 x_<팩>_ 접두 (R3)
   R4·R5·R6  pack.yaml 병합 규칙 — packs.load 가 PackError 를 내지 않는다
   R7  팩 라우터 · 훅의 쓰기 SQL(insert|update|delete … <테이블>) 대상이 x_<팩>_* + write_scope 뿐
   R8  lot_genealogy · sys_number_seq 직접 INSERT/UPDATE 없음
+  R9  팩을 올린 채 tests/test_arch_*.py 전건 통과 (D-36 · CR-11 — 코어 단독 tests/ 전건은 gate G-C21). `--no-r9` 로 건너뛴다
   R10 코어 템플릿을 덮어쓴 파일 목록 (WARN) — README.md 에 적혀 있어야 한다
   D-05 attrs->> 를 WHERE 에서 쓰면 WARN, 집계(group by · sum 등) 에서 쓰면 FAIL
 
@@ -115,6 +116,18 @@ def main() -> int:
         unlisted = [t for t in over if t not in readme]
         add("R10 코어 템플릿 덮어쓰기 목록 (README.md 에 적는다)", "WARN" if over and not unlisted else ("FAIL" if unlisted else "PASS"),
             f"덮어쓴 템플릿 {over or 0}" + (f" · README 에 없음 {unlisted}" if unlisted else ""))
+
+    # R9 (CR-11 · D-36) — 팩을 올린 채 tests/test_arch_*.py 전건. 코어 단독(MES_PACK=) tests/ 전건은 gate 의 G-C21 이 같은 실행에서 판정한다
+    if "--no-r9" not in sys.argv:
+        import subprocess
+
+        arch = sorted(str(f.relative_to(ROOT)) for f in (ROOT / "tests").glob("test_arch_*.py"))
+        proc = subprocess.run(["uv", "run", "pytest", "-q", "-p", "no:cacheprovider", *arch], cwd=ROOT, env={**os.environ, "MES_PACK": pack},
+                              capture_output=True, text=True, timeout=900)
+        tail = next((ln.strip() for ln in reversed(proc.stdout.splitlines()) if re.search(r"\d+ (passed|failed|error)", ln)), "출력 없음")
+        failed = [ln.split(" ", 1)[1].split(" - ")[0] for ln in proc.stdout.splitlines() if ln.startswith(("FAILED ", "ERROR "))]
+        add("R9 팩을 올린 채 tests/test_arch_*.py 통과 (코어 단독 tests/ 전건은 G-C21)", "PASS" if proc.returncode == 0 else "FAIL",
+            f"파일 {len(arch)} · {tail}" + (f" {failed[:3]}" if failed else ""))
 
     w = max(len(i) for i, _, _ in rows)
     for item, st, actual in rows:

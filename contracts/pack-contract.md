@@ -72,7 +72,7 @@ packs/<팩>/
 | R6 | `lineage.*[].base` 는 코어 종류 · `terms` 키는 `terms_keys` 안 · `requires_core` 만족 | `packs.load` |
 | R7 | 팩 라우터 · 훅의 쓰기 SQL 대상은 `x_<팩>_*` + `write_scope` 뿐 | `check_pack` 정적 스캔(`insert|update|delete … <table>`) |
 | R8 | `lot_genealogy` · `sys_number_seq` 직접 INSERT/UPDATE 없음 — `lineage` · `numbering` 만 | 〃 |
-| R9 | 코어 테스트(`tests/`)가 팩을 올린 채로도, 팩 폴더를 지운 채로도 전건 통과 | `make test` ×2 |
+| R9 | **코어 단독(`MES_PACK=`)에서 `tests/` 전건** 통과 + **팩을 올린 채 `tests/test_arch_*.py`** 통과(D-36 · CR-11). 팩이 역할 · 권한 · 채번 · 시드 공정을 바꾸는 것은 정상 확장이라 업무 테스트(`tests/test_<모듈>*.py` — 코어 권한 표 · 접두 · 예시 공정을 가정)는 팩에서 돌리지 않는다. 팩의 업무 흐름은 팩 테스트(`packs/<팩>/tests/` · G-P04)가 본다 | 코어 단독 전건 = gate G-C21 · 팩 `test_arch_*` = `check_pack` R9 |
 | R10 | 코어 템플릿을 덮어쓴 파일 목록을 `README.md` 에 적는다 | `check_pack` WARN 목록 ↔ README |
 | R11 | 팩 안에 외부 CDN · 제어 명령 엔드포인트 · 비밀값 없음 | `check_security` |
 
