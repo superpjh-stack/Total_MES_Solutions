@@ -79,11 +79,21 @@ def test_create_links_order_detail_and_plan(admin, base):
     partner = conn.q1("select id from bas_partner limit 1")
     o = conn.q1("insert into ord_order (order_no, partner_id, order_date, created_by) values (%s, %s, current_date, 'test') returning id", (f"T-O-{SFX}", partner["id"]))
     d = conn.q1("insert into ord_order_dtl (order_id, line_no, item_id, qty, created_by) values (%s, 1, %s, 10, 'test') returning id", (o["id"], base["item_id"]))
-    p = conn.q1("insert into ord_plan (plan_no, order_dtl_id, item_id, plan_date, plan_qty, created_by) values (%s, %s, %s, current_date, 10, 'test') returning id", (f"T-N-{SFX}", d["id"], base["item_id"]))
+    p = conn.q1("insert into ord_plan (plan_no, order_dtl_id, item_id, plan_date, plan_qty, created_by) values (%s, %s, %s, current_date, 10, 'test') returning id, status", (f"T-N-{SFX}", d["id"], base["item_id"]))
+    assert p["status"] == "계획"
+    r = admin.post("/job/work-orders", data={"item_id": base["item_id"], "process_id": base["process_id"], "plan_qty": "10", "order_dtl_id": d["id"], "plan_id": p["id"]})
+    assert r.status_code == 422 and r.json()["fields"][0]["name"] == "plan_id"                                # D-101: 확정된 계획만 지시로 이어진다
+    assert conn.q1("select status from ord_order_dtl where id = %s", (d["id"],))["status"] == "대기"           # 422 면 아무것도 안 바뀐다
+    conn.x("update ord_plan set status = '확정' where id = %s", (p["id"],))                                     # F-ORD-09 의 몫 — 테스트는 직접 올린다
     r = admin.post("/job/work-orders", data={"item_id": base["item_id"], "process_id": base["process_id"], "plan_qty": "10", "order_dtl_id": d["id"], "plan_id": p["id"]})
     assert r.status_code == 200
     assert conn.q1("select status from ord_order_dtl where id = %s", (d["id"],))["status"] == "지시"
-    assert conn.q1("select status from ord_plan where id = %s", (p["id"],))["status"] == "확정"
+    assert conn.q1("select status from ord_plan where id = %s", (p["id"],))["status"] == "확정"                 # 지시는 계획 상태를 바꾸지 않는다 (D-101)
+    assert any(v == str(p["id"]) for v, _ in admin.get("/job/work-orders").json()["options"]["plan_id"])        # 선택지는 확정 계획만
+    conn.x("update ord_plan set status = '취소' where id = %s", (p["id"],))
+    assert admin.post("/job/work-orders", data={"item_id": base["item_id"], "process_id": base["process_id"], "plan_qty": "10", "plan_id": p["id"]}).status_code == 422
+    assert not any(v == str(p["id"]) for v, _ in admin.get("/job/work-orders").json()["options"]["plan_id"])
+    conn.x("update ord_plan set status = '확정' where id = %s", (p["id"],))
     assert admin.post(f"/job/work-orders/{r.json()['id']}/cancel").status_code == 200
     assert conn.q1("select status from ord_order_dtl where id = %s", (d["id"],))["status"] == "대기"       # 취소하면 되돌린다
     _cleanup(r.json()["id"])
@@ -149,8 +159,11 @@ def test_list_filters_and_progress_is_computed(admin, qa, base):
     assert j["screen_id"] == "JOB-01" and any(r["id"] == wo["id"] and r["progress"] == "대기" for r in j["rows"])
     res = conn.q1("insert into pop_work_result (work_order_id, process_id, created_by) values (%s, %s, 'test') returning id", (wo["id"], base["process_id"]))
     j = admin.get("/job/work-orders?status=진행").json()
-    assert any(r["id"] == wo["id"] and r["progress"] == "진행" and r["status"] == "대기" for r in j["rows"])    # 저장 안 함 — 실적 유무
+    assert j["rows"][0]["id"] == wo["id"] and j["rows"][0]["progress"] == "진행" and j["rows"][0]["status"] == "대기"   # 저장 안 함 — 실적 유무 · 최신 등록이 첫 줄(잔존 데이터 무관)
+    j = admin.get(f"/job/work-orders?status=진행&no={wo['work_order_no']}").json()                            # 번호로 좁혀도 같은 행
+    assert len(j["rows"]) == 1 and j["rows"][0]["id"] == wo["id"] and j["rows"][0]["progress"] == "진행"
     assert not any(r["id"] == wo["id"] for r in admin.get("/job/work-orders?status=대기").json()["rows"])
+    assert not any(r["id"] == wo["id"] for r in admin.get(f"/job/work-orders?status=대기&no={wo['work_order_no']}").json()["rows"])
     assert admin.get(f"/job/work-orders?item_id={base['item_id']}&process_id={base['process_id']}&no={wo['work_order_no']}").json()["rows"][0]["id"] == wo["id"]
     assert admin.get("/job/work-orders?date_from=bad").status_code == 422
     assert admin.get(f"/job/work-orders?edit={wo['id']}", headers=HTML).status_code == 200
@@ -166,10 +179,13 @@ def test_status_board_today_week_and_drilldown(admin, base):
     res = conn.q1("insert into pop_work_result (work_order_id, process_id, ended_at, good_qty, defect_qty, created_by) values (%s, %s, now(), 4, 1, 'test') returning id", (wo["id"], base["process_id"]))
     j = admin.get("/job/status").json()
     assert j["screen_id"] == "JOB-02" and j["summary"]["전체"] >= 1
-    row = next(r for r in j["rows"] if r["id"] == wo["id"])
-    assert row["progress"] == "진행" and float(row["good_qty"]) == 4 and row["achieve_pct"] == 40.0
-    j = admin.get(f"/job/status?range=week&wo={wo['id']}").json()
-    assert j["detail"]["id"] == wo["id"] and len(j["results"]) == 1 and float(j["results"][0]["good_qty"]) == 4
+    assert j["rows"][0]["id"] == wo["id"], "최신 등록 지시가 첫 줄 (w.id desc) — 잔존 데이터가 LIST_LIMIT 를 넘어도"
+    row = j["rows"][0]
+    assert row["progress"] == "진행" and float(row["good_qty"]) == 4 and row["achieve_pct"] == 40.0 and j["summary"]["진행"] >= 1
+    j = admin.get(f"/job/status?range=week&wo={wo['id']}").json()                                              # ?wo= 드릴다운 (D-604) — 목록 상한과 무관
+    assert j["detail"]["id"] == wo["id"] and j["detail"]["work_order_no"] == wo["work_order_no"]
+    assert len(j["results"]) == 1 and float(j["results"][0]["good_qty"]) == 4 and float(j["results"][0]["defect_qty"]) == 1
+    assert j["range"] == "week" and j["frm"] <= date.today().isoformat() <= j["to"]
     assert admin.get("/job/status?range=bad").status_code == 422
     assert admin.get("/job/status?wo=999999999").status_code == 404
     assert admin.get("/job/status?device=mobile", headers=HTML).status_code == 200                             # 모바일 채널 허용

@@ -1,6 +1,7 @@
 """job 라우터 — 작업지시 (기능 7 · 화면 3) · 담당 개발1.
 
-쓰는 테이블: `job_work_order` `job_lot` · `ord_order_dtl.status`(지시 연결 상태만) · `ord_plan.status`(지시가 붙으면 `확정`) — db-schema.md §2.
+쓰는 테이블: `job_work_order` `job_lot` · `ord_order_dtl.status`(지시 연결 상태만) — db-schema.md §2.
+`ord_plan.status` 는 **바꾸지 않는다**(D-101 · 개발3 안): F-JOB-01 은 `확정` 계획만 받고(`계획` · `취소` 는 422) 상태 전이는 F-ORD-09 만 한다.
 LOT 을 미리 만들지 않고 실적에 쓰지 않는다. 진행 여부는 저장하지 않고 실적 유무로 계산한다(`v_work_order_progress`).
 번호는 `numbering.next("WORK_ORDER", cur=cur)` 만 만든다(G-C08).
 
@@ -40,8 +41,8 @@ WORK_ORDERS, STATUS, PRINT = nav.path_of("JOB-01"), nav.path_of("JOB-02"), nav.p
 ST_WAIT, ST_RUN, ST_CLOSED, ST_CANCEL = "대기", "진행", "마감", "취소"
 STATUSES = (ST_WAIT, ST_RUN, ST_CLOSED, ST_CANCEL)
 DTL_WAIT, DTL_ORDERED = "대기", "지시"
-PLAN_CONFIRMED = "확정"
-LIST_LIMIT = 500
+PLAN_CONFIRMED = "확정"                           # D-101 — 이 상태의 계획만 지시로 이어진다 (F-ORD-09 가 올린다)
+LIST_LIMIT = 500                                 # 목록 · 현황판은 `w.id desc`(최신 등록 우선) 로 이 안에서 — 잔존 데이터가 많아도 방금 만든 지시가 보인다
 PRINTING_AVAILABLE = importlib.util.find_spec("mescore.app.printing") is not None     # 개발2 R2 — 있으면 그것으로 출력한다
 
 WO_SELECT = """
@@ -123,7 +124,7 @@ def options() -> dict[str, list[tuple[str, str]]]:
         "equipment_id": [(str(r["id"]), f"{r['equip_code']} {r['equip_name']}") for r in conn.q(
             "select id, equip_code, equip_name from bas_equipment where use_yn = 'Y' order by equip_code")],
         "plan_id": [(str(r["id"]), f"{r['plan_no']} ({r['plan_date']} · {r['plan_qty']})") for r in conn.q(
-            "select id, plan_no, plan_date, plan_qty from ord_plan where status <> '취소' order by plan_date desc, id desc limit 500")],
+            "select id, plan_no, plan_date, plan_qty from ord_plan where status = %s order by plan_date desc, id desc limit 500", (PLAN_CONFIRMED,))],   # D-101 확정만
         "order_dtl_id": [(str(r["id"]), f"{r['order_no']} #{r['line_no']} ({r['item_code']} {r['qty']})") for r in conn.q(
             """select d.id, o.order_no, d.line_no, i.item_code, d.qty from ord_order_dtl d join ord_order o on o.id = d.order_id join bas_item i on i.id = d.item_id
                 where o.status <> '취소' order by o.order_date desc, d.line_no limit 500""")],
@@ -163,7 +164,7 @@ def work_orders(request: Request, date_from: str = "", date_to: str = "", item_i
     if no.strip():
         where.append(contains("w.work_order_no"))
         params.append(no.strip())
-    rows = conn.q(WO_SELECT + f" where {' and '.join(where)} order by w.plan_date desc nulls last, w.id desc limit {LIST_LIMIT}", params)
+    rows = conn.q(WO_SELECT + f" where {' and '.join(where)} order by w.id desc limit {LIST_LIMIT}", params)          # 최신 등록 우선
     for r in rows:
         r["progress"] = ST_RUN if (r["status"] == ST_WAIT and r["started"]) else r["status"]
     editing = wo_of_path(edit) if edit else None
@@ -184,6 +185,10 @@ def create_work_order(request: Request, user: rbac.User = rbac.require_fn("F-JOB
     process_id = ref_of(form, "process_id", "공정", "bas_process", required=True)
     equipment_id = ref_of(form, "equipment_id", "설비", "bas_equipment")
     plan_id = ref_of(form, "plan_id", "생산계획", "ord_plan")
+    if plan_id is not None:                                                                          # D-101 — 확정된 계획만 지시로 이어진다
+        plan = conn.q1("select plan_no, status from ord_plan where id = %s", (plan_id,))
+        if plan["status"] != PLAN_CONFIRMED:
+            raise bad("확정된 계획만 지시로 이어진다", "plan_id", f"{plan['plan_no']} 상태 {plan['status']}", "생산계획")
     order_dtl_id = ref_of(form, "order_dtl_id", "수주 상세", "ord_order_dtl")
     bom_id = ref_of(form, "bom_id", "BOM", "bas_bom") if text_of(form, "bom_id", "BOM", max_len=20) else active_bom_id(item_id)
     if bom_id is not None and conn.q1("select 1 as hit from bas_bom where id = %s and item_id = %s", (bom_id, item_id)) is None:
@@ -219,9 +224,6 @@ def create_work_order(request: Request, user: rbac.User = rbac.require_fn("F-JOB
         if order_dtl_id is not None:
             cur.execute("update ord_order_dtl set status = %s, updated_at = now(), updated_by = %s where id = %s and status = %s",
                         (DTL_ORDERED, user.login_id, order_dtl_id, DTL_WAIT))
-        if plan_id is not None:
-            cur.execute("update ord_plan set status = %s, updated_at = now(), updated_by = %s where id = %s and status = '계획'",
-                        (PLAN_CONFIRMED, user.login_id, plan_id))
         packs.hook("after_save_job_work_order")(cur, row, user)
         packs.hook("on_work_order_created")(cur, row, user)
     audit.log_change(request, user, "F-JOB-01", f"job_work_order:{row['work_order_no']}", {"id": row["id"], "item_id": item_id, "plan_qty": str(plan_qty), "lots": len(row["lots"])})
@@ -327,7 +329,7 @@ def status_board(request: Request, range: str = "today", wo: str = "", user: rba
     frm = today if range == "today" else today - timedelta(days=today.weekday())
     to = today if range == "today" else frm + timedelta(days=6)
     rows = conn.q(WO_SELECT + " where (w.plan_date between %s and %s) or (w.plan_date is null and w.created_at::date between %s and %s) "
-                  f"order by w.plan_date nulls last, w.id limit {LIST_LIMIT}", (frm, to, frm, to))
+                  f"order by w.id desc limit {LIST_LIMIT}", (frm, to, frm, to))                 # 최신 등록 우선 — 상한 안에 방금 만든 지시가 든다
     for r in rows:
         r["progress"] = ST_RUN if (r["status"] == ST_WAIT and r["started"]) else r["status"]
         r["achieve_pct"] = float((Decimal(r["good_qty"]) / Decimal(r["plan_qty"]) * 100).quantize(Decimal("0.1"))) if r["plan_qty"] else None

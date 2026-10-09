@@ -1,5 +1,6 @@
 {# SYS-04 접근 로그 (F-SYS-10 · G-C18 · 개발1 · 디자이너1 이식) — 기간 · 사용자 · 종류(login_ok · login_fail · view · change · error) · 화면 · 기능 · 대상. 비밀번호 · 세션 ID 는 없다. 쓰기 0.
-   라우터 ctx: rows · by_kind · total · limit · kinds · kind_options · path · f. #}
+   라우터 ctx: rows · by_kind · total · limit · kinds · kind_options · path · f.
+   기능명(r.detail.name — audit.log_change 가 넣은 function-list.md 중립어) · 대상(r.target) 은 `|t` 를 거친다 — 팩 용어(G-P05 · 개발3 §3-14 · 개발2 §3-B). #}
 {% extends "base.html" %}
 {% import "home/_macros.html" as ui with context %}
 
@@ -27,8 +28,8 @@
       <td data-l="{{ t('로그인 ID') }}">{{ r.login_id|txt }}</td>
       <td data-l="{{ t('화면') }}">{% if r.screen_id %}<code>{{ r.screen_id }}</code>{% else %}-{% endif %}</td>
       <td data-l="{{ t('기능') }}">{% if r.fn_id %}<code>{{ r.fn_id }}</code>{% else %}-{% endif %}</td>
-      <td data-l="{{ t('대상') }}">{{ r.target|txt }}</td>
-      <td class="wrap" data-l="{{ t('상세') }}">{{ (r.detail.name if r.detail and r.detail.name else (r.detail.text if r.detail and r.detail.text else ''))|txt }}</td>
+      <td data-l="{{ t('대상') }}">{{ r.target|txt|t }}</td>
+      <td class="wrap" data-l="{{ t('상세') }}">{{ (r.detail.name if r.detail and r.detail.name else (r.detail.text if r.detail and r.detail.text else ''))|txt|t }}</td>
       <td data-l="{{ t('채널') }}">{{ r.device|txt }}</td>
       <td data-l="IP"><code>{{ r.ip|txt }}</code></td>
     </tr>

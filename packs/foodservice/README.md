@@ -188,9 +188,10 @@
 | 파일 | 왜 |
 |---|---|
 | `templates/print/work_order.html` | 작업지시서에 레시피(구성품 · 배합량 · 배치 기준인분) · 조리순서 · 주의사항 · 투입 LOT 추천(유통기한 순)을 찍는다 — TD3-017 "레시피 · 주의사항 미리보기" · TD4-017 기능 2 |
-| `templates/sys/logs.html` | (개발1 웨이브 B 추가) SYS-04 「상세」 칸에 `\|t` 한 줄 — 코어 `audit.log_change` 가 기능 이름(중립어 '작업 종료' · '출하 LOT 스캔')을 `detail.name` 에 그대로 저장하고 코어 양식이 `t()` 없이 찍어 G-P05 에 걸린다. 코어가 고치면 지운다 (`progress-dev1.md` §3) |
 
-그 밖의 코어 템플릿은 덮어쓰지 않는다. `check_pack` WARN 목록이 이 2건과 같아야 한다.
+~~`templates/sys/logs.html`~~ — 웨이브 B 에 SYS-04 「상세」 칸 `|t` 한 줄을 위해 덮어썼던 것은 **회전 4 에 지웠다**: 코어 `sys/logs.html` 이 기능명 · 대상에 `|t` 를 거친다(개발1 · `progress-dev1.md` §2 회전 4).
+
+그 밖의 코어 템플릿은 덮어쓰지 않는다. `check_pack` WARN 목록이 이 1건과 같아야 한다.
 
 ---
 
