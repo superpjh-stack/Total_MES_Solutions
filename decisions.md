@@ -178,6 +178,7 @@
 
 ## D-38 팩 문구의 용어 치환 범위 — `menus.rename` 값은 그대로 · 속성 라벨은 `t()` · 상태: 가설
 - 회전 5 아키텍트(DEF-QA1-003 · G-P05). ① `menus.rename` 값은 **팩이 쓴 최종 이름**(`pack.verbatim`) — `t()` 를 걸지 않는다(회전 4 결정 유지 · 값이 terms 키와 똑같을 때만 치환). 그래서 rename 값은 terms 키를 담지 않게 **최종 꼴로** 쓴다(foodservice `실적 (POP)` → `조리 실적 (POP)` 처럼). `check_terms --pack` 은 rename 값을 노출로 세지 않는다. ② 팩 `attrs` 라벨은 `packs.attrs_of()` 가 **`t()` 를 거친 라벨**을 준다 — 팩은 라벨을 terms 키(중립어)로 쓴다(`공정구분` → `조리 공정구분`). 선택지(`choices`)는 저장 값이라 바꾸지 않는다. ③ 판정 단위는 화면 글 조각(태그 사이 글 · title/placeholder/aria-label) — 표 본문 · 선택지 · 숫자/`(예시)` 가 든 조각(DB 값)은 뺀다(QA1 `check_screens` 와 같은 규칙).
+- **회전 7(DEF-QA1-011)**: ① 의 「terms 키를 담지 않는다」 는 **붙여 쓴 합성어도 포함**(`품질이상` ⊃ `이상`) — 예외를 두지 않는다. QA1 `check_screens` G-P05 「menus.rename 값에 치환 안 된 terms 키 0」 행은 그대로 둔다(kimchi 는 기획자3 이 이름을 고친다). `pack-contract.md` §2 `menus.rename` 줄.
 - 바뀌면 고칠 곳: `app/packs.py`(`t` · `attrs_of`) · `tools/check_terms.py`.
 
 ## D-39 출하 승인 뒤 ERP 큐는 코어 기본 훅이 넣는다 · 상태: 가설
@@ -358,3 +359,15 @@
 ## D-40 G-P01 R10 — README 에 적힌 템플릿 덮어쓰기는 PASS · 상태: 가설
 - `pack-contract.md` §4 R10 은 "코어 템플릿을 덮어쓴 파일 목록을 README.md 에 적는다" 다. 지금까지 `check_pack` 은 전부 적혀 있어도 WARN 을 냈고, `goal.md` §2.8 은 WARN 을 통과로 보지 않아 규칙을 지킨 팩(foodservice 1 · printfilm 3)이 종료 조건에 걸렸다.
 - 오케스트레이터(회전 5 판정)가 판정을 고쳤다: 전부 README 에 있으면 PASS(목록은 실측 칸에 남는다) · 하나라도 없으면 FAIL. 덮어쓰기 자체는 `spec.md` §3.4 의 허용된 탈출구라 실패가 아니다.
+
+## D-41 열린 투입으로 잔량 0 인 PRODUCT LOT 은 종료 전이라도 `소진` · 상태: 확정(회전 7 아키텍트 — DEF-QA2-008)
+- QA2 회전 6: §3.4 회전 5 문장 「열린 투입은 상태를 바꾸지 않는다」 때문에 LOT 20 을 종료 전 실적에 20 투입하면 잔량 0 인데 `재고` — 화면 · 추적에 거짓 「재고」 가 보이고, `assert_usable`(상태만 봄)이 수량 없는 투입 · 분할 · 합병 · 종료 합병 옵션 · 출하 스캔을 받아 같은 LOT 이 두 경로로 나갔다.
+- **결정**: `v_lot_state` PRODUCT 는 출하 → `출하`, `분할|합병|생산` 부모 → `소진`(통째) 다음에 **잔량(`v_lot_stock` — 계보 + 종료 전 실적의 투입) ≤ 0 이면 `소진`** — 종료 전이라도. 열린 `pop_input.qty` NULL(수량 모르는 투입)도 통째로 보아 `소진`, LOT 수량 NULL 인데 투입(계보 · 열린)이 있으면 `소진`. 투입을 취소하면 다시 `재고`(뷰 계산이라 저장 상태 없음). 회전 5 의 「열린 투입은 상태 불변」 문장은 폐기한다.
+- 쓰기 경로는 이중으로 막는다 — 뷰가 `소진` 이면 `assert_usable` 이 422 이고, 개발2 는 잔량(열린 투입 포함) ≤ 0 · 잠금(DEF-QA2-009)을 쓰기 함수에서 따로 본다. 둘이 같은 `v_lot_stock` 을 본다.
+- 바뀌면 고칠 곳: `db/views.sql`(`v_lot_state`) · `contracts/db-schema.md` §3.4 · `tests/test_arch_schema.py::test_product_lot_open_input_to_zero_is_consumed`.
+
+## D-42 운영 HTTP 사내망에서 세션 쿠키 `Secure` 를 끄는 설정 · 상태: 차단(사람 결정)
+- QA3 회전 6 재현: `MES_ENV=prod` 를 HTTP 로 LAN 주소에서 열면 `POST /login` 303 → `/` 303 → `/login` — 서버는 세션을 발급하지만 브라우저가 `Secure` 쿠키를 저장하지 않아 로그인이 안 된다(루프백만 예외). D-605 · DEF-QA3-007 로 운영은 `Secure` 가 기본이다.
+- **아키텍트 제안**: ① 기본 — 운영은 TLS 종단(사내 리버스 프록시 · HTTPS) 뒤에 둔다. 코드 변경 없음. 프록시 뒤면 uvicorn `--proxy-headers --forwarded-allow-ips=<프록시 주소>`. ② HTTP 사내망만 쓰기로 정하면 `MES_COOKIE_SECURE=0`(명시 설정 · 기본 1 · `.env.example` 에 설명) 을 `settings` 에 두고 `main.py` `SessionMiddleware(https_only=…)` 가 그 값을 본다. dev 모드로 대신하지 않는다(`/login/as`).
+- 사람이 정할 것: HTTPS 로 갈지 · TLS 를 어디서 끊을지(프록시 · 인증서) · HTTP 운영을 허용할지(②를 코드에 넣을지). 결정 전에는 **코드에 넣지 않는다** — 운영 문서(`CLAUDE.md` 환경 절)에 제안만.
+- 바뀌면 고칠 곳(② 채택 시): `app/settings.py` · `app/main.py`(`https_only`) · `.env.example` · `tests/test_arch_smoke.py::test_logout_is_post_only_and_cookie_flags`.

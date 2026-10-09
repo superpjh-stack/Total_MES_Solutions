@@ -30,6 +30,7 @@
 - PostgreSQL 17 (unix socket `/tmp`). DB **`mes_core_db`**(코어 단독) · `mes_kimchi_db` · `mes_foodservice_db` · `mes_printfilm_db`(팩별). 포트 **8030**(8000 니즈푸드 · 8020 엘컴화인이 쓴다).
 - `uv` / Python 3.12. **명령은 전부 `uv run …`** — 시스템 `python3` 를 쓰지 않는다.
 - 환경변수 접두 `MES_` (`.env.example`). `MES_PACK` 이 팩을 고른다(비우면 코어 단독). 비밀(`MES_SESSION_SECRET` · `MES_SEED_PASSWORD`)은 로컬 `.env`(gitignore)에만 — **코드 · 문서에 값을 적지 않는다**(G-C19). `make setup` 이 `.env` 를 난수로 만든다.
+- **운영(`MES_ENV` ≠ dev)은 TLS 종단(리버스 프록시 · HTTPS) 뒤에 둔다 — 제안 · D-42 사람 결정 대기.** 운영 세션 쿠키는 `Secure` 라서 다른 PC 가 `http://<LAN 주소>:포트` 로 열면 브라우저가 쿠키를 저장하지 않아 로그인이 안 된다(QA3 회전 6 재현 · 루프백 `127.0.0.1` 만 예외). 프록시 뒤면 uvicorn `--proxy-headers --forwarded-allow-ips=<프록시 주소>` 로 전달 헤더를 그 프록시에서만 믿는다. HTTP 사내망만 쓰기로 정하면 `MES_COOKIE_SECURE=0` 같은 **명시 설정** 하나로 Secure 를 끈다(**아직 코드에 없다** — D-42). `MES_ENV=dev` 로 대신하지 않는다(dev 는 `/login/as` 를 루프백에 연다 · D-605).
 - **이 폴더 밖은 읽기만 한다.** push · 배포 · 외부 전송 없음.
 
 ## 명령

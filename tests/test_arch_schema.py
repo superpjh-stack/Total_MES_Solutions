@@ -217,3 +217,27 @@ def test_product_lot_open_input_counts_in_stock(cur):
     cur.execute("update pop_work_result set ended_at = now() where id = %s", (e,))
     _edge(cur, lot, child, "투입", 15)                           # 종료 → 계보 투입 15 (lineage 가 하는 일)
     assert (remain()["remain_qty"], remain()["consumed_qty"]) == (5, 15)
+
+
+def test_product_lot_open_input_to_zero_is_consumed(cur):
+    """D-41 · DEF-QA2-008 — 열린 투입(종료 전)으로 잔량 0 이 된 PRODUCT LOT 은 종료 전이라도 `소진`. 취소하면 다시 `재고`.
+    열린 투입의 수량을 모르면(qty NULL) 통째로 쓴 것으로 보고 `소진`. 잔량이 남으면 `재고` 그대로(부분 투입)."""
+    sfx = _current_views(cur)
+    item = _one(cur, "insert into bas_item (item_code, item_name, item_type, created_by) values (%s, '제품 (예시)', '제품', 't') returning id", (f"T-OZ-{sfx}",))["id"]
+    proc = _one(cur, "insert into bas_process (process_code, process_name, created_by) values (%s, '공정 (예시)', 't') returning id", (f"T-OZ-{sfx}",))["id"]
+    wo = _one(cur, "insert into job_work_order (work_order_no, item_id, process_id, plan_qty, created_by) values (%s, %s, %s, 10, 't') returning id",
+              (f"T-OZ-{sfx}", item, proc))["id"]
+    r = _one(cur, "insert into pop_work_result (work_order_id, process_id, created_by) values (%s, %s, 't') returning id", (wo, proc))["id"]
+    full, part, unknown = (_lot(cur, f"{n}-{sfx}", "PRODUCT", item, qty=20) for n in ("T-OZ-F", "T-OZ-P", "T-OZ-U"))
+
+    def state(lot_id):
+        return _one(cur, "select s.state, k.remain_qty from v_lot_state s join v_lot_stock k on k.lot_id = s.lot_id where s.lot_id = %s", (lot_id,))
+
+    inp = _one(cur, "insert into pop_input (work_result_id, material_lot_id, qty, created_by) values (%s, %s, 20, 't') returning id", (r, full))["id"]
+    assert (state(full)["state"], state(full)["remain_qty"]) == ("소진", 0)      # 종료 전이라도 소진 — 거짓 「재고」 없음
+    cur.execute("update pop_input set canceled_yn = 'Y' where id = %s", (inp,))
+    assert (state(full)["state"], state(full)["remain_qty"]) == ("재고", 20)     # 취소하면 되돌아온다
+    cur.execute("insert into pop_input (work_result_id, material_lot_id, qty, created_by) values (%s, %s, 15, 't')", (r, part))
+    assert (state(part)["state"], state(part)["remain_qty"]) == ("재고", 5)      # 부분 투입은 재고
+    cur.execute("insert into pop_input (work_result_id, material_lot_id, qty, created_by) values (%s, %s, null, 't')", (r, unknown))
+    assert state(unknown)["state"] == "소진"                                      # 수량 모르는 열린 투입 → 통째

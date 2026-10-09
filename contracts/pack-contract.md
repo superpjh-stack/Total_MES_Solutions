@@ -31,7 +31,7 @@ packs/<팩>/
 | `requires_core` | ✓ | semver 범위. `core.yaml: core_version` 이 밖이면 기동 거부 |
 | `terms` | | `{코어 중립어: 업종어}`. 키는 `core.yaml: terms_keys` 에 있어야 한다. 값은 자유(업종어 허용). 치환(`packs.t`)은 **한 번 훑기 · 같은 자리에서 긴 키 먼저**(`출하 LOT` 이 `출하` 보다 먼저) · 치환 결과를 다시 치환하지 않는다 · **겹말 방지** — 값이 키를 품고(`추적: LOT 추적`) 원문 그 자리가 이미 그 값이면 그대로(`LOT 추적` → `LOT LOT 추적` 이 되지 않는다) |
 | `menus.hide` | | 코어 메뉴 코드 목록. 숨긴 메뉴의 화면은 403 + 메뉴 없음. 테이블 · 테스트는 남는다 |
-| `menus.rename` | | `{코드: 이름}`. **이름은 팩이 쓴 최종 문구 — `t()` 를 걸지 않는다**(회전 4 · 붙여 쓴 합성어 `품질이상` 의 겹말까지 막는다). 업종어로 다 쓴 이름을 준다(`실적 (POP)` 이 아니라 `조리 실적 (POP)`). 예외: 이름이 `terms` 키와 **똑같으면**(`출하`) 그 낱말은 어디서나 치환 대상이라 치환된다. G-P05(`check_terms --pack`)는 rename 값을 노출로 세지 않는다 |
+| `menus.rename` | | `{코드: 이름}`. **이름은 팩이 쓴 최종 문구 — `t()` 를 걸지 않는다**(회전 4 · 붙여 쓴 합성어 `품질이상` 의 겹말까지 막는다). 업종어로 다 쓴 이름을 준다(`실적 (POP)` 이 아니라 `조리 실적 (POP)`). 예외: 이름이 `terms` 키와 **똑같으면**(`출하`) 그 낱말은 어디서나 치환 대상이라 치환된다. G-P05(`check_terms --pack`)는 rename 값을 화면 글 노출로 세지 않는다. **rename 값에 `terms` 키를 날것으로 넣지 않는다 — 붙여 쓴 합성어 포함**(`품질이상` 은 키 `이상` 을 담는다 → 치환어로 쓴 최종 꼴 `품질 이슈` 처럼). `check_screens` G-P05 「menus.rename 값에 치환 안 된 terms 키 0」 행이 이것을 FAIL 로 잡는다(회전 7 · D-38 ① · DEF-QA1-011) |
 | `menus.order` | | 코어 + 팩 메뉴 코드 전체 순서. 빠진 것은 뒤에 코어 순서로 |
 | `menus.add[]` | | `{code, name, after, owner, channels[]}`. `code` 는 코어 12 와 다르게. `owner` 는 팩 `function-list.md` 담당 검사에 쓴다(없으면 팩 이름). `channels` 는 아래 채널 표기(없으면 `관리자 Web`) |
 | `screens[]` | E4 때 | `{id: X-<MOD>-nn, name, module, path, channels[], owner}`. `module` 은 `menus.add` 로 더한 팩 모듈 코드, `path` 는 `/<module>/…`, 코어 경로와 겹치지 않게. **채널 표기는 코드(`web` · `pop` · `mobile` · `board`)와 라벨(`관리자 Web` · `현장 POP` · `모바일` · `현황판`) 둘 다 받는다** — 병합본에는 라벨로 정규화된다. 그 밖 값은 `PackError` |
