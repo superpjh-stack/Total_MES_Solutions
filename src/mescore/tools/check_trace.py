@@ -8,7 +8,7 @@
          · 권한 열 = core.yaml permissions 에서 계산한 입력 역할 · 한 기능 = API 하나(라우트 등록) = 테스트 하나 이상(`@pytest.mark.fn`) · 고아 라우트 0
          · 이관 배치 4 ↔ `mescore.migrate.COMMANDS`
   G-P02  (MES_PACK) 팩 화면 수 · 기능 수 = gates.yaml (테이블 수는 check_schema)
-  G-P03  (MES_PACK) gates.yaml: design_source 가 있으면 tools/import_design.py 의 매핑 누락 0 (도구가 없으면 미검증)
+  G-P03  (MES_PACK) gates.yaml: design_source 가 있으면 `tools/import_design.py --pack <팩>` 출력 마지막 `G-P03 … PASS|FAIL|미검증` 줄 그대로 (도구가 없으면 미검증)
 
 출력: `G-nn  항목  PASS|FAIL|미검증  실측`. 종료코드 0 = G-C01 · G-C02 FAIL 없음.
 """
@@ -197,7 +197,35 @@ def check_pack_scale(r: Report) -> None:
     elif not (Path(__file__).resolve().parent / "import_design.py").exists():
         r.add("G-P03", f"[{p.name}] 추적표", None, f"design_source {src} · tools/import_design.py 없음 (개발1)")
     else:
-        r.add("G-P03", f"[{p.name}] 추적표", None, f"design_source {src} · import_design 매핑 판정은 그 도구의 출력으로 (미구현)")
+        ok, actual = run_import_design(p.name)
+        r.add("G-P03", f"[{p.name}] 추적표", ok, actual)
+
+
+G_P03_LINE_RE = re.compile(r"^G-P03\s+\[(?P<pack>[^\]]+)\]\s+추적표\s+(?P<st>PASS|FAIL|미검증)\s+(?P<actual>.*)$")
+
+
+def run_import_design(pack: str) -> tuple[bool | None, str]:
+    """`import_design.py --pack <팩>` 을 돌려 출력 **마지막** `G-P03  [<팩>] 추적표  PASS|FAIL|미검증  …` 줄을 그대로 판정으로 쓴다 (CR-10 · 개발1 ⑦).
+    종료코드 0 PASS · 1 FAIL · 2 미검증 — 줄과 종료코드가 어긋나거나 줄이 없으면 FAIL(조용히 통과시키지 않는다)."""
+    import subprocess
+
+    tool = Path(__file__).resolve().parent / "import_design.py"
+    env = {**os.environ, "MES_PACK": pack}
+    proc = subprocess.run(["uv", "run", "python", str(tool), "--pack", pack], cwd=ROOT, env=env, capture_output=True, text=True, timeout=300)
+    used = "--pack"
+    if proc.returncode not in (0, 1, 2) and "--pack" in (proc.stderr or ""):          # --pack 이 아직 없는 도구 — 기존 인자(MES_PACK)로
+        proc = subprocess.run(["uv", "run", "python", str(tool)], cwd=ROOT, env=env, capture_output=True, text=True, timeout=300)
+        used = "MES_PACK (--pack 없음)"
+    lines = [m for m in (G_P03_LINE_RE.match(x.strip()) for x in (proc.stdout or "").splitlines()) if m]
+    if not lines:
+        tail = ((proc.stderr or proc.stdout or "").strip().splitlines() or ["출력 없음"])[-1][:160]
+        return False, f"import_design({used}) rc={proc.returncode} — G-P03 줄 없음: {tail}"
+    m = lines[-1]
+    st = m.group("st")
+    want = {"PASS": 0, "FAIL": 1, "미검증": 2}[st]
+    if m.group("pack") != pack or proc.returncode != want:
+        return False, f"import_design({used}) 판정 줄 [{m.group('pack')}] {st} ↔ 종료코드 {proc.returncode} 어긋남"
+    return {"PASS": True, "FAIL": False, "미검증": None}[st], f"{m.group('actual')} (import_design --pack)"
 
 
 def main() -> int:
