@@ -1,19 +1,25 @@
 -- 뷰 3 — 저장하지 않고 계산하는 값 (contracts/db-schema.md §3.4). make db-schema 가 schema.sql 다음에 적용한다.
---   v_lot_stock           LOT 잔량 (MATERIAL: qty − Σ pop_input · PRODUCT: qty − Σ 자식 계보 qty)
+--   v_lot_stock           LOT 잔량 (MATERIAL: qty − Σ pop_input · PRODUCT: qty − Σ 자식 계보 qty − Σ 열린 실적(종료 전)의 pop_input — 회전 5 · DEF-QA2-001)
 --   v_lot_state           LOT 상태 재고/소진/출하 — 계보와 잔량으로만 판정 (상태 컬럼 없음). PRODUCT: 출하 계보 → 출하 · 분할/합병/생산 → 소진(LOT 통째) · 투입만 → 잔량(부분 투입)
 --   (create or replace — 열이 같으면 운영 DB 에 그대로 다시 적용할 수 있다)
 --   v_work_order_progress 작업지시 진행 여부 — 실적 유무로 계산
 
+-- PRODUCT 소비 = 계보(종료 때 쓰인 투입 · 분할 · 합병 · 출하) + 아직 종료 전 실적에 스캔된 투입(취소 제외). 종료되면 그 투입은 계보로 넘어가므로 두 번 세지 않는다.
+-- 이것으로 종료 전 두 실적에 같은 생산 LOT 을 이중 투입해 잔량을 넘기는 것을 lineage.consume_material 의 잔량 검사가 막을 수 있다(DEF-QA2-001 · 개발2).
 create or replace view v_lot_stock as
 select l.id as lot_id, l.lot_no, l.kind, l.kind_base, l.qty,
        case l.kind_base
            when 'MATERIAL' then coalesce((select sum(i.qty) from pop_input i where i.material_lot_id = l.id and i.canceled_yn = 'N'), 0)
            when 'PRODUCT'  then coalesce((select sum(g.qty) from lot_genealogy g where g.parent_lot_id = l.id), 0)
+                              + coalesce((select sum(i.qty) from pop_input i join pop_work_result r on r.id = i.work_result_id
+                                           where i.material_lot_id = l.id and i.canceled_yn = 'N' and r.ended_at is null), 0)
            else 0
        end as consumed_qty,
        coalesce(l.qty, 0) - case l.kind_base
            when 'MATERIAL' then coalesce((select sum(i.qty) from pop_input i where i.material_lot_id = l.id and i.canceled_yn = 'N'), 0)
            when 'PRODUCT'  then coalesce((select sum(g.qty) from lot_genealogy g where g.parent_lot_id = l.id), 0)
+                              + coalesce((select sum(i.qty) from pop_input i join pop_work_result r on r.id = i.work_result_id
+                                           where i.material_lot_id = l.id and i.canceled_yn = 'N' and r.ended_at is null), 0)
            else 0
        end as remain_qty
   from lot l;

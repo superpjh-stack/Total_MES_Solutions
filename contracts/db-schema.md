@@ -94,7 +94,7 @@ DB `mes_core_db` (PostgreSQL 17) · 테이블 **52** (bas 10 · ord 4 · job 2 �
 ### 3.4 상태 · 잔량 뷰
 
 - `v_lot_state(lot_id, state)` — SHIPMENT 는 `출하`; PRODUCT 는 자식 쪽에 `출하` 행이 있으면 `출하`, `분할|합병|생산` 의 **부모**로 나오면 `소진`(LOT 통째), `투입` 의 부모로만 나오면 **잔량**으로 — 잔량 ≤ 0 · 수량 모르는 투입(qty NULL) · LOT 수량 NULL 이면 `소진`, 아니면 `재고`(부분 투입 · 회전 4); MATERIAL 은 잔량 0 이면 `소진`.
-- `v_lot_stock(lot_id, qty, consumed_qty, remain_qty)` — MATERIAL: `lot.qty` − Σ`pop_input.qty`(취소 제외). PRODUCT: `lot.qty` − Σ 자식 계보 `qty`.
+- `v_lot_stock(lot_id, qty, consumed_qty, remain_qty)` — MATERIAL: `lot.qty` − Σ`pop_input.qty`(취소 제외). PRODUCT: `lot.qty` − Σ 자식 계보 `qty` − Σ **종료 전 실적**(`pop_work_result.ended_at IS NULL`)의 `pop_input.qty`(취소 제외 — 회전 5 · DEF-QA2-001). 종료되면 그 투입은 계보 `투입` 으로 넘어가 한 번만 센다. `v_lot_state` 는 계보로만 판정(열린 투입은 상태를 바꾸지 않는다).
 - `v_work_order_progress(work_order_id, started, closed, result_count, good_qty)`.
 
 ## 4. 테이블 — 52 (렌더본 — `make contracts` 가 schema.sql + 실제 DB 에서 찍는다 · D-23)
