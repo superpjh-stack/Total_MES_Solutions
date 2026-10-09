@@ -2,8 +2,8 @@
 
 계보: 투입 M1→P1 (1) · 투입 P1→T1, P1→T2 (2) · 투입 M2, M3→X1 (2) · 혼합 T1, T2→X1 (2) · 투입 X1→K1 (1) · 출하 K1→S1 (1) = **9행** (gates.yaml).
 혼합은 F-POP-03 종료의 합병 옵션 — `merge_lot_ids=T1,T2` · `merge_relation=혼합` → `lineage.make_product_lot(merge_parent_ids=)`(개발2 2bf68da) 가
-별도 합병 LOT 없이 이 실적의 LOT(X1) 하나에 잇는다. P1 = 1000 (gates.yaml `P1 1000 … 500 + 350 투입 → 150 재고`) · in 1000 / out 850 은 손실률 측정값.
-깊이 5(S1 ← K1 ← X1 ← T1 ← P1 ← M1) · 원재료 3 · TANK 2 · 절임통 배치 소진 · salinity_pct 측정값 2행 · P1 잔량 150 재고.
+별도 합병 LOT 없이 이 실적의 LOT(X1) 하나에 잇는다. P1 양품 = 전처리 후 중량 850 (회전 7 · D-514) · in 1000 / out 850 은 손실률 측정값.
+깊이 5(S1 ← K1 ← X1 ← T1 ← P1 ← M1) · 원재료 3 · TANK 2 · 절임통 배치 소진 · salinity_pct 측정값 2행 · P1 잔량 0 소진 (gates.yaml p1_remain_qty 0 · p1_state 소진).
 """
 
 from __future__ import annotations
@@ -52,8 +52,8 @@ def test_s1_chain():
     item_std(prod, "salting_hours", std_value=48)
     # 1. 입고 3 (배추 1000 · 고춧가루 200 · 마늘 40) → 입고검사 합격
     m1, m2, m3 = receive_and_pass(ITEM_CABBAGE, 1000, prod=prod, qa=qa), receive_and_pass(ITEM_PEPPER, 200, prod=prod, qa=qa), receive_and_pass(ITEM_GARLIC, 40, prod=prod, qa=qa)
-    # 2. P02 전처리 — in 1000 · out 850 → 손실률 15 (이탈 없음) → P1 (양품 1000 — gates.yaml p1_remain_qty 150 의 전제)
-    r1 = run_result(prod, work_order("P02", qty=1000), [(m1["lot_no"], 1000)], 1000, input_weight_kg=1000, output_weight_kg=850)
+    # 2. P02 전처리 — in 1000 · out 850 → 손실률 15 (이탈 없음) → P1 (양품 = 전처리 후 중량 850 · D-514)
+    r1 = run_result(prod, work_order("P02", qty=850), [(m1["lot_no"], 1000)], 850, input_weight_kg=1000, output_weight_kg=850)
     loss = conn.q1("select value_num, deviated from pop_measure where work_result_id = %s and param_key = 'loss_rate_pct'", (r1["result_id"],))
     assert loss and float(loss["value_num"]) == 15 and loss["deviated"] is False
     # 3·4. 절임통 2 (TK-01 500 · TK-02 350) — 염도 센서 SS-01 · SS-02
@@ -61,7 +61,8 @@ def test_s1_chain():
     t1 = _tank_finish(prod, s2, "TK-01", "SS-01", 500, 8.9)
     t2 = _tank_finish(prod, s3, "TK-02", "SS-02", 350, 9.1)
     p1 = lot_row(r1["lot_id"])
-    assert p1["state"] == "재고" and float(p1["remain_qty"]) == 150        # gates.yaml p1_remain_qty 150 · 재고 (1000 − 500 − 350)
+    assert float(p1["qty"]) == 850
+    assert p1["state"] == "소진" and float(p1["remain_qty"]) == 0          # gates.yaml p1_remain_qty 0 · p1_state 소진 (850 − 500 − 350 · D-514)
     # 5. P06 혼합 실적 R4 — 투입 M2 · M3 → 종료(합병 옵션 parents [T1, T2] relation 혼합) → X1 한 LOT
     s4 = start(prod, work_order("P06", "FL-01", qty=1090), "FL-01")
     scan_input(prod, s4["id"], m2["lot_no"], 200)

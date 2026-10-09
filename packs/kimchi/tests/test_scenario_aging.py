@@ -2,6 +2,8 @@
 
 K1(1000) → X-AGE-01 숙성 600 → `lineage.split(count=2, qtys=[600, 400], relation=숙성, kind=AGING)` + 잔량 LOT `retag(PRODUCT)`
 (코어 split 이 N ≥ 2 라 잔량도 새 LOT — README 구현 메모 · 코어 변경 요청). 계보 +2(숙성 2) · 출하 +1.
+회전 7 기대값(D-515 · gates.yaml S4): aging_qty 600 · k1_leftover_qty 400 · k1_leftover_state 재고 · k1_state 소진 · k1_leftover_lot 새 LOT ·
+genealogy_delta 2 · backward_materials 2 (이 테스트의 K1 은 양념 M2 · M3 로만 만든다).
 """
 
 from __future__ import annotations
@@ -68,7 +70,7 @@ def test_s4_aging():
     assert conn.q1("select count(*) as n from lot_genealogy")["n"] == g_before + 3
     # 역추적 S(A1) — 원재료 2 (양념) + 배추 없음(이 테스트는 절임통 생략) · AGING 노드
     bw = prod.get("/trc/backward", params={"no": shipment_lot_no(s["id"])}).json()
-    assert sorted(n["no"] for n in bw["materials"]) == sorted(k1["materials"])
+    assert sorted(n["no"] for n in bw["materials"]) == sorted(k1["materials"]) and len(bw["materials"]) == 2     # backward_materials 2
     aging_nodes = [n for st in bw["stages"] for n in st["nodes"] if n["kind"] == "AGING"]
     assert len(aging_nodes) == 1 and aging_nodes[0]["kind_label"] == "숙성 배치"
     # 전량 숙성 — LOT 자체가 숙성 배치 (retag · 계보 0행)

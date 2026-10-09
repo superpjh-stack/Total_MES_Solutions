@@ -273,3 +273,14 @@ G-P06  착수 시간 — outputs/pack-timing.md ≤ 4h                  미검�
 | DEF-QA2-005 | totals MTTR 가중 평균(설비 A 0.5h×1 · B 1/3h×2 → 0.3889, 평균의 평균 0.4167 아님) | `test_stats::test_equipment_totals_mttr_is_weighted_over_all_fixed_faults` |
 | DEF-QA3-006 | 간선 `qty`(50) ↔ `lot_qty`(합병 LOT 100) 분리 | `test_trc_api::test_merge_node_shows_lot_qty_apart_from_edge_qty` |
 | QA2-006 kimchi S1 | **9행**(투입 6 · 혼합 2 · 출하 1) — F-POP-03 종료 `merge_lot_ids=T1,T2` · `merge_relation=혼합` · P1 양품 1000 → 잔량 **150 재고** · 깊이 5 · edge 9. age 직접 `update lot set insp_status` 제거(split 상속). `rename.qua: 품질이상` · attrs 라벨 `설비·탱크 구분` · 설비/공정 CSV 머리글 `attrs.` | `MES_PACK=kimchi` 새 DB `mes_kimchi_dev3r5` 팩 테스트 26 passed · `check_terms --pack` G-P05 PASS(노출 0) |
+
+## §6 회전 7 — QA 회전 6 결함 수정 (2026-10-09)
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| DEF-QA2-008 출하 경로 | F-SHP-05 `scan_lot` 이 같은 tx 안에서 `v_lot_stock`(열린 투입 포함)을 다시 읽어 LOT 수량이 있고 잔량 ≤ 0 이면 422 「다른 실적에 투입된(잔량 0) LOT 은 출하할 수 없습니다」 (`d1b34c0`). 아키텍트 D-41(`6d5d539` — 열린 투입 잔량 0 → `소진`) 뒤에는 `lineage.ship` 의 소진 검사도 같은 경우를 막는다. 개발2 `lineage.ship` 잔량 · 잠금이 커밋되면 `routers/shp.py::_assert_remaining` 을 지운다(이 회전 끝까지 개발2 lineage 커밋 없음 — 작업 트리에만) | `test_shp_api::test_scan_lot_used_up_by_open_input_is_422` — 합격 LOT 10 을 종료 전 실적에 10 투입 → 스캔 422 · 출하 계보 0 · 출하 LOT 0. 검사 없이 돌리면 FAIL(200) 확인 |
+| DEF-QA2-006 kimchi S1 (기획자3 `200b3dd` · D-514) | P02 전처리 양품 **850**(= output_weight_kg · 지시 850) → P1 850 − 500 − 350 = 잔량 **0 · 소진**. 혼합 1090 · 포장 1000 그대로 · 계보 9행 · 깊이 5 그대로 | `test_scenario_chain.py` `p1.qty 850 · state 소진 · remain 0` |
+| DEF-QA2-010 kimchi S4 (D-515) | 새 키 그대로 성립: aging_qty 600 · k1_leftover_qty 400 · k1_leftover_state 재고 · k1_state 소진 · k1_leftover_lot 새 LOT · genealogy_delta 2(출하 뒤 3) · backward_materials **2** 단언 추가. `age.py` 는 바꾸지 않음(개발2 부분 분할 규칙 변경 없음) | `test_scenario_aging.py` |
+| DEF-QA1-011 (D-516) | `rename.qua = 품질 이슈 관리`(기획자3). 팩 코드 · 시드 · 템플릿에 `품질이상` 0 | `MES_PACK=kimchi check_screens.py` G-P05 rename 행 **PASS**(값 10 · 키 든 값 0) · 화면 글 64 노출 0 · 오류 응답 91 치환 0 |
+| 검증 | `uv run pytest -q` 303 passed · kimchi 팩 26 passed · `make check-routes` G-C03 56/56 · `check-terms` G-C23 PASS · `check_terms --pack` kimchi G-P05 PASS | — |
+| 시드 | kimchi 시드에 P1 · K1 수량 없음(시나리오는 테스트가 API 로 만든다) — 바꿀 것 없음 | grep |
