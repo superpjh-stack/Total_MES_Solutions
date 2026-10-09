@@ -26,7 +26,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from ..db import conn
 from . import auth, contracts, nav, packs, rbac, templating
 from .packs import t
-from .settings import get_settings
+from .settings import dev_login_allowed, get_settings
 from .templating import STATIC_DIR, render
 from .util import audit, http
 from .util.http import HookError
@@ -72,6 +72,15 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def request_middleware(request: Request, call_next):
+        # D-605 개발용 로그인 — MES_ENV=dev 이고 루프백 요청일 때만. 라우터(home.login_as)와 별개로 여기서 한 번 더 404 (DEF-QA1-001 · QA3-001)
+        if request.url.path.rstrip("/") == "/login/as" and not dev_login_allowed(request):
+            if http.wants_html(request):
+                response = _error_page(request, 404, "not_found", http.status_message(404))
+            else:
+                response = JSONResponse({"code": "not_found", "message": http.status_message(404)}, status_code=404)
+            for k, v in http.SECURITY_HEADERS.items():
+                response.headers.setdefault(k, v)
+            return response
         response = await call_next(request)
         for k, v in http.SECURITY_HEADERS.items():
             response.headers.setdefault(k, v)

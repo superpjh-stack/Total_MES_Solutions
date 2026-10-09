@@ -3,10 +3,12 @@
 정본에 수치가 없는 값(자동 로그아웃 · 잠금 횟수)은 **코드에 기본값을 지어내지 않는다.** 값이 없으면 `None` 이고 그 기능을 적용하지 않는다.
 비밀(세션 비밀 · 시드 비밀번호 · 수집 토큰)은 저장소 밖 `.env`(gitignore)에만 둔다 (G-C19).
 `MES_PACK` 이 팩을 고른다(비우면 코어 단독). `MES_PG_DSN` 이 비면 팩에 따라 `mes_core_db` / `mes_<팩>_db`.
+`MES_ENV` 는 **비면 `prod`**(안전한 쪽 · DEF-QA1-001 · QA3-001) — 개발 편의(설명 패널 · 개발용 로그인 · 500 사유 노출)는 `MES_ENV=dev` 를 적었을 때만.
 """
 
 from __future__ import annotations
 
+import ipaddress
 import os
 from dataclasses import dataclass
 from functools import lru_cache
@@ -79,6 +81,10 @@ class Settings:
     grid_page_size: int
 
     @property
+    def is_dev(self) -> bool:
+        return self.env == "dev"
+
+    @property
     def db_name(self) -> str:
         return db_name_for(self.pack)
 
@@ -91,7 +97,7 @@ class Settings:
 def get_settings() -> Settings:
     pack = _env("PACK")
     return Settings(
-        env=_env("ENV", "dev") or "dev",
+        env=_env("ENV", "prod") or "prod",
         pack=pack,
         pg_dsn=_env("PG_DSN") or f"postgresql:///{db_name_for(pack)}",
         port=_env_int("PORT") or DEFAULT_PORT,
@@ -104,6 +110,26 @@ def get_settings() -> Settings:
         board_refresh_seconds=_env_int("BOARD_REFRESH_SECONDS") or 5,
         grid_page_size=_env_int("GRID_PAGE_SIZE") or 10,
     )
+
+
+def is_loopback(host: str | None) -> bool:
+    """요청 상대 주소가 루프백(127.0.0.0/8 · ::1)인가. 이름(`localhost` · `testclient`)이나 빈 값은 루프백이 아니다 — 주소로만 판정."""
+    if not host:
+        return False
+    try:
+        return ipaddress.ip_address(host.split("%", 1)[0]).is_loopback
+    except ValueError:
+        return False
+
+
+def dev_login_allowed(request) -> bool:
+    """D-605 개발용 무비밀번호 로그인(`POST /login/as`)을 열어도 되는가 — **`MES_ENV=dev` 이고 요청이 루프백에서 왔을 때만.**
+    아니면 그 경로는 404 다(`routers/home.login_as` 가 이 판정을 쓰고, `main.py` 미들웨어가 한 번 더 막는다).
+    프록시 뒤라면 상대 주소가 프록시(대개 루프백)이므로 운영은 `MES_ENV` 를 dev 로 두지 않는다 — 기본값 prod."""
+    if not get_settings().is_dev:
+        return False
+    client = getattr(request, "client", None)
+    return is_loopback(getattr(client, "host", None))
 
 
 def reset_cache() -> None:

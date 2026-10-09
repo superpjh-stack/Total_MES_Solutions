@@ -259,3 +259,25 @@ def test_sort_clause_allows_only_declared_columns():
     with pytest.raises(HTTPException) as exc:
         h.sort_clause("id;drop table lot", allowed, "x")
     assert exc.value.status_code == 422 and exc.value.detail["code"] == "validation_error"
+
+
+def test_dev_login_only_dev_and_loopback(monkeypatch):
+    """D-605 · DEF-QA1-001/QA3-001 — `MES_ENV` 기본값은 prod. `POST /login/as` 는 MES_ENV=dev **그리고** 루프백 요청일 때만, 아니면 404."""
+    from mescore.app import settings as st
+
+    try:
+        monkeypatch.setenv("MES_ENV", "")
+        st.reset_cache()
+        assert get_settings().env == "prod"
+        for env, host, want in (("", "127.0.0.1", 404), ("prod", "127.0.0.1", 404), ("dev", "10.0.0.5", 404),
+                                ("dev", "testclient", 404), ("dev", "127.0.0.1", 200), ("dev", "::1", 200)):
+            monkeypatch.setenv("MES_ENV", env)
+            st.reset_cache()
+            c = TestClient(app, raise_server_exceptions=False, client=(host, 50000))
+            r = c.post("/login/as", data={"role": "ADMIN"})
+            assert r.status_code == want, (env, host, r.status_code, r.text[:120])
+            if want == 404:
+                assert r.json()["code"] == "not_found" and c.get("/sys/users").status_code == 401
+    finally:
+        monkeypatch.undo()
+        st.reset_cache()

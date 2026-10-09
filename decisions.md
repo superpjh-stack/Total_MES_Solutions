@@ -262,8 +262,9 @@
 ## D-604 Web 에서 실적을 읽는 화면 · 상태: 가설
 - 디자이너1. POP-02 는 POP 전용이라 Web 실적 조회 화면 ID 가 없다. JOB-02 지시 현황의 지시 행에서 실적 목록으로 드릴다운(`GET /job/status?wo=`)으로 한다. 기능 수 불변.
 
-## D-605 개발용 역할 바로 로그인 버튼 · 상태: 가설
+## D-605 개발용 역할 바로 로그인 버튼 · 상태: 확정(회전 5 아키텍트 — DEF-QA1-001 · QA3-001)
 - `MES_ENV=dev` 일 때만 로그인 화면에 역할 4 버튼. 운영 빌드에는 없다.
+- **회전 5**: `MES_ENV` 기본값을 `prod` 로(비거나 없으면 prod · `.env.example` 도 prod — `make setup` 이 새로 만드는 `.env` 는 prod). `POST /login/as` 는 `settings.dev_login_allowed(request)` = `MES_ENV=dev` **그리고** 요청 상대 주소가 루프백일 때만 — 아니면 404. `main.py` 미들웨어가 라우터 앞에서 같은 판정으로 404 를 주고, `routers/home.login_as` 도 이 함수로 바꾼다(개발1). 이름(`localhost` · `testclient`)은 루프백으로 치지 않는다 — 주소만. 프록시 뒤 운영은 dev 로 두지 않는다.
 
 
 

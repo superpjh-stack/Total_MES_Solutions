@@ -41,6 +41,7 @@
 - **테스트는 JSON 쪽으로 판정한다.** `TestClient` 기본 `Accept: */*`.
 - `/health` 는 인증 없이 200(DB 끊기면 503) — `status` · `system` · `pack` · `core_version` · `db.ok` · `menus` · `screens` · `functions` · `placeholders` · `pack_screens` · `router_include_errors`. 접속 문자열 · 호스트 · DB 이름은 싣지 않는다.
 - **인증 없이 열리는 것은 `/health` · `/static/*` · `/login` · `/error` · `POST /ifc/collect`(토큰 헤더 `X-Collect-Token` 로 인증 — `MES_COLLECT_TOKEN`) 뿐이다.** `/docs` · `/redoc` 은 404. `/openapi.json` 은 시스템 모듈 조회 권한자만.
+- 개발용 역할 로그인 `POST /login/as`(D-605)는 **`MES_ENV=dev` 이고 요청 상대 주소가 루프백(127.0.0.0/8 · ::1)일 때만** 있다 — 그 밖은 404(`settings.dev_login_allowed` · `main.py` 미들웨어). `MES_ENV` 는 비면 `prod`. 로그아웃은 `POST /logout` 만(`GET` 405 — 다른 사이트 링크로 로그아웃시키지 못하게). 세션 쿠키 `HttpOnly` · `SameSite=Lax` · dev 가 아니면 `Secure`.
 - **채널**: `?device=pop|mobile|board` 또는 로그인 때 고른 `device` 가 세션에 남는다. `core.yaml`/`pack.yaml: channels` 에 없는 화면을 그 채널로 열면 403. 현황판은 오류 화면에서도 자동 새로고침이 이어진다.
 - **스캔 화면 알림**(`static/app.js`): 알림이 떠 있어도 스캔 글자가 스캔칸으로 들어가고 Enter 가 보낸다. 닫으면 포커스가 스캔칸으로. `data-scan` 은 화면에 하나.
 - **용어 치환**: 응답 본문의 사용자 문구(알림 · 라벨 · 메뉴명 · 오류 메시지)는 `t()` 를 거친 것이다. JSON 의 `message` 도 치환된 문장이다. `code` · `fields[].name` 의 **컬럼 식별자**는 치환하지 않는다(`fields[].label` 에 치환어).
