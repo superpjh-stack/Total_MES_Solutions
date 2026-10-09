@@ -32,11 +32,19 @@
 .dash .focus b{font-size:34px;line-height:1;font-variant-numeric:tabular-nums}.dash .focus b.is-empty{font-size:16px}
 .dash .focus b[data-status="critical"]{color:var(--c-err)}.dash .focus b[data-status="warn"]{color:var(--c-warn)}.dash .focus b[data-status="good"]{color:var(--c-ok)}
 .dash .focus span{color:var(--c-ink-2)}.dash .focus a{margin-left:auto;font-size:var(--fs-md);color:var(--c-accent)}
+body.ch-mobile .dash-m{gap:12px}body.ch-mobile .dash-m .panel-head h2{font-size:17px}
+body.ch-mobile .dash-m .tile{min-height:96px;padding:10px 12px}body.ch-mobile .dash-m .tile .v{font-size:30px}
+body.ch-mobile .dash-m .recent li{grid-template-columns:44px minmax(0,1fr);row-gap:0}body.ch-mobile .dash-m .recent .k{font-size:12px}body.ch-mobile .dash-m .recent .x{grid-column:2}
+body.ch-mobile .dash-m .links a{min-height:44px;display:inline-flex;align-items:center}
 body.ch-pop .dash .tile .v{font-size:44px}body.ch-pop .dash .links a{padding:14px 20px;font-size:16px}
 </style>
 {% endblock %}
 
-{% block body %}
+{#- 채널 나눔(회전 5) — Web 은 section.panel, 모바일은 mobile_body(.m-main 안 m-sec · 패널 테두리 없음). 내용은 dash_content 한 곳 -#}
+{% block body %}{% if device == 'mobile' %}{{ self.mobile_body() }}{% else %}<section class="panel dash" data-role="{{ user.role_code }}">{{ self.dash_content() }}</section>{% endif %}{% endblock %}
+{% block mobile_body %}<section class="m-sec dash dash-m" data-role="{{ user.role_code }}">{{ self.dash_content() }}</section>{% endblock %}
+
+{% block dash_content %}
 {% set role = user.role_code %}
 {% macro href(sid, extra='') %}{% if user.can_open(sid) and nav.channel_allowed(sid, device) %}{{ nav.path_of(sid) }}{{ extra }}{% endif %}{% endmacro %}
 {% macro tile(sid, label, value, sub='', status='', focus=false, extra='') %}
@@ -50,7 +58,6 @@ body.ch-pop .dash .tile .v{font-size:44px}body.ch-pop .dash .links a{padding:14p
 {% set focus_link = {'approvals_pending': ('SHP-02', '출하 승인'), 'late_orders': ('SHP-03', '출하 현황'), 'issues_open': ('QUA-04', '이상 · 시정'),
                      'labels_today': ('POP-04', 'LOT 라벨'), 'deviated': ('KPI-02', '측정값 추이'), 'faults': ('EQP-03', '고장')}.get(extra.key) %}
 {% set zero_good = extra.key in ('late_orders', 'issues_open', 'deviated', 'faults') %}
-<section class="panel dash" data-role="{{ role }}">
   <div class="panel-head">
     <h2>{{ t('오늘') }} <small>{{ t(board) }} · {{ today.date }}</small></h2>
     <span class="as-of">{{ t('집계') }} {{ now[11:16] }} {{ t('기준') }}{% set b = href('KPI-01', '?device=board')|trim %}{% if b %} · {{ t('현황판') }} <a href="{{ b }}">{{ b }}</a>{% endif %}</span>
@@ -76,5 +83,4 @@ body.ch-pop .dash .tile .v{font-size:44px}body.ch-pop .dash .links a{padding:14p
       {% if focus_link %}{% set fh = href(focus_link[0], '?kind=quality' if extra.key == 'deviated' else '')|trim %}{% if fh %}<a href="{{ fh }}">{{ t(focus_link[1]) }} →</a>{% endif %}{% endif %}
     </div>
   </div>
-</section>
 {% endblock %}

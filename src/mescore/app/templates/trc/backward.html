@@ -2,4 +2,6 @@
 {% extends "base.html" %}
 {% import "trc/_cards.html" as cards %}
 {% block head %}{{ cards.styles() }}{% endblock %}
-{% block body %}{% include "trc/_trace.html" %}{% endblock %}
+{#- 모바일은 mobile_body(trc/_trace_m.html) — body 를 통째로 바꾸므로 여기서 채널을 나눈다(회전 5) -#}
+{% block body %}{% if device == 'mobile' %}{{ self.mobile_body() }}{% else %}{% include "trc/_trace.html" %}{% endif %}{% endblock %}
+{% block mobile_body %}{% include "trc/_trace_m.html" %}{% endblock %}

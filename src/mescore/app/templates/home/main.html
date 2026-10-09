@@ -1,7 +1,7 @@
 {# 메인 = IA 화면 (CMN-02 · 개발1 routers/home.py). 디자이너3 docs/design/home/home.html 이식.
-   ctx(개발1 · 바꾸지 않는다): cards[{menu seq level allowed screens[{screen functions}] fn_count write_roles today}] n_allowed n_menus n_screens n_functions n_batch lineage numbering pack.
+   ctx(개발1 · 바꾸지 않는다): cards[{menu seq level allowed screens[{screen functions}] fn_count write_roles today today_label today_source}] n_allowed n_menus n_screens n_functions n_batch lineage numbering pack.
    모듈 카드를 일하는 순서(core.yaml: order · 팩 menus.order = nav.MENUS)로. 현재 역할의 칸(rbac.cell)이 `없음` 이면 카드는 흐리게 + 링크 없음(G-C17 — check_routes 가 href 로 센다).
-   팩이 hide 한 모듈은 nav.MENUS 에 없다(카드 없음). "오늘 건수" 는 c.today — 개발1 이 stats 공개 함수로 넘기면 보인다, 지금은 None → 미수집. 문구는 t(). #}
+   팩이 hide 한 모듈은 nav.MENUS 에 없다(카드 없음). "오늘 건수" 는 c.today(stats.today_counts) · 라벨 c.today_label(예 검사 대기) · 출처 문장 c.today_source 는 title — None → 미수집. 문구는 t(). #}
 {% extends "base.html" %}
 {% import "trc/_cards.html" as cmp %}
 {% block head %}{{ cmp.styles() }}
@@ -33,10 +33,32 @@
 .ia-cards .screens{display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:auto;padding-top:4px}
 .ia-cards .screens a,.ia-cards .screens span{font-size:var(--fs-sm);padding:2px 8px;border-radius:999px;background:var(--c-bg);color:var(--c-ink-2);border:var(--bw) solid transparent}
 .ia-cards .screens a:hover{border-color:var(--c-line);color:var(--c-ink);text-decoration:none}
+.ia-m .ia-cards{grid-template-columns:minmax(0,1fr);gap:16px;padding-top:12px}
+.ia-m .ia-cards .card{min-height:0;padding:14px 12px 12px;gap:8px}
+.ia-m .ia-cards .card[data-level="없음"] .screens,.ia-m .ia-cards .card[data-level="없음"] .roles{display:none}
+.ia-m .ia-cards .roles .chan{display:none}
+.ia-m .ia-cards .screens a,.ia-m .ia-cards .screens span{font-size:13px;padding:6px 10px;min-height:32px;display:inline-flex;align-items:center}
 .legend{margin:14px 0 0;font-size:12.5px;color:var(--c-ink-3);display:flex;gap:18px;flex-wrap:wrap}
 </style>
 {% endblock %}
-{% block body %}
+{#- 카드 한 장 — Web 본문 · 모바일 본문이 같이 쓴다 -#}
+{% macro card(c) %}
+    <article class="card{% if c.menu.is_pack %} card-ext{% endif %}" data-module="{{ c.menu.module }}" data-menu="{{ c.menu.code }}" data-level="{{ '없음' if not c.allowed else c.level }}"{% if not c.allowed %} aria-disabled="true"{% endif %}>
+      <span class="step">{{ c.seq }} {{ t(c.menu.name) }}</span>
+      <h3>{% if c.allowed and c.menu.screens %}<a class="go" href="{{ c.menu.screens[0].path }}">{{ t(c.menu.name) }}</a>{% else %}<span>{{ t(c.menu.name) }}</span>{% endif %} <code>{{ c.menu.module }}</code><span class="level"{% if c.level.startswith('입력') %} data-write{% endif %}>{{ t('권한 없음') if not c.allowed else c.level }}</span></h3>
+      <div class="facts">
+        <div>{{ t('화면') }}<b>{{ c.menu.screens|length }}</b></div>
+        <div{% if c.today_source %} title="{{ c.today_source }}"{% endif %}>{{ t(c.today_label or '오늘') }}<b{% if c.today is none %} class="is-empty"{% endif %}>{{ c.today if c.today is not none else NOT_COLLECTED }}</b></div>
+      </div>
+      <div class="roles">{{ t('입력') }} <b>{{ c.write_roles|join(' · ') if c.write_roles else '—' }}</b>{% if c.menu.channels and c.menu.channels|reject('equalto', 'web')|list %} <span class="chan">· {{ c.menu.channels|reject('equalto', 'web')|join(' · ') }}</span>{% endif %}{% if c.menu.is_pack %} · <b>{{ t('팩') }}</b>{% endif %} · {{ t('기능') }} {{ c.fn_count }}</div>
+      <div class="screens">
+        {% for s in c.screens %}{% if c.allowed %}<a href="{{ s.screen.path }}" title="{{ s.functions|map('t')|join(' · ') }}">{{ t(s.screen.name) }}</a>{% else %}<span>{{ t(s.screen.name) }}</span>{% endif %}{% else %}<span class="is-empty">{{ t('화면 없음') }}</span>{% endfor %}
+      </div>
+    </article>
+{% endmacro %}
+
+{#- 모바일은 mobile_body(회전 5) — .m-top 이 제목 · 사용자 · 번호 검색을 그리므로 시스템 줄 · 범례는 빼고 역할 요약 한 줄 + 카드 한 줄씩 -#}
+{% block body %}{% if device == 'mobile' %}{{ self.mobile_body() }}{% else %}
 {% set ns = namespace(w=0, r=0, n=0) %}
 {% for c in cards %}{% if c.level.startswith('입력') %}{% set ns.w = ns.w + 1 %}{% elif c.allowed %}{% set ns.r = ns.r + 1 %}{% else %}{% set ns.n = ns.n + 1 %}{% endif %}{% endfor %}
 <section class="panel ia-top">
@@ -52,20 +74,7 @@
 
 <section class="panel" id="ia-menus">
   <div class="ia-cards cards">
-    {% for c in cards %}
-    <article class="card{% if c.menu.is_pack %} card-ext{% endif %}" data-module="{{ c.menu.module }}" data-menu="{{ c.menu.code }}" data-level="{{ '없음' if not c.allowed else c.level }}"{% if not c.allowed %} aria-disabled="true"{% endif %}>
-      <span class="step">{{ c.seq }} {{ t(c.menu.name) }}</span>
-      <h3>{% if c.allowed and c.menu.screens %}<a class="go" href="{{ c.menu.screens[0].path }}">{{ t(c.menu.name) }}</a>{% else %}<span>{{ t(c.menu.name) }}</span>{% endif %} <code>{{ c.menu.module }}</code><span class="level"{% if c.level.startswith('입력') %} data-write{% endif %}>{{ t('권한 없음') if not c.allowed else c.level }}</span></h3>
-      <div class="facts">
-        <div>{{ t('화면') }}<b>{{ c.menu.screens|length }}</b></div>
-        <div>{{ t('오늘') }}<b{% if c.today is none %} class="is-empty"{% endif %}>{{ c.today if c.today is not none else NOT_COLLECTED }}</b></div>
-      </div>
-      <div class="roles">{{ t('입력') }} <b>{{ c.write_roles|join(' · ') if c.write_roles else '—' }}</b>{% if c.menu.channels and c.menu.channels|reject('equalto', 'web')|list %} <span class="chan">· {{ c.menu.channels|reject('equalto', 'web')|join(' · ') }}</span>{% endif %}{% if c.menu.is_pack %} · <b>{{ t('팩') }}</b>{% endif %} · {{ t('기능') }} {{ c.fn_count }}</div>
-      <div class="screens">
-        {% for s in c.screens %}{% if c.allowed %}<a href="{{ s.screen.path }}" title="{{ s.functions|map('t')|join(' · ') }}">{{ t(s.screen.name) }}</a>{% else %}<span>{{ t(s.screen.name) }}</span>{% endif %}{% else %}<span class="is-empty">{{ t('화면 없음') }}</span>{% endfor %}
-      </div>
-    </article>
-    {% endfor %}
+    {% for c in cards %}{{ card(c) }}{% endfor %}
   </div>
   <div class="legend">
     <span>{{ t('번호 = 일하는 순서(팩 menus.order 로 바뀐다)') }}</span>
@@ -73,5 +82,16 @@
     <span>{{ t('카드 이름은 용어 치환 · 팩 rename 자리 — 경로 · 화면 ID 는 바뀌지 않는다') }}</span>
     <span>{{ t('오늘 건수가 없으면 미수집') }}</span>
   </div>
+</section>
+{% endif %}{% endblock %}
+
+{% block mobile_body %}
+{% set ns = namespace(w=0, r=0, n=0) %}
+{% for c in cards %}{% if c.level.startswith('입력') %}{% set ns.w = ns.w + 1 %}{% elif c.allowed %}{% set ns.r = ns.r + 1 %}{% else %}{% set ns.n = ns.n + 1 %}{% endif %}{% endfor %}
+<section class="m-sec ia-m">
+  <h2>{{ t('일하는 순서') }} <small>{{ user.role_name }} · {{ t('입력') }} {{ ns.w }} · {{ t('조회') }} {{ ns.r }} · {{ t('없음') }} {{ ns.n }}</small></h2>
+  {% if not n_allowed %}<p class="empty">{{ t('열 수 있는 메뉴가 없다 — 권한 표를 확인한다') }}.</p>{% endif %}
+  <div class="ia-cards cards">{% for c in cards %}{{ card(c) }}{% endfor %}</div>
+  <p class="notes">{{ t('흐린 카드 = 이 역할의 권한 칸이 없음 (403 · 탐색에서도 숨김)') }} · {{ t('오늘 건수가 없으면 미수집') }}</p>
 </section>
 {% endblock %}

@@ -1,0 +1,54 @@
+{# 추적 모바일 본문 — TRC-01 · TRC-02 의 {% block mobile_body %}(디자이너2 mobile/trc_backward_m.html). base 의 .m-frame 안 .m-main 에 들어간다.
+   제목 · 사용자 · 번호 검색(→ TRC-03)은 .m-top 이 그린다 — 여기서는 화면 제목을 다시 그리지 않는다. 추적 번호 칸은 결과가 없을 때(빈 진입 · 422)만.
+   세로 단계 — 깊이마다 한 단, 분기는 details 로 접기(JS 0). 카드 수량 = LOT 수량(edge.lot_qty = lot.qty) · 관계 줄의 수 = 화살표 qty(QA3-006). 390px 가로 넘침 0. #}
+{% import "trc/_cards.html" as cards %}
+{% set arrow = '←' if mode == backward else '→' %}
+{% set here = nav.path_of('TRC-01') if mode == forward else nav.path_of('TRC-02') %}
+<div class="chips" role="tablist">
+  <a class="chip{% if mode == forward %} on{% endif %}" href="{{ nav.path_of('TRC-01') }}{% if no %}?no={{ no }}{% endif %}">{{ t('정방향') }}</a>
+  <a class="chip{% if mode == backward %} on{% endif %}" href="{{ nav.path_of('TRC-02') }}{% if no %}?no={{ no }}{% endif %}">{{ t('역방향') }}</a>
+  <a class="chip" href="{{ nav.path_of('TRC-03') }}{% if no %}?q={{ no }}{% endif %}">{{ t('번호 검색') }}</a>
+</div>
+{{ cards.scan_alert(scan_error) }}
+{% if not trace %}
+<form class="m-search m-trace-no" method="get" action="{{ here }}" role="search" autocomplete="off">
+  <input type="search" name="no" data-scan autofocus required value="{{ no }}" placeholder="{{ t('추적할 LOT 번호') }}" aria-label="{{ t('추적할 번호') }}" autocapitalize="off" spellcheck="false">
+  <button type="submit">{{ t('추적') }}</button>
+</form>
+{% else %}
+<section class="m-sec trace" aria-label="{{ t('계보') }}">
+  <h2>{{ t('출발') }} <small>{{ t('깊이') }} {{ depth }} · {{ t('노드') }} {{ node_count }} · {{ t('화살표') }} {{ edge_count }}</small></h2>
+  <div class="t-node start">
+    {{ cards.card(start.no, start.state, [('종류', t(start.kind_label)), ('품목', start.item|txt), ('LOT 수량', ((start.qty|num(3)) ~ ' ' ~ (start.unit|txt(''))) if start.qty is not none else none), ('작업지시', start.work_order_no|txt)],
+                  ([('지시', start_links.work_order)] if start_links.work_order else []) + ([('검사', start_links.inspection)] if start_links.inspection else []) + ([('출하', start_links.shipment)] if start_links.shipment else []), 'start') }}
+  </div>
+  {% for st in stages %}
+  <div class="t-node">
+    <div class="depth">{{ t('깊이') }} {{ st.depth }} · {{ st.relations|map('t')|join(' · ') }} {{ arrow }} {{ st.edges|length }}{{ t('건') }}</div>
+    <details class="fold"{% if st.open %} open{% endif %}><summary><span class="grow">{{ st.nodes|length }} LOT</span><span class="badge badge-neutral">{{ t('펼침') if st.open else t('접힘') }}</span></summary>
+      <div class="body">
+      {% for e in st.edges %}
+      {{ cards.card(e.to.no, e.to.state, [('관계', t(e.relation) ~ (' ' ~ (e.qty|num(3)) if e.qty is not none else '') ~ ' ' ~ arrow ~ ' ' ~ e['from'].no), ('종류', t(e.to.kind_label)), ('품목', e.to.item|txt), ('LOT 수량', ((e.lot_qty|num(3)) ~ ' ' ~ ((e.unit or e.to.unit)|txt(''))) if e.lot_qty is not none else none), ('작업지시', e.to.work_order_no|txt)],
+                     [('역방향', e.links.backward), ('정방향', e.links.forward)] + ([('검사', e.links.inspection)] if e.links.inspection else []) + ([('지시', e.links.work_order)] if e.links.work_order else [])) }}
+      {% endfor %}
+      </div>
+    </details>
+  </div>
+  {% else %}
+  <p class="empty">{{ t('이 방향으로 이어진 계보가 없습니다') }}</p>
+  {% endfor %}
+</section>
+{% if mode == backward %}
+<section class="m-sec">
+  <h2>{{ t('원재료 LOT 전부') }} <small>{{ t('중복 없이') }} {{ materials|length }}</small></h2>
+  {% for m in materials %}{{ cards.card(m.no, m.state, [('품목', m.item|txt), ('검사', t(m.insp_status) if m.insp_status else none)], [('정방향', nav.path_of('TRC-01') ~ '?no=' ~ m.no)]) }}{% else %}<p class="empty">{{ NOT_COLLECTED }}</p>{% endfor %}
+</section>
+{% else %}
+<section class="m-sec">
+  <h2>{{ t('출하 LOT') }} <small>{{ shipments|length }} · {{ t('재고') }} {{ stock|length }}</small></h2>
+  {% for x in shipments %}{{ cards.card(x.no, '출하', [], [('역방향', nav.path_of('TRC-02') ~ '?no=' ~ x.no)]) }}{% endfor %}
+  {% for s in stock %}{{ cards.card(s.no, '재고', [('품목', s.item|txt)], [('역방향', nav.path_of('TRC-02') ~ '?no=' ~ s.no)]) }}{% endfor %}
+  {% if not shipments and not stock %}<p class="empty">{{ NOT_COLLECTED }}</p>{% endif %}
+</section>
+{% endif %}
+{% endif %}

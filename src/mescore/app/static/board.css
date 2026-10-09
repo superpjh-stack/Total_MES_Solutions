@@ -1,37 +1,6 @@
 /* 현황판(KPI-01) 전용 스타일 — 디자이너3. docs/design/board/board.html 의 <style> 을 그대로 옮겼다.
    1920×1080 벽걸이 기준 · 조작 요소 0 · 색은 상태 의미(good · warn · critical)로만. 외부 CDN · 웹폰트 0.
-   토큰은 디자이너1 tokens.css 의 이름(--c-* · --font-*)만 쓴다. 다크 = html[data-theme="dark"] (전환 조건 미확정 · README 이식 요청). */
-
-/* ── TEMP-TOKENS: static/style.css :root 에 디자이너1 토큰이 아직 없어 현황판이 쓰는 토큰만 임시로 둔다.
-      tokens.css 가 static 으로 오면 이 블록을 지운다(값은 docs/design/tokens.css 와 같다). ── */
-:root{
-  --font-sans:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","맑은 고딕","Noto Sans KR","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"D2Coding","Liberation Mono",monospace;
-  --r-md:4px;--r-lg:6px;
-  --c-bg:#f2f3f5;--c-surface:#ffffff;--c-surface-2:#eef0f2;--c-line:#d3d7dc;--c-line-strong:#a9b0b8;
-  --c-ink:#1b1f24;--c-ink-2:#5c6670;--c-ink-3:#8c959e;--c-ink-inverse:#ffffff;
-  --c-accent:#1f5fa8;--c-accent-tint:#e6eef9;
-  --c-ok:#1e7b3f;--c-warn:#9a6200;--c-err:#b42318;--c-info:#1f5fa8;--c-neutral:#5c6670;
-  --c-eq-run:var(--c-ok);--c-eq-stop:var(--c-neutral);--c-eq-check:var(--c-info);--c-eq-fault:var(--c-err);
-  --c-empty:#8c959e;--c-undecided:#8a5a00;
-}
-:root[data-theme="dark"]{
-  --c-bg:#15181c;--c-surface:#1e2227;--c-surface-2:#262b31;--c-line:#353b43;--c-line-strong:#525a64;
-  --c-ink:#e6e9ec;--c-ink-2:#a3acb5;--c-ink-3:#6f7983;--c-ink-inverse:#15181c;
-  --c-accent:#6ea3e8;--c-accent-tint:#1f2d40;
-  --c-ok:#6dc98b;--c-warn:#e9b84a;--c-err:#f08a7f;--c-info:#6ea3e8;--c-neutral:#a3acb5;
-  --c-empty:#6f7983;--c-undecided:#e9b84a;
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --c-bg:#15181c;--c-surface:#1e2227;--c-surface-2:#262b31;--c-line:#353b43;--c-line-strong:#525a64;
-    --c-ink:#e6e9ec;--c-ink-2:#a3acb5;--c-ink-3:#6f7983;--c-ink-inverse:#15181c;
-    --c-accent:#6ea3e8;--c-accent-tint:#1f2d40;
-    --c-ok:#6dc98b;--c-warn:#e9b84a;--c-err:#f08a7f;--c-info:#6ea3e8;--c-neutral:#a3acb5;
-    --c-empty:#6f7983;--c-undecided:#e9b84a;
-  }
-}
-/* ── /TEMP-TOKENS ── */
+   토큰은 /static/tokens.css(디자이너1)를 kpi/board.html 이 먼저 <link> 한다 — 여기엔 색상값을 적지 않는다. 다크 = html[data-theme="dark"] (전환 조건 미확정 · README 이식 요청). */
 
 *{box-sizing:border-box}
 html,body{margin:0;height:100%}
@@ -61,7 +30,9 @@ b,strong{font-weight:700}
 .panel h2.sub-h{margin-top:18px;font-size:24px}
 
 /* 대표 숫자 */
-.hero{display:flex;align-items:baseline;gap:14px;line-height:1}
+.hero{display:flex;align-items:baseline;gap:6px 14px;line-height:1;flex-wrap:wrap;min-width:0}
+.hero .of,.hero .u{white-space:nowrap}
+.hero[data-long] .v{font-size:84px}.hero[data-long] .of{font-size:36px}.hero[data-long] .u{font-size:26px}
 .hero .v{font-size:112px;font-weight:700;letter-spacing:-.03em}
 .hero .of{font-size:44px;color:var(--c-ink-3);font-weight:400}
 .hero .u{font-size:32px;color:var(--c-ink-2)}
@@ -73,6 +44,7 @@ b,strong{font-weight:700}
 .sub .k .l{font-size:22px;color:var(--c-ink-3)}
 .sub .k b{font-size:46px;line-height:1.05;white-space:nowrap}
 .sub .k b.target{font-size:40px}
+.sub .k b.target .is-empty{font-size:26px;white-space:normal}  /* 「미확정 (D-602)」 — 칸 폭 안에 */
 .sub .k[data-status="good"] b{color:var(--c-ok)}
 .sub .k[data-status="warn"] b{color:var(--c-warn)}
 .sub .k[data-status="critical"] b{color:var(--c-err)}

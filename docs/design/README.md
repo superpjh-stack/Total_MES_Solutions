@@ -170,8 +170,9 @@
 |---|---|---|---|
 | `today` | `YYYY-MM-DD` | 머리글 날짜 | |
 | `source` | `실시간` \| `스냅샷 HH:MM` | 머리글 | `kpi_snapshot` 을 썼으면 스냅샷 시각 |
+| `undecided` | str (`미확정 (D-602)` · 이미 `t()`) | 목표 칸 `data-empty` · 첫 렌더 빈 목표 | 회전 5 · DEF-QA2-003 — 목표 NULL 칸 문구. 템플릿은 이 값을 그대로 쓴다(없으면 같은 글자를 스스로 만든다) |
 | `production.plan_qty` · `actual_qty` · `good_qty` · `defect_qty` · `unit` | number · str | 생산 대표 숫자 | 오늘 지시(`plan_date=today`)의 계획 합 · 종료 실적 합. 없으면 `null` → `미수집` |
-| `production.achieve_rate` · `good_rate` | % number | 달성률 meter · 양품률 | `good_rate_target` = `kpi_indicator('production.good_rate').target_value`(없으면 `null` → `미확정`) |
+| `production.achieve_rate` · `good_rate` | % number | 달성률 meter · 양품률 | `good_rate_target` = `kpi_indicator('production.good_rate').target_value`(없으면 `null` → `미확정 (D-602)` — G-C11 형식 · 회전 5) |
 | `production.by_hour[]` | `[{hour:"08", qty}]` | 시간대별 막대(SVG) | 0~23 중 실적 있는 시간부터. 빈 배열이면 막대 없음 |
 | `quality.inspection_count` · `pass_count` · `fail_count` · `pass_rate` · `pass_rate_target` | | 품질 대표 숫자 | 오늘 판정(`judged_at`)된 검사. 조건부는 합격에 세지 않는다(미확정 — D-nn) |
 | `quality.top_defects[]` | `[{defect_code, defect_name, qty, share}]` | 불량 상위 가로 막대 | `share` = 1위 대비 %. 최대 3 |
@@ -181,7 +182,7 @@
 | `equipment.items[]` | `[{equip_code, equip_name, state, collect_yn, last_received_at}]` | 설비 표 | 수집 설비는 `collect.latest` 의 마지막 수신, 아니면 `null` → `미수집`. 최대 5 — 고장 · 정지 먼저 |
 | `work_orders_count` · `work_orders[]` | `[{work_order_no, item_name, process_name, equipment_name, plan_qty, actual_qty, achieve_rate, status}]` | 진행 중 작업지시 표 | `status` 대기 · 진행. 진행 먼저. 최대 7(공정 · 설비 열은 벽걸이에서 생략) |
 | `measure.measured_count` · `deviated_count` | number | 측정값 이탈 대표 숫자 | 오늘 `pop_measure` 전체 · `deviated=true` |
-| `indicators[]` | `[{indicator_key, name, unit, value, target_value, status}]` | 지표 목록 | `stats.indicators()` 중 `visible_yn=Y`. `target_value` null → `미확정`. `status` good/warn/critical/null 은 서버가 계산(값 ≥ 목표 good · ≥ 95% warn · 그 밖 critical). 최대 6 |
+| `indicators[]` | `[{indicator_key, name, unit, value, target_value, status}]` | 지표 목록 | `stats.indicators()` 중 `visible_yn=Y`. `target_value` null → `미확정 (D-602)`(`board.undecided` 가 오면 그 글자). `status` good/warn/critical/null 은 서버가 계산(값 ≥ 목표 good · ≥ 95% warn · 그 밖 critical). 최대 6 |
 
 화면 규칙: `null` → `미수집`(회색 · 보통 굵기), 목록 0건 → `미수집` 한 줄, 폴링 실패 → `html[data-state="stale"]` + "갱신 실패 HH:MM, 재시도 중"(마지막 값 유지 · 폴링 계속), 야간 → `html[data-theme="dark"]`(전환 조건 미확정). 상태색은 목표 대비 · 0 이 정상인 건수(지연 · 고장 · 이탈)에만. 조작 요소 0 — 링크 · 버튼 없음, `cursor:none`.
 
@@ -213,7 +214,7 @@ Code128 · 값 = 번호 글자 그대로(`A-Z 0-9 -` · 권장 ≤ 20자) · 인
 
 ### 5. 메인 · 대시보드
 
-- `home/home.html` CMN-02: `nav.MENUS` 순서(= 일하는 순서, 팩 `menus.order`)대로 카드 12. 카드 = 이름(`t()` · `rename` 자리) · 화면 수 · 오늘 건수 1 · 입력 역할 · 화면 링크. `data-level = rbac.cell(role, menu).level` — `없음` 이면 흐림 + 링크 없음, 팩 `hide` 면 카드 없음. 오늘 건수 출처(가설)는 파일 주석.
+- `home/home.html` CMN-02: `nav.MENUS` 순서(= 일하는 순서, 팩 `menus.order`)대로 카드 12. 카드 = 이름(`t()` · `rename` 자리) · 화면 수 · 오늘 건수 1(라벨 `t(c.today_label)` · 출처 `title=c.today_source` — D-108) · 입력 역할 · 화면 링크. `data-level = rbac.cell(role, menu).level` — `없음` 이면 흐림 + 링크 없음, 팩 `hide` 면 카드 없음. 오늘 건수 출처(가설)는 파일 주석.
 - `home/dashboard.html` CMN-04: 역할별 판 4(관리자 · 생산 · 품질 · 현장) 중 서버는 하나만. 공통 숫자 4(`today.work_orders results inspections_pending shipments_pending`) + 역할별 강조 1 + 바로가기(권한 칸 조회 이상만). 읽기만 — 쓰기 0, `kpi` 집계를 읽을 뿐.
 - 현황판용 오류 상태는 `board/board_states.html` 3번(갱신 실패)이다. 오류 화면 `error.html` 은 디자이너1.
 
@@ -338,6 +339,27 @@ Code128 · 값 = 번호 글자 그대로(`A-Z 0-9 -` · 권장 ≤ 20자) · 인
 | 5 | 디자이너2 `static/mobile.css` | `trc/_trace.html` · `trc/search.html` · `kpi/summary.html` · `ifc/collect.html` 의 모바일 카드는 `m-sec · m-card · kv · links · fold · trace · t-node` 마크업 그대로다. `body.ch-mobile .m-only` 만 보이고 `.web-only`(트리 · 표)는 숨긴다(`trc/_cards.html: styles()`). 원형의 하단 탭 4 · `.m-top` 검색 틀은 `base.html` 몫이라 넣지 않았다 | `trc/backward_mobile.png` |
 | 6 | 개발2 `printing.label_for` | 라벨 한 장의 `attrs[]` 두 줄 — 50×30 은 한 줄만 찍는다. 라벨 표시용 속성 선언이 없으면 빈 줄. 그대로 두면 된다(요청 아님 · 확인 사항) | — |
 | 7 | 검증 | `make check-terms` 는 다른 담당 파일(`style.css` 강조색 · `job/status.html` 스크롤)의 금지어로 한때 FAIL 했다가 지금은 PASS. `pytest` 는 같은 DB 를 여러 담당이 동시에 써서 `test_trc_api`(쓰기 0 검사 — `shp_shipment` 건수가 중간에 늘었다) · `test_job_work_orders` · `test_measure`(`_measure.html` 개발2/디자이너2 동시 수정)가 흔들렸다. 내 파일만으로 돌리면 통과 — 커밋 전 단독 실행 결과는 보고서 | — |
+
+## 이식 정리 (디자이너3 · 회전 5 · 2026-10-09)
+
+바꾼 파일: `static/{board,print}.css` · `templates/kpi/{board,summary,indicators}.html` · `templates/print/*.html` 4 · `templates/home/main.html` · `templates/dashboard/index.html` · `templates/trc/{_cards,_trace,search,backward,forward}.html` · `templates/trc/_trace_m.html`(새 파일). 캡처 `outputs/design/{board,print,home,trc}/r5_*.png`.
+
+| # | 항목 | 결과 |
+|---|---|---|
+| 1 | `TEMP-TOKENS` 삭제 | `board.css` · `print.css` 의 임시 토큰 블록을 지웠다. `kpi/board.html` · `print/*.html` 4 가 `board.css`/`print.css` 앞에 `<link rel="stylesheet" href="/static/tokens.css?v=…">`. 임시 블록이 쓰던 토큰 26 개 전부 `tokens.css` 에 있다(인쇄 `@media print` 재정의도 `tokens.css` 쪽). 색상값 직접 지정 0(바코드 `fill:#000` 만) |
+| 2 | 메인 카드 오늘 건수 | `t(c.today_label or '오늘')` + `title="{{ c.today_source }}"`(개발1 D-108). 값 None → `미수집` 그대로 |
+| 3 | 모바일 본문 분리 | TRC-01/02 · TRC-03 · KPI-02 · CMN-02 · CMN-04 가 `{% block mobile_body %}` 를 가진다. `{% block body %}` 를 통째로 바꾸는 화면은 `{% if device == 'mobile' %}{{ self.mobile_body() }}{% else %}…{% endif %}` 로 나눈다(base 의 기본 분기를 거치지 않으므로). 모바일 본문은 화면 제목 · `.panel` 테두리를 다시 그리지 않는다(`.m-top` 몫). TRC-01/02 는 결과가 있으면 추적 번호 칸을 빼고(`.m-top` 검색과 겹침) 빈 진입 · 422 에서만 `form.m-search[data-scan]`. TRC-03 은 `.m-top` 검색이 없으니 본문 맨 위 `form.m-search` 하나. KPI-02 는 조회 조건을 `details.fold` 로 접고 표(`ui.grid`)를 그리지 않는다(카드와 두 벌로 나오던 것). 메인은 시스템 줄 · 범례를 빼고 카드 한 줄씩. 390px 실측 `scrollWidth − clientWidth = 0`(8 화면 · 아래) |
+| 4 | QA2-003 KPI-01 목표 미확정 | 템플릿 고정 글자였다 → `미확정 (D-602)`(`board.undecided` 가 오면 그것). `data-empty` 도 같은 글자라 폴링이 지워도 같다. 목표 칸이 비면 `is-empty` 가 바깥 `span[data-key]` 에 붙어 뒤의 `%` 를 숨긴다. KPI-03 안내 문구의 맨 `미확정` 도 `(D-602)` 동반. 현황판 · KPI-03 본문의 맨 `미확정` 0 |
+| 5 | QA3-006 추적 노드 수량 | 노드 수량 = `node.qty`(lot.qty) · 화살표 수량 = `edge.qty` 를 나눴다. Web 트리: 관계 옆 굵은 수가 화살표 수량(`합병 50.000 →`) · 노드 끝이 LOT 수량(`100.000 EA`). 화살표 표: `화살표 수량` · `LOT 수량` 두 열. 모바일 카드: 관계 줄 `합병 50.000 → P-…` + `LOT 수량`. 개발3 키 `edges[].qty`(화살표) · `edges[].lot_qty` · `edges[].unit`(도착 LOT) 를 쓴다 |
+| 6 | 현황판 503 | DB 끊긴 서버(8033 · 유효 세션)에서 `GET /kpi/board?device=board` → 503 `_error.html` · `body.ch-board[data-refresh-seconds=5]` · `app.js` 실림 · `<noscript>` refresh. 폴링 중 503 은 `board.js` 의 stale(마지막 값 유지). `r5_board_503.png` |
+| 7 | 현황판 큰 숫자 넘침 | 실적 + 계획 글자 수가 11 을 넘으면 `.hero[data-long]` 로 한 단계 줄인다(112 → 84px) · `.hero` 줄바꿈 허용. 품질 목표 `미확정 (D-602)` 는 26px. 1920×1080 칸 밖 요소 0 |
+
+모바일 390px 실측(`document.documentElement.scrollWidth − clientWidth`, 칸 밖 요소 수): TRC-01 `M-EX-0001` 0/0 · TRC-02 `X-EX-0001` 0/0 · TRC-02 422 0/0 · TRC-03 0/0 · KPI-02 생산 0/0 · KPI-02 품질+측정값 0/0 · CMN-02 0/0 · CMN-04 0/0.
+
+**요청**
+- 디자이너1 `base.html`: TRC-01/02 에서도 `.m-top` 번호 검색이 TRC-03(`?q=`)으로 간다 — 원형(`mobile/trc_backward_m.html`)대로 이 두 화면에서는 `action=현재 경로 · name=no` 로 바꿔 주면 본문의 빈 진입 추적 칸을 지운다.
+- 디자이너1 `_error.html`: 현황판 채널 503 은 벽걸이 1920 에서 글자가 작다(제목 ≈ 18px). `body.ch-board` 일 때 상태 · 문구를 현황판 크기(48px 이상)로.
+- 개발3 `routers/dashboard.py`: 모바일 CMN-04 의 `shortcuts` 가 관리자에게 0 건(「열 수 있는 화면이 없습니다」) — 모바일 채널 허용 화면(TRC-03 · KPI-02 · JOB-02 · MAT-04)을 넘기는지 확인.
 
 ## 이식 요청 (디자이너2 · 웨이브 A′ · 2026-10-09)
 

@@ -1,19 +1,6 @@
 /* 출력물 4종(작업지시서 · LOT 라벨 · 출하 라벨 · 성적서) 공용 스타일 — 디자이너3. docs/design/print/*.html 의 <style> 을 한 파일로.
    양식별 규칙은 body[data-print="work_order|label_lot|label_shipment|document"] 로 나눈다. 화면에서는 종이처럼 보이고, 인쇄에서는 @page 여백 · 배경 제거.
-   바코드는 printing.barcode_svg 의 인라인 SVG — fill:#000 만 예외(barcode_spec.md §2). 외부 CDN · 웹폰트 0. */
-
-/* ── TEMP-TOKENS: static/style.css :root 에 디자이너1 토큰이 아직 없어 출력물이 쓰는 토큰만 임시로 둔다. tokens.css 가 오면 지운다. ── */
-:root{
-  --font-sans:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","맑은 고딕","Noto Sans KR","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"D2Coding","Liberation Mono",monospace;
-  --r-md:4px;--r-lg:6px;--sh-2:0 4px 14px rgba(16,20,24,.16);
-  --c-bg:#f2f3f5;--c-surface:#ffffff;--c-surface-2:#eef0f2;--c-line:#d3d7dc;
-  --c-ink:#1b1f24;--c-ink-2:#5c6670;--c-ink-3:#8c959e;--c-ink-inverse:#ffffff;
-  --c-accent:#1f5fa8;--c-err:#b42318;--c-warn:#9a6200;--c-deviated:#9a6200;--c-empty:#8c959e;
-  --c-print-ink:#000000;--c-print-line:#000000;--c-print-bg:#ffffff;
-}
-@media print{:root{--c-bg:#fff;--c-surface:#fff;--c-surface-2:#fff;--c-line:#000;--c-ink:#000;--c-ink-2:#333;--c-ink-3:#666;--sh-2:none}}
-/* ── /TEMP-TOKENS ── */
+   바코드는 printing.barcode_svg 의 인라인 SVG — fill:#000 만 예외(barcode_spec.md §2). 외부 CDN · 웹폰트 0. 토큰은 print/*.html 이 먼저 <link> 하는 /static/tokens.css. */
 
 *{box-sizing:border-box}
 body{margin:0;background:var(--c-bg);color:var(--c-ink);font-family:var(--font-sans);font-size:11pt;line-height:1.4}

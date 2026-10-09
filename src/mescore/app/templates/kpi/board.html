@@ -2,7 +2,7 @@
    첫 렌더는 서버가 stats.board() 로 채우고(키 = README 디자이너3 §1 확정 · D-602), 그 뒤 static/board.js 가 board_refresh_seconds 마다 같은 경로를
    Accept: application/json 으로 받아 [data-key] 글자만 바꾼다(전체 새로고침 없음). 실패하면 html[data-state="stale"] + "갱신 실패 HH:MM, 재시도 중" — 마지막 값 유지.
    app.js 는 싣지 않는다(그쪽 현황판 로직은 base.html 화면의 전체 새로고침 — 둘이 겹치면 요청이 두 배가 된다). JS 가 없으면 noscript meta refresh.
-   null → 미수집 · 목표 없음 → 미확정 · 목록 0건 → 미수집 한 줄. 다크는 ?theme=dark → html[data-theme="dark"] (전환 조건 미확정 — README 이식 요청). #}
+   null → 미수집 · 목표 없음 → 미확정 (D-602) · 목록 0건 → 미수집 한 줄. 다크는 ?theme=dark → html[data-theme="dark"] (전환 조건 미확정 — README 이식 요청). #}
 {% set theme = 'dark' if request.query_params.get('theme') == 'dark' else 'light' %}
 <!DOCTYPE html>
 <html lang="ko" data-theme="{{ theme }}" data-state="ok">
@@ -11,12 +11,16 @@
 <meta name="viewport" content="width=1920">
 <noscript><meta http-equiv="refresh" content="{{ board_refresh_seconds }}"></noscript>
 <title>{{ t('현황판') }} · {{ system_name }}</title>
+<link rel="stylesheet" href="/static/tokens.css?v={{ asset_v }}">
 <link rel="stylesheet" href="/static/board.css?v={{ asset_v }}">
 </head>
 <body class="ch-board" data-device="board" data-refresh-seconds="{{ board_refresh_seconds }}" data-poll-url="{{ poll_url }}" data-empty="{{ NOT_COLLECTED }}">
 {% set p = board.production %}{% set q = board.quality %}{% set d = board.delivery %}{% set e = board.equipment %}{% set m = board.measure %}
 {% macro n(v, digits=0) %}{% if v is none %}<span class="is-empty">{{ NOT_COLLECTED }}</span>{% else %}{{ v|num(digits) }}{% endif %}{% endmacro %}
-{% macro tgt(v) %}{% if v is none %}<span class="is-empty">{{ t('미확정') }}</span>{% else %}{{ v|num(1) }}{% endif %}{% endmacro %}
+{#- 목표 NULL = 「미확정 (D-602)」(goal G-C11 형식 · QA2-003). 개발3 이 board.undecided 로 문구를 넘기면 그것을 쓴다 -#}
+{% set UNDECIDED = board.undecided if board.undecided is defined and board.undecided else t('미확정') ~ ' (D-602)' %}
+{% macro tgt(v) %}{% if v is none %}<span class="is-empty">{{ UNDECIDED }}</span>{% else %}{{ v|num(1) }}{% endif %}{% endmacro %}
+{% macro tgt_span(key, v) %}<span data-key="{{ key }}" data-digits="1" data-empty="{{ UNDECIDED }}"{% if v is none %} class="is-empty"{% endif %}>{{ UNDECIDED if v is none else v|num(1) }}</span>{% endmacro %}
 {% macro st(v, target) %}{% if v is not none and target is not none %}{% set fv = v|float %}{% set ft = target|float %} data-status="{{ 'good' if fv >= ft else ('warn' if fv >= ft * 0.95 else 'critical') }}"{% endif %}{% endmacro %}
 {% macro zero(v) %}{% if v is not none %} data-status="{{ 'critical' if v > 0 else 'good' }}"{% endif %}{% endmacro %}
 
@@ -34,7 +38,8 @@
   {# 1. 오늘 생산 — production.* #}
   <section class="panel">
     <h2>{{ t('오늘 생산') }} <small>{{ t('계획 대비 실적') }}</small></h2>
-    <div class="hero" data-status-key="production.achieve_rate" data-good="95" data-warn="80"{{ st(p.achieve_rate, 95) }}>
+    {#- 실적 + 계획 자릿수가 길면(쉼표 포함 12자 넘음) 큰 숫자를 한 단계 줄여 한 줄에 — 칸 밖으로 밀려 차트가 잘리지 않게 -#}
+    <div class="hero" data-status-key="production.achieve_rate" data-good="95" data-warn="80"{{ st(p.achieve_rate, 95) }}{% if ((p.actual_qty|num(0))|string|length + (p.plan_qty|num(0))|string|length) > 11 %} data-long{% endif %}>
       <span class="v" data-key="production.actual_qty" data-digits="0">{{ n(p.actual_qty) }}</span>
       <span class="of">/ <span data-key="production.plan_qty" data-digits="0">{{ n(p.plan_qty) }}</span></span>
       <span class="u" data-key="production.unit">{{ p.unit|txt('') }}</span>
@@ -44,7 +49,7 @@
       <div class="k"><span class="l">{{ t('달성률') }}</span><b><span data-key="production.achieve_rate" data-digits="1">{{ n(p.achieve_rate, 1) }}</span><em class="u">%</em></b></div>
       <div class="k" data-status-key="production.good_rate" data-target-key="production.good_rate_target"{{ st(p.good_rate, p.good_rate_target) }}>
         <span class="l">{{ t('양품률') }}</span><b><span data-key="production.good_rate" data-digits="1">{{ n(p.good_rate, 1) }}</span><em class="u">%</em></b>
-        <span class="target">{{ t('목표') }} <span data-key="production.good_rate_target" data-digits="1" data-empty="{{ t('미확정') }}">{{ tgt(p.good_rate_target) }}</span><em class="u">%</em></span>
+        <span class="target">{{ t('목표') }} {{ tgt_span('production.good_rate_target', p.good_rate_target) }}<em class="u">%</em></span>
       </div>
       <div class="k"><span class="l">{{ t('불량') }}</span><b><span data-key="production.defect_qty" data-digits="0">{{ n(p.defect_qty) }}</span></b></div>
     </div>
@@ -65,7 +70,7 @@
     <div class="sub">
       <div class="k"><span class="l">{{ t('검사') }}</span><b><span data-key="quality.inspection_count" data-digits="0">{{ n(q.inspection_count) }}</span><em class="u"> {{ t('건') }}</em></b></div>
       <div class="k" data-status-key="quality.fail_count" data-zero-good{{ zero(q.fail_count) }}><span class="l">{{ t('불합격') }}</span><b><span data-key="quality.fail_count" data-digits="0">{{ n(q.fail_count) }}</span><em class="u"> {{ t('건') }}</em></b></div>
-      <div class="k"><span class="l">{{ t('목표') }}</span><b class="target"><span data-key="quality.pass_rate_target" data-digits="1" data-empty="{{ t('미확정') }}">{{ tgt(q.pass_rate_target) }}</span><em class="u">%</em></b></div>
+      <div class="k"><span class="l">{{ t('목표') }}</span><b class="target">{{ tgt_span('quality.pass_rate_target', q.pass_rate_target) }}<em class="u">%</em></b></div>
     </div>
     <h2 class="sub-h">{{ t('불량 상위') }} <small>{{ t('수량') }}</small></h2>
     <ul class="bars" data-list="quality.top_defects" data-max="3">
@@ -142,7 +147,7 @@
     </div>
     <h2 class="sub-h">{{ t('지표') }} <small>{{ t('목표 대비') }}</small></h2>
     <ul class="inds" data-list="indicators" data-max="6">
-      <template><li data-status-key="status"><span data-key="name"></span><span><b data-key="value" data-digits="1"></b><small>/ <span data-key="target_value" data-digits="1" data-empty="{{ t('미확정') }}"></span> <span data-key="unit"></span></small></span></li></template>
+      <template><li data-status-key="status"><span data-key="name"></span><span><b data-key="value" data-digits="1"></b><small>/ <span data-key="target_value" data-digits="1" data-empty="{{ UNDECIDED }}"></span> <span data-key="unit"></span></small></span></li></template>
       {% for i in board.indicators[:6] %}<li data-row{% if i.status %} data-status="{{ i.status }}"{% endif %}><span>{{ t(i.name) }}</span><span><b{% if i.value is none %} class="is-empty"{% endif %}>{{ n(i.value, 1) }}</b><small>/ {{ tgt(i.target_value) }} {{ i.unit|txt('') }}</small></span></li>
       {% else %}<li data-row class="is-empty">{{ NOT_COLLECTED }}</li>{% endfor %}
     </ul>

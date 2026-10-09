@@ -1,11 +1,12 @@
 {# TRC-03 번호 검색 — F-TRC-03 lineage.search. 번호 일부 · 품목으로. ctx(개발3 · 바꾸지 않는다): q results[{node links}] limit. 쓰기 0.
-   Web: 표. 모바일(디자이너2 mobile/trc_search_m.html): 390px 카드 — 원재료 LOT 은 정방향, 출하 · 생산 LOT 은 역방향이 주 버튼. #}
+   Web: 표. 모바일(mobile_body · 디자이너2 mobile/trc_search_m.html): 검색 칸 하나 + 390px 카드 — 원재료 LOT 은 정방향, 출하 · 생산 LOT 은 역방향이 주 버튼. #}
 {% extends "base.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "trc/_cards.html" as cards %}
 {% block head %}{{ cards.styles() }}{% endblock %}
 
-{% block body %}
+{#- 모바일은 mobile_body — .m-top 에 TRC-03 번호 검색이 없으므로(base 가 이 화면에서 뺀다) 검색 칸은 본문 맨 위 하나 -#}
+{% block body %}{% if device == 'mobile' %}{{ self.mobile_body() }}{% else %}
 <section class="panel">
   <div class="chips">
     <a class="chip" href="{{ nav.path_of('TRC-01') }}">{{ t('정방향 추적') }}</a>
@@ -27,14 +28,24 @@
     {% endfor %}
     </tbody>
   </table>
-  <div class="m-sec m-only">
-    {% for r in results %}
-    {% set primary = [('정방향', r.links.forward), ('역방향', r.links.backward)] if r.node.kind_base == 'MATERIAL' else [('역방향', r.links.backward), ('정방향', r.links.forward)] %}
-    {{ cards.card(r.node.no, r.node.state, [('종류', t(r.node.kind_label)), ('품목', r.node.item|txt), ('수량', ((r.node.qty|num(3)) ~ ' ' ~ (r.node.unit|txt(''))) if r.node.qty is not none else none), ('검사', t(r.node.insp_status) if r.node.insp_status else none), ('작업지시', r.node.work_order_no|txt)], primary) }}
-    {% else %}
-    <p class="empty-inline">{{ NOT_COLLECTED }} — {{ t('맞는 번호가 없습니다 · 번호 일부를 더 넣어 본다') }}</p>
-    {% endfor %}
-  </div>
   {% endif %}
 </section>
+{% endif %}{% endblock %}
+
+{% block mobile_body %}
+<form class="m-search" method="get" action="{{ nav.path_of('TRC-03') }}" role="search" autocomplete="off">
+  <input type="search" name="q" data-scan autofocus required value="{{ q }}" placeholder="{{ t('LOT · 작업지시 · 출하 번호 검색') }}" aria-label="{{ t('번호 · 품목 일부') }}" autocapitalize="off" spellcheck="false">
+  <button type="submit">{{ t('검색') }}</button>
+</form>
+{% if results is not none %}
+<section class="m-sec">
+  <h2>{{ t('결과') }} <small>「{{ q }}」 · {{ results|length }}{{ t('건') }}{% if results|length >= limit %} · {{ t('더 좁혀 주세요') }}{% endif %}</small></h2>
+  {% for r in results %}
+  {% set primary = [('정방향', r.links.forward), ('역방향', r.links.backward)] if r.node.kind_base == 'MATERIAL' else [('역방향', r.links.backward), ('정방향', r.links.forward)] %}
+  {{ cards.card(r.node.no, r.node.state, [('종류', t(r.node.kind_label)), ('품목', r.node.item|txt), ('수량', ((r.node.qty|num(3)) ~ ' ' ~ (r.node.unit|txt(''))) if r.node.qty is not none else none), ('검사', t(r.node.insp_status) if r.node.insp_status else none), ('작업지시', r.node.work_order_no|txt)], primary) }}
+  {% else %}
+  <p class="empty">{{ NOT_COLLECTED }} — {{ t('맞는 번호가 없습니다 · 번호 일부를 더 넣어 본다') }}</p>
+  {% endfor %}
+</section>
+{% endif %}
 {% endblock %}
