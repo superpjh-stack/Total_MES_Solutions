@@ -109,10 +109,16 @@ def test_login_401_then_ok_and_logout_revokes():
 
 
 def test_admin_opens_every_screen_and_placeholders_carry_contract():
+    """팩이 `menus.hide` 로 숨긴 메뉴의 화면은 403 이 계약(R9 · DEF-QA3-004 — printfilm `hide: [eqp]`)."""
     c = _client("admin")
+    hidden = packs.current().hidden
     n_ph = 0
     for s in nav.SCREENS:
         r = c.get(s.path)
+        if s.menu_code in hidden:
+            assert r.status_code == 403, (s.path, "숨긴 메뉴")
+            n_ph += s.path in app.state.placeholder_paths
+            continue
         assert r.status_code == 200, s.path
         body = r.json()
         if s.path in app.state.placeholder_paths:
