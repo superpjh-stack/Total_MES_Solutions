@@ -338,6 +338,43 @@ tr.deviated td{color:var(--c-deviated);font-weight:700}
 .m-field .readonly{min-height:30px;padding:4px 8px;border:var(--bw) solid var(--c-line);border-radius:var(--r-md);background:var(--c-surface-2);color:var(--c-ink-2)}
 .m-field.deviated input,.m-field.deviated .readonly{border-color:var(--c-warn-line);background:var(--c-deviated-bg)}
 
+/* 디자이너2 템플릿의 Web 최소 모양 (회전 4 · 이식 요청 8) — POP · 모바일 본모양은 pop.css · mobile.css. 관리자 Web 에서 같은 화면
+   (POP-01~04 관리자 조회 · MAT-02 · QUA-02 검사 항목)을 열었을 때 깨지지 않을 만큼만. 색은 전부 §1 토큰 */
+.pop-main{min-width:0}
+.pop-main .screen-head{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);flex-wrap:wrap;margin:0 0 var(--sp-3)}
+.pop-main .screen-title{margin:0;font-size:var(--fs-lg)}
+.pop-main .who{display:flex;gap:var(--sp-3);align-items:center;font-size:var(--fs-sm)}
+.m-field.collect{background:var(--c-surface-2);border-radius:var(--r-md);padding:var(--sp-1) var(--sp-2)}
+.result{margin:0 0 var(--sp-3);padding:var(--sp-2) var(--sp-3);border:var(--bw) solid var(--c-line);border-left:4px solid var(--c-line-strong);border-radius:var(--r-md);background:var(--c-surface-2)}
+.result-msg{margin:0;font-weight:700}
+.result.err{border-color:var(--c-err-line);border-left-color:var(--c-err);background:var(--c-err-bg)}
+.result.err .result-msg{color:var(--c-err)}
+.result.ok{border-color:var(--c-ok-line);border-left-color:var(--c-ok);background:var(--c-ok-bg)}
+.result.ok .result-msg{color:var(--c-ok)}
+.result-fields{margin:var(--sp-1) 0 0;padding-left:var(--sp-5);font-size:var(--fs-sm)}
+.choice{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:var(--sp-1)}
+.choice.c2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.choice.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.choice.c4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.choice label{position:relative;display:block;min-width:0}
+.choice input{position:absolute;opacity:0;width:1px;height:1px;margin:0;padding:0;min-height:0}
+.choice span{display:flex;align-items:center;justify-content:center;text-align:center;min-height:var(--touch-min);padding:var(--sp-1) var(--sp-2);border:var(--bw) solid var(--c-line-strong);border-radius:var(--r-md);background:var(--c-surface);font-weight:600;cursor:pointer}
+.choice input:checked+span{background:var(--c-accent);border-color:var(--c-accent);color:var(--c-accent-ink)}
+.choice input:focus-visible+span{outline:2px solid var(--c-focus);outline-offset:2px}
+.choice input:disabled+span{opacity:.5;cursor:not-allowed}
+.choice.big span{min-height:56px;font-size:var(--fs-md)}
+.choice .ok input:checked+span{background:var(--c-ok);border-color:var(--c-ok)}
+.choice .warn input:checked+span{background:var(--c-warn);border-color:var(--c-warn)}
+.choice .err input:checked+span{background:var(--c-err);border-color:var(--c-err)}
+.steps{display:flex;gap:var(--sp-1);margin:0 0 var(--sp-3);flex-wrap:wrap}
+.steps .step{flex:1 1 0;min-width:96px;padding:var(--sp-1) var(--sp-2);border:var(--bw) solid var(--c-line);border-radius:var(--r-md);font-size:var(--fs-sm);font-weight:600;text-align:center;color:var(--c-ink-2);background:var(--c-surface)}
+.steps .step.on{background:var(--c-accent);border-color:var(--c-accent);color:var(--c-accent-ink)}
+.steps .step.done{background:var(--c-ok-bg);border-color:var(--c-ok-line);color:var(--c-ok)}
+.card.sel{border-color:var(--c-accent);box-shadow:inset 0 0 0 1px var(--c-accent)}
+a.card{display:block;color:inherit;text-decoration:none}
+a.card:hover{border-color:var(--c-accent)}
+.notice{margin:0 0 var(--sp-3);padding:var(--sp-2) var(--sp-3);border:var(--bw) solid var(--c-warn-line);border-left:4px solid var(--c-warn);border-radius:var(--r-md);background:var(--c-warn-bg);font-weight:600}
+
 /* 알림 팝업 (app.js S-06~S-09 · POP 채널) */
 .popup-layer{position:fixed;inset:0;background:rgba(20,20,24,.45);display:flex;align-items:center;justify-content:center;z-index:var(--z-toast)}
 .popup{background:var(--c-surface);color:var(--c-ink);border-radius:var(--r-lg);padding:var(--sp-5) var(--sp-5);min-width:280px;max-width:min(520px,92vw);box-shadow:var(--sh-2)}
@@ -380,6 +417,13 @@ body.login{display:flex;flex-direction:column;align-items:center;justify-content
 .login-side td,.login-side th{border-bottom:1px solid rgba(255,255,255,.12);padding:3px 4px;text-align:left;color:var(--c-head-ink-2);vertical-align:top}
 .login-side th{color:var(--c-head-ink)}
 .ftr.login-ftr{position:fixed;left:0;right:0;bottom:0;color:var(--c-head-ink-2)}
+
+.login-side table.matrix th,.login-side table.matrix td{text-align:left;white-space:normal}
+.login-side table.matrix .num{text-align:right;white-space:nowrap}
+.login-side table.matrix th[scope=row]{text-align:left}
+.login-side table.matrix .lv-n{opacity:.7}
+.login-side table.matrix td.wrap{white-space:normal;text-align:left}
+.login-side .sub-h{margin-top:var(--sp-4)}
 
 /* 오류 (CMN-03) */
 .err-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;padding:var(--sp-6) var(--sp-4);text-align:center}
@@ -474,15 +518,9 @@ body.ch-pop .toast{font-size:var(--fs-pop-note)}
 
 /* 모바일 — 한 단 · 폭 390 · 가로 넘침 0 · 표는 카드로(아래 @media) */
 body.ch-mobile{font-size:var(--fs-mobile-base)}
-body.ch-mobile .shell{grid-template-columns:minmax(0,1fr);padding:var(--sp-2)}
-body.ch-mobile .desc,body.ch-mobile #desc-toggle,body.ch-mobile #side-toggle{display:none}
-body.ch-mobile .side{position:static;max-height:none}
-body.ch-mobile .main{order:-1}
-body.ch-mobile .hdr{flex-wrap:wrap;min-height:var(--touch-min)}
-body.ch-mobile .main .btn,body.ch-mobile .actions .btn{min-height:var(--touch-min)}
-body.ch-mobile .hdr{gap:var(--sp-2);padding:var(--sp-1) var(--sp-3)}
-body.ch-mobile .hdr .menu-jump{display:inline-flex}
-body.ch-mobile .ftr{padding-bottom:var(--sp-7)}
+/* 틀(.m-frame · .m-top · .m-main · 하단 탭 .m-tabs)은 base.html 이 그리고 모양은 mobile.css. 모바일에는 .hdr · .side · .desc · .ftr 가 없다(회전 4) */
+body.ch-mobile .m-main .btn,body.ch-mobile .actions .btn{min-height:var(--touch-min)}
+body.ch-mobile .m-main>.alert{margin:var(--sp-2) var(--sp-3)}
 body.ch-mobile input,body.ch-mobile select{min-height:var(--touch-min);font-size:var(--fs-mobile-base)}
 body.ch-mobile code{overflow-wrap:anywhere;font-size:var(--fs-mobile-no)}
 body.ch-mobile .cal{display:none}

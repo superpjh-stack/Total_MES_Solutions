@@ -1,8 +1,15 @@
-{# 공통 레이아웃 (디자이너1 · docs/design/web/base.html 이식) — 헤더 / 좌측 메뉴(nav.MENUS 의 권한 가시 목록 `menus` · 팩 hide · rename · order 반영) / 본문 3블록 / 우측 계약 패널 / 토스트 · 422 알림 / 푸터.
-   채널: body.ch-web · ch-pop · ch-mobile · ch-board 는 templating.render 가 device 로 붙인다. POP 은 좌측 메뉴 대신 상단 탭(이 화면의 채널 허용 화면만) — 안의 모양은 pop.css(디자이너2).
-   개발자는 {% block search %} {% block grid %} {% block actions %} 를 채우거나 {% block body %} 를 통째로 바꾼다. search 블록을 비우면 조회 조건 패널이 안 그려진다.
-   flash(http.saved · 422 핸들러): kind=ok → 토스트 한 번(8초) · 그 밖(warn · error · info) → 본문 위 알림 + fields[] 항목별 사유. POP 채널은 app.js 의 #flash-data 팝업(S-09).
-   사용자 문구는 전부 t(). 스크립트는 static/app.js 하나(디자이너2). #}
+{# 공통 레이아웃 (디자이너1 · docs/design/web/base.html 이식) — 채널 틀 셋을 여기 한 곳이 그린다(회전 4 · 디자이너2 이식 요청 1 · 2).
+   채널: body.ch-web · ch-pop · ch-mobile · ch-board 는 templating.render 가 device 로 붙인다.
+   · ch-web(· ch-board) : 헤더 / 좌측 메뉴(nav.MENUS 의 권한 가시 목록 `menus` · 팩 hide · rename · order 반영) / 본문 / 우측 계약 패널 / 푸터.
+   · ch-pop            : 헤더 + 상단 탭(.pop-tabs — 이 화면의 채널 허용 화면만) / main.pop-main(제목 줄 .screen-head — 설비 · 시각 · 연결 · 뒤로) / 좌측 메뉴 · 계약 패널 없음. 모양은 pop.css(디자이너2).
+   · ch-mobile         : .m-frame(390) = .m-top(제목 · 사용자 · TRC-03 번호 검색) / .m-main / 하단 탭 4 .m-tabs(추적 TRC-03 · 현황 KPI-02 · 지시 JOB-02 · 재고 MAT-04 —
+                         `menus` 에 있는 모듈 + nav.channel_allowed(id, 'mobile') 만). .hdr · .side · .desc · .ftr 는 그리지 않는다. 모양은 mobile.css(디자이너2).
+   자식 블록: {% block search %} {% block grid %} {% block form %} {% block actions %} — 또는 {% block body %} 를 통째로 바꾼다(그래도 채널 틀은 base 가 두른다).
+     {% block pop_body %} — POP 본문(비우면 search · grid · form · actions 를 POP 패널로). grid 가 비고 pop_body 만 있으면 Web · 모바일에서도 그 본문을 그린다.
+     {% block mobile_body %} — 모바일 본문(비우면 search 를 .m-filter · grid 를 .m-sec 으로). {% set who_equip = … %} 를 자식 맨 위에 두면 POP 제목 줄에 설비.
+   pop/_layout.html(디자이너2)은 옮겨 가는 동안 남는다 — 그 body 가 이미 main.pop-main · div.m-frame 을 그리면 base 는 틀을 겹쳐 두르지 않는다(결과 같음). 지우면 이 분기도 지운다.
+   flash(http.saved · 422 핸들러): kind=ok → 토스트 한 번(8초) · 그 밖(warn · error · info) → 본문 위 알림 + fields[] 항목별 사유 · values{} 는 ui.field/select 가 칸에 되채운다.
+   POP 채널은 app.js 의 #flash-data 팝업(S-09). 사용자 문구는 전부 t(). 스크립트는 static/app.js 하나(디자이너2). #}
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -16,9 +23,123 @@
 {% block head %}{% endblock %}
 </head>
 <body class="ch-{{ device }}" data-device="{{ device }}" data-screen="{{ screen_id or '' }}" data-grid-page-size="{{ grid_page_size }}"{% if device == 'board' %} data-refresh-seconds="{{ board_refresh_seconds }}"{% endif %}>
-{% set show_side = menus and device != 'pop' %}
-{% set show_desc = settings.env == 'dev' and device in ('web', 'mobile') %}
+{% set show_side = menus and device not in ('pop', 'mobile') %}
+{% set show_desc = settings.env == 'dev' and device == 'web' %}
+{% set pop_ids = ['POP-01', 'POP-02', 'POP-03', 'POP-04'] %}
 
+{#- 내용 블록 정의 — 여기서는 출력하지 않고 아래 채널 틀이 self.body() 로 부른다(블록은 if 안이어도 정의된다) -#}
+{% if false %}
+{% block pop_body %}{% endblock %}
+{% block mobile_body %}{% endblock %}
+{% block body %}
+{% set pop_html = self.pop_body() %}
+{% set grid_html = self.grid() %}
+{% if device == 'pop' %}
+  {% if pop_html|trim %}
+  {{ pop_html }}
+  {% else %}
+  {% set search_html = self.search() %}
+  {% if search_html|trim %}
+  <section class="panel">
+    <h2>{{ t('조회 조건') }}</h2>
+    <form class="form-grid" method="get" id="screen-search">{{ search_html }}</form>
+  </section>
+  {% endif %}
+  <section class="panel grid-panel">{{ grid_html }}</section>
+  {% set form_html = self.form() %}{% if form_html|trim %}<section class="panel">{{ form_html }}</section>{% endif %}
+  <div class="actions">{{ self.actions() }}</div>
+  {% endif %}
+{% elif device == 'mobile' %}
+  {% set m_html = self.mobile_body() %}
+  {% if m_html|trim %}
+  {{ m_html }}
+  {% elif not grid_html|trim and pop_html|trim %}
+  {{ pop_html }}
+  {% else %}
+  {% set search_html = self.search() %}
+  {% if search_html|trim %}<form class="m-filter" method="get" id="screen-search">{{ search_html }}<button type="submit">{{ t('조회') }}</button></form>{% endif %}
+  <section class="m-sec">{{ grid_html }}</section>
+  {% endif %}
+{% elif not grid_html|trim and pop_html|trim %}
+  {# 관리자 Web 에서 POP 전용 화면(POP-01~04)을 열었을 때 — 같은 본문을 Web 틀 안에 #}
+  <div class="pop-main">{{ pop_html }}</div>
+{% else %}
+  {% set search_html = self.search() %}
+  {% if search_html|trim %}
+  <section class="panel search" aria-labelledby="h-search">
+    <h2 id="h-search">{{ t('조회 조건') }}</h2>
+    <form class="search-form" method="get" id="screen-search">
+      {% block search %}{% endblock %}
+    </form>
+  </section>
+  {% endif %}
+
+  <section class="panel grid-panel" aria-labelledby="h-grid">
+    {% block grid %}{% endblock %}
+  </section>
+
+  {# 쓰기 폼 패널(section.panel#form) — 표 아래 · 버튼 띠 위. 비우면 안 그려진다 #}
+  {% block form %}{% endblock %}
+
+  <section class="actions">
+    {% block actions %}
+    {% if search_html|trim %}<button type="submit" form="screen-search" class="btn btn-primary">{{ t('조회') }}</button>{% endif %}
+    {% endblock %}
+  </section>
+{% endif %}
+{% endblock %}
+{% endif %}
+
+{% set body_html = self.body() %}
+
+{#- 본문 위 알림(422 · info · warn) — Web · 모바일. POP 은 #flash-data 팝업 -#}
+{% macro flash_alert() %}
+{% if flash and flash.kind != 'ok' and device != 'pop' %}
+<div class="alert{% if flash.kind == 'info' %} info{% elif flash.kind == 'warn' %} warn{% endif %}" role="alert">
+  <button type="button" class="alert-x" data-alert-close aria-label="{{ t('닫기') }}">&times;</button>
+  <strong>{{ flash.title or t('입력값을 확인해 주세요') }}</strong>{% if flash.message %} — {{ flash.message }}{% endif %}
+  {% if flash.fields %}
+  <ul class="fields">
+    {% for f in flash.fields %}<li><b>{{ f.label or f.name }}</b>{% if f.name %} <code>{{ f.name }}</code>{% endif %} — {{ f.reason }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% endif %}
+{% endmacro %}
+
+{% if device == 'mobile' %}
+{# ── 모바일 틀 — .hdr · .side · .desc · .ftr 없음 ── #}
+{% if '<div class="m-frame">' in body_html %}
+{{ body_html }}
+{% else %}
+{% set menu_codes = (menus or [])|map(attribute='code')|list %}
+<div class="m-frame">
+<header class="m-top">
+  <div class="row"><h1>{{ screen_name or system_name }}{% if screen_id %} <small>{{ screen_id }}</small>{% endif %}</h1>
+    <span class="who">{% if user %}{{ user.user_name }} · {{ user.role_name }} <form method="post" action="/logout"><button>{{ t('로그아웃') }}</button></form>{% else %}<a href="/login">{{ t('로그인') }}</a>{% endif %}</span></div>
+  {% if 'trc' in menu_codes and screen_id != 'TRC-03' and nav.channel_allowed('TRC-03', 'mobile') %}
+  <form class="m-search" method="get" action="{{ nav.path_of('TRC-03') }}" role="search">
+    <input type="search" name="q" placeholder="{{ t('LOT · 작업지시 · 출하 번호 검색') }}" aria-label="{{ t('번호 검색') }}" autocomplete="off">
+    <button type="submit">{{ t('검색') }}</button>
+  </form>
+  {% endif %}
+</header>
+<main class="m-main" id="main">
+  {{ flash_alert() }}
+  {{ body_html }}
+</main>
+<nav class="m-tabs" aria-label="{{ t('하단 탭') }}">
+  {% for code, sid, label, ico in [('trc', 'TRC-03', '추적', '⌕'), ('kpi', 'KPI-02', '현황', '▤'), ('job', 'JOB-02', '지시', '☰'), ('mat', 'MAT-04', '재고', '▦')] %}
+  {% if code in menu_codes and nav.channel_allowed(sid, 'mobile') %}
+  <a href="{{ nav.path_of(sid) }}"{% if screen_id == sid or (code == 'kpi' and screen_id in ['SHP-03', 'ORD-03']) or (code == 'trc' and screen_id in ['TRC-01', 'TRC-02']) %} class="on"{% endif %}><span class="ico" aria-hidden="true">{{ ico }}</span>{{ t(label) }}</a>
+  {% endif %}
+  {% endfor %}
+</nav>
+</div>
+{% endif %}
+
+{% else %}
+{# ── Web · 현황판 · POP — 헤더(POP 은 상단 탭) ── #}
 <header class="hdr">
   <div class="hdr-l">
     {% if show_side %}<button type="button" class="hdr-btn" id="side-toggle" aria-controls="side-menu" aria-expanded="true" title="{{ t('메뉴 접기 · 펴기') }}">&#9776;</button>{% endif %}
@@ -67,44 +188,32 @@
   </nav>
   {% endif %}
 
+  {% if device == 'pop' %}
+  {# POP — 본문 하나 = main.pop-main (제목 줄 + 본문). 바깥은 div 라 <main> 이 겹치지 않는다 #}
+  <div class="main" id="main">
+    {% if '<main class="pop-main">' in body_html %}
+    {{ body_html }}
+    {% else %}
+    <main class="pop-main">
+      <div class="screen-head">
+        <h1 class="screen-title">{{ screen_name or system_name }}{% if screen_id %} <small>{{ screen_id }}</small>{% endif %}</h1>
+        <div class="who" aria-label="{{ t('현재 상태') }}">
+          {% if who_equip %}<span class="who-item"><small>{{ t('설비') }}</small><b>{{ who_equip }}</b></span>{% endif %}
+          <span class="who-item"><small>{{ t('시각') }}</small><b>{% if now is string %}{{ now[11:16] }}{% else %}{{ now|dt('%H:%M') }}{% endif %}</b></span>
+          <span class="who-item conn on"><small>{{ t('연결') }}</small><b>{{ t('정상') }}</b></span>
+          <a class="btn back" href="{{ nav.path_of('POP-01') if screen_id in pop_ids and screen_id != 'POP-01' else '/' }}">← {{ t('뒤로') }}</a>
+        </div>
+      </div>
+      {{ body_html }}
+    </main>
+    {% endif %}
+  </div>
+  {% else %}
   <main class="main" id="main">
-    {% if flash and flash.kind != 'ok' and device != 'pop' %}
-    <div class="alert{% if flash.kind == 'info' %} info{% elif flash.kind == 'warn' %} warn{% endif %}" role="alert">
-      <button type="button" class="alert-x" data-alert-close aria-label="{{ t('닫기') }}">&times;</button>
-      <strong>{{ flash.title or t('입력값을 확인해 주세요') }}</strong>{% if flash.message %} — {{ flash.message }}{% endif %}
-      {% if flash.fields %}
-      <ul class="fields">
-        {% for f in flash.fields %}<li><b>{{ f.label or f.name }}</b>{% if f.name %} <code>{{ f.name }}</code>{% endif %} — {{ f.reason }}</li>{% endfor %}
-      </ul>
-      {% endif %}
-    </div>
-    {% endif %}
-
-    {% block body %}
-    {% set search_html = self.search() %}
-    {% if search_html|trim %}
-    <section class="panel search" aria-labelledby="h-search">
-      <h2 id="h-search">{{ t('조회 조건') }}</h2>
-      <form class="search-form" method="get" id="screen-search">
-        {% block search %}{% endblock %}
-      </form>
-    </section>
-    {% endif %}
-
-    <section class="panel grid-panel" aria-labelledby="h-grid">
-      {% block grid %}{% endblock %}
-    </section>
-
-    {# 쓰기 폼 패널(section.panel#form) — 표 아래 · 버튼 띠 위. 비우면 안 그려진다 #}
-    {% block form %}{% endblock %}
-
-    <section class="actions">
-      {% block actions %}
-      {% if search_html|trim %}<button type="submit" form="screen-search" class="btn btn-primary">{{ t('조회') }}</button>{% endif %}
-      {% endblock %}
-    </section>
-    {% endblock %}
+    {{ flash_alert() }}
+    {{ body_html }}
   </main>
+  {% endif %}
 
   {% if show_desc %}
   <aside class="desc" id="desc-panel" data-env="{{ settings.env }}" aria-label="{{ t('계약') }}">
@@ -130,6 +239,7 @@
   </aside>
   {% endif %}
 </div>
+{% endif %}
 
 {% if flash and flash.kind == 'ok' and device != 'pop' %}
 <div class="toast" role="status" aria-live="polite" data-auto>
@@ -149,7 +259,9 @@
   </div>
 </div>
 
+{% if device != 'mobile' %}
 <footer class="ftr">{{ system_name }} · {{ t('갱신 시각') }} <b>{{ now }}</b> · {{ t('코어') }} {{ core_version }}{% if pack_name %} · {{ t('팩') }} {{ pack_name }}{% endif %}</footer>
+{% endif %}
 <script src="/static/app.js?v={{ asset_v }}"></script>
 </body>
 </html>

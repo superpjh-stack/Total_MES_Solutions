@@ -99,6 +99,9 @@
 | `section.panel.grid-panel` | `{% block grid %}{% endblock %}` | 개발자 (`ui.grid`) |
 | `section.panel#form` / `section.actions` | `{% block actions %}{% endblock %}` | 개발자 (`ui.write_button`) |
 | 본문 통째로 (권한 표 · 추적 · 카탈로그처럼 3블록이 안 맞을 때) | `{% block body %}` | 개발자 |
+| POP 본문 (회전 4) | `{% block pop_body %}` — base 가 `main.pop-main` + 제목 줄 `.screen-head`(설비 `who_equip` · 시각 · 연결 · 뒤로) + 상단 탭으로 두른다. 비우면 search · grid · form · actions 를 POP 패널로 | 디자이너2 · 개발2 |
+| 모바일 본문 (회전 4) | `{% block mobile_body %}` — base 가 `.m-frame` = `.m-top`(제목 · 사용자 · TRC-03 번호 검색) + `.m-main` + 하단 탭 4 `.m-tabs` 로 두른다. 비우면 search → `.m-filter` · grid → `.m-sec`. 모바일엔 `.hdr` `.side` `.desc` `.ftr` 가 없다 | 디자이너2 · 3 |
+| 422 입력값 유지 (회전 4) | flash `values{name: 값}` 이 오면 `ui.field` · `ui.select` 가 그 칸을 되채운다(`with context` import · 비밀번호 · readonly · disabled 제외) | 아키텍트(`util/http.py` · `main._back_with_flash`) |
 | `div.alert` (422 목록) | `{% if flash and flash.kind == 'error' %}` — `flash.message` + `{% for f in flash.fields %}` `f.label` `f.name` `f.reason` | `http.saved` / 422 핸들러가 세션 flash 에 |
 | `div.toast` (303 뒤 1회) | `{% if flash and flash.kind == 'ok' %}` · `app.js` 가 8초 뒤 닫는다 | 〃 |
 | `aside.desc` (계약 패널) | `{% if settings.show_contract_panel %}` · `{% for f in functions %}` `f.id` `f.name` `f.kind` · `.off` = `not user.can(f.id)` | `contracts.functions_of(screen_id)` |
@@ -375,3 +378,33 @@ S-01~S-14 구현 위치(`static/app.js`): S-01 `scans.length !== 1 → console.e
 | 모바일 채널 JOB-02 · ORD-03 | `.m-frame` + 하단 탭 4 | `base.html` 헤더 · 좌측 메뉴 + 표를 카드로(`cardify` · `body.ch-mobile` 과 폭 480 아래 둘 다) · ORD-03 은 주 단위 `details` | 디자이너2 `pop/_layout.html` 의 모바일 틀을 `base.html` 이 품으면 두 화면도 하단 탭이 붙는다 — 다음 회전에 합친다 |
 
 `app.js`(디자이너2) 에 필요한 동작 — 없어도 깨지지 않게 CSS 로 받쳐 두었다: `[data-toast-close]` · `.toast[data-auto]` 8초 뒤 제거(지금은 CSS 애니메이션으로 숨긴다) · `[data-alert-close]` · `[data-close-details]`(인라인 확인의 취소) · `#side-toggle`(`body.side-collapsed`) · `#desc-toggle`(`body.desc-closed` / 1180 아래 `desc-open`). 좌측 메뉴는 `app.js` 의 `.menu-head` 클릭(`.menu-group.open`)을 그대로 쓰도록 `mg menu-group` · `mg-h menu-head` 두 이름을 같이 달았다. `templating.asset_version()` 은 `style.css` · `app.js` 의 mtime 만 보므로 `tokens.css` 만 바꾸면 캐시가 안 풀린다 — `style.css` 를 같이 건드리거나 `asset_version` 에 `tokens.css` 를 더한다(아키텍트).
+
+## 이식 요청 (디자이너1 · 회전 4 · 2026-10-09)
+
+바꾼 파일: `templates/base.html` · `_error.html` · `login.html` · `home/_macros.html` · `static/style.css`. 캡처 `outputs/design/web/r4_*.png`(BAS-01 · POP-01 · JOB-02 × Web · POP · 모바일 + MAT-04 · TRC-03 모바일 + 503 POP). BAS-01 은 POP · 모바일 채널 밖이라 403, POP-01 은 모바일 채널 밖이라 403 — 그 화면 캡처가 채널 차단 확인이다.
+
+**처리한 것**
+
+| # | 요청 | 결과 |
+|---|---|---|
+| 디자이너2-1 | POP · 모바일 분기를 base 로 | `base.html` 이 채널 틀 셋을 그린다 — ch-pop: `.hdr` + 상단 탭 `.pop-tabs` + `div.main > main.pop-main`(`.screen-head` 제목 · 설비 · 시각 · 연결 · 뒤로) / ch-mobile: `.m-frame`(`.m-top` · `.m-main` · `.m-tabs` 4) / 그 밖: Web 3단. `{% block pop_body %}` · `{% block mobile_body %}` 를 base 가 둔다. 내용 블록은 출력하지 않는 자리에서 정의하고 틀이 `self.body()` 로 부른다 — **`{% block body %}` 를 통째로 바꾼 화면(TRC · KPI · 메인 · 대시보드)도 채널 틀 안에 들어간다**(모바일 틀이 하나가 됐다). `<main>` 은 화면마다 하나(POP 바깥은 `div.main`) |
+| 디자이너2-1 | `pop/_layout.html` 은 그대로 · 결과 같게 | `_layout.html` 의 body 가 이미 `<main class="pop-main">` · `<div class="m-frame">` 을 그리면 base 는 틀을 겹쳐 두르지 않고 그대로 낸다(문자열 검사 — `_layout.html` 을 지우는 회전에 이 두 줄도 지운다). POP-01 · MAT-04 결과 DOM 이 전과 같다(main 1 · pop-main 1 · screen-head 1 · 상단 탭 13 / m-frame 1 · 하단 탭 4) |
+| 디자이너2-2 | 모바일에서 `.hdr` `.side` 를 그리지 않는다 | 모바일은 `.hdr` · `.side` · `.desc` · `.ftr` 를 아예 안 그린다. `style.css` §5 의 모바일 헤더 · 메뉴 규칙을 지웠다. 하단 탭은 `menus` 에 있는 모듈 + `nav.channel_allowed(id, 'mobile')`. `.m-top` 번호 검색은 TRC-03 자신에서는 뺀다(본문 검색과 겹침) |
+| 디자이너2-3 | 503 POP(S-12) | `_error.html` 이 `device == 'pop' and status == 503` 이면 POP 틀 — `.hdr` + `div.offline-bar[role=alert]`(「서비스 일시 중단 (503) — 연결이 돌아오면 스캔을 이어서 한다」) + `main.pop-main` + `form.scan-box` 안 `input[data-scan][disabled]` + 「다시 시도」 + `.result.err`(방금 스캔은 저장 안 됨). `app.js` 를 싣는다(S-12 disabled → 포커스 없음 · POP 자동 새로고침 없음). 「다시 시도」 = GET 이면 같은 주소, POST 면 이전 화면(POST 주소를 GET 으로 열면 405). 현황판 채널 오류 화면의 자동 새로고침은 그대로 |
+| 디자이너2-8 | Web 최소 모양 | `style.css` §3 「디자이너2 템플릿의 Web 최소 모양」 — `.pop-main(.screen-head .who)` · `.result(.err .ok) .result-msg .result-fields` · `.choice(.c2 .c3 .c4 .big · .ok .warn .err) label>input+span` · `.m-field.collect` · `.steps .step(.on .done)`(메인 카드의 `.card .step` 과 겹치지 않게 `.steps` 아래로) · `.card.sel` · `a.card` · `.notice` |
+| 디자이너1 · 422 | 입력값 유지 | **준비만** — 아키텍트의 flash `values` 커밋이 아직 없다(`git log -- util/http.py` 마지막 = Phase 0). `ui.field` · `ui.select` 서명은 그대로, 첫 줄에서 `flash.get('values')` 를 읽어 그 칸 `name` 이 있으면 value 로 쓴다(비밀번호 · readonly · disabled 제외 · 라우터 value 보다 앞선다). **`flash.values` 로 쓰면 안 된다 — flash 는 dict 라 `dict.values` 메서드가 잡힌다.** 확인: 가짜 flash 로 렌더 → `item_code` 되채움 · `pw` 빈 값 · select `A&B` selected |
+| 디자이너1 · 로그인 | 역할 × 채널 × 입력 메뉴 표 | 개발1 `role_summary`(`aa9e22a` · `GET /login` — code · name · channels[device label] · write_menus[code name label] · read_count) + `n_menus` 로 안내 칸에 표(입력 메뉴 = 메뉴명 + 범위 `(승인)` 등 · 조회 = read_count/n_menus). 제목 「역할 n · 채널 4」 와 개발용 역할 버튼도 이 목록에서. `POST /login` 실패 재렌더(401)에는 키가 없어 표를 숨기고 버튼은 코어 역할 4(확인함). 개발용 버튼에 `formnovalidate` — 아이디 칸 `required` 때문에 `/login/as` 가 브라우저에서 막히던 것. 캡처 `r4_login.png` |
+
+**아키텍트에게** — ① `util/http.py: flash(..., values=)` + `main._back_with_flash` 가 `await request.form()` 의 값을 `values{}` 로(비밀번호 · `csrf` 류 키 제외 · 파일 제외). 템플릿은 이미 받는다. ② `templating.asset_version()` 에 `tokens.css` 를 더해 달라(웨이브 A′ 요청 그대로).
+
+## 다음 회전 디자이너2 · 3 몫 (디자이너1 · 회전 4)
+
+| 누구 | 할 일 | 왜 |
+|---|---|---|
+| 디자이너2 | `templates/pop/_layout.html` 을 지우고 extends 하는 17 파일(`pop/{work,result,inputs,labels}` · `mat/{receipts,inspections,stock,lots,requirements}` · `qua/inspections` · `eqp/{status,checks,faults}` · `shp/{scan,status,shipments,documents}`)을 `{% extends "base.html" %}` 로. `{% block head_extra %}` 를 쓰던 곳은 `{% block head %}` 로. 블록 이름 `pop_body` · `mobile_body` · `who_equip` 는 같다 | base 가 같은 틀을 그린다. 지운 뒤 디자이너1 이 base 의 「이미 그린 틀이면 그대로」 두 줄을 지운다 |
+| 디자이너2 | `static/mobile.css` 맨 위 `body.ch-mobile:has(.m-frame) > .hdr …` 세 줄과 `@layer pop-token-fallback`(토큰 임시값) 을 지운다. `pop.css` 의 토큰 임시값도 | 모바일엔 `.hdr` · `.side` 가 없다 · 토큰은 `style.css` 가 `tokens.css` 를 `@import` |
+| 디자이너2 | `.m-main > .alert`(모바일 422 · info 알림) 와 `.toast` 의 모바일 위치를 하단 탭과 겹치지 않게 `mobile.css` 에서 | base 가 `.m-main` 맨 위에 알림을 그린다(모양은 `style.css` 기본) |
+| 디자이너3 | `trc/{search,backward,forward}.html` · `kpi/summary.html` · `home/main.html` · `dashboard/index.html` 의 모바일 분기 — 이제 base 의 `.m-frame` 안에 들어간다. `.m-only` 카드 · 자체 검색 줄이 `.m-top` 과 겹치지 않는지 · 모바일 머리 제목을 화면 안에서 다시 그리지 않는지 본다. 가능하면 `{% block body %}` 대신 `{% block mobile_body %}` 로 모바일 본문을 나눈다 | 모바일 틀이 하나가 됐다(전에는 base 헤더 + 좌측 메뉴) |
+| 디자이너3 | `board.css` · `print.css` 의 `TEMP-TOKENS` 블록을 지우고 `kpi/board.html` · `print/*.html` 에 `<link rel="stylesheet" href="/static/tokens.css">` 한 줄 | `tokens.css` 가 웨이브 A′ 부터 있다 |
+| 디자이너3 | 현황판 오류 화면(503)도 `_error.html` 의 ch-board 자동 새로고침을 쓰는지 확인 — `kpi/board.html` 이 503 을 자기 화면 안 「연결 끊김」 으로 그리면 그대로 | S-12 · 자동 새로고침은 board 만 |
+

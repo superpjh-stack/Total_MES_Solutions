@@ -1,6 +1,8 @@
 {# 공통 오류 화면 (CMN-03 · 디자이너1 docs/design/web/screens/error.html 이식) — contracts/api-contract.md.
    DB 가 끊겨도 그려져야 하므로 base.html 을 쓰지 않는다 — main._error_page 가 주는 키만 쓴다: status · code · message · fields · detail_note · guide · device · board_refresh_seconds · system_name · asset_v.
-   `/error` (guide=true) 는 상태코드 7 의 문구 · 다음 행동 표(개발용). 현황판 채널(ch-board)은 오류 화면에서도 자동 새로고침이 이어진다(app.js). #}
+   `/error` (guide=true) 는 상태코드 7 의 문구 · 다음 행동 표(개발용). 현황판 채널(ch-board)은 오류 화면에서도 자동 새로고침이 이어진다(app.js).
+   POP 채널의 503(S-12 · 디자이너2 이식 요청 3) 은 POP 틀로 — 빨간 띠 div.offline-bar[role=alert] + 막힌 스캔칸 input[data-scan][disabled] + 「다시 시도」.
+   app.js 는 disabled 스캔칸에 포커스를 주지 않고 POP 은 자동 새로고침하지 않는다 — 「다시 시도」 는 사람이 누른다(GET 이면 같은 주소 · POST 면 이전 화면). #}
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -14,6 +16,42 @@
 </head>
 <body class="ch-{{ device or 'web' }}" data-device="{{ device or 'web' }}" data-screen="CMN-03"{% if device == 'board' and board_refresh_seconds %} data-refresh-seconds="{{ board_refresh_seconds }}"{% endif %}>
 {% set back = request.headers.get('referer') if request else '' %}
+{% set retry = (request.url if request.method in ('GET', 'HEAD') else (back or '/')) if request else '/' %}
+{% if device == 'pop' and status == 503 and not guide %}
+{# ── POP 503 (S-12) — 서버가 그린다 · 스캔은 막고 다시 시도만 ── #}
+<header class="hdr">
+  <div class="hdr-l">
+    <a class="brand" href="/">{{ system_name }}</a>
+    <span class="crumb"><strong>{{ t('서비스 일시 중단') }}</strong> <code>503</code></span>
+  </div>
+  <div class="hdr-r">{% if now %}<span class="meta">{{ t('갱신') }} <b id="refreshed-at">{{ now }}</b></span>{% endif %}</div>
+</header>
+<div class="offline-bar" role="alert">{{ t('서비스 일시 중단') }} (503) — {{ t('연결이 돌아오면 스캔을 이어서 한다') }}</div>
+<main class="pop-main">
+  <div class="screen-head">
+    <h1 class="screen-title">{{ message }} <small>CMN-03</small></h1>
+    <div class="who" aria-label="{{ t('현재 상태') }}">
+      <span class="who-item conn off"><small>{{ t('연결') }}</small><b>{{ t('끊김') }}</b></span>
+    </div>
+  </div>
+  <form class="scan-box" method="get" action="{{ retry }}" autocomplete="off">
+    <label class="f scan"><span>{{ t('바코드 스캔') }}</span>
+      <input type="text" name="barcode" data-scan disabled aria-disabled="true" placeholder="{{ t('연결 끊김 — 스캔할 수 없다') }}">
+    </label>
+    <label class="f w-btn"><span>&nbsp;</span><a class="btn btn-primary" href="{{ retry }}">{{ t('다시 시도') }}</a></label>
+  </form>
+  <div class="result err" role="status">
+    <p class="result-msg">{{ t('방금 스캔한 건은 저장되지 않았다') }}</p>
+    <ul class="result-fields">
+      <li>{{ t('연결이 돌아오면 「다시 시도」 를 누르고 같은 바코드를 한 번 더 스캔한다') }}</li>
+      <li>{{ t('계속되면 관리자에게 알린다') }}{% if code %} — code <code>{{ code }}</code>{% endif %}</li>
+    </ul>
+  </div>
+</main>
+<script src="/static/app.js?v={{ asset_v }}"></script>
+</body>
+</html>
+{% else %}
 <header class="hdr">
   <div class="hdr-l">
     <a class="brand" href="/">{{ system_name }}</a>
@@ -48,7 +86,7 @@
           {% if status == 401 %}
           <a class="btn btn-primary" href="/login">{{ t('로그인으로') }}</a>
           {% elif status == 503 %}
-          <a class="btn btn-primary" href="{{ request.url if request else '/' }}">{{ t('다시 시도') }}</a>
+          <a class="btn btn-primary" href="{{ retry }}">{{ t('다시 시도') }}</a>
           {% else %}
           <a class="btn btn-primary" href="/">{{ t('메인으로') }}</a>
           {% endif %}
@@ -88,3 +126,4 @@
 {% if device == 'board' and board_refresh_seconds %}<script src="/static/app.js?v={{ asset_v }}"></script>{% endif %}
 </body>
 </html>
+{% endif %}

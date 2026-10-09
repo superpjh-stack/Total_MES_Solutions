@@ -1,7 +1,7 @@
 {# 공통 로그인 화면 (CMN-01 · 디자이너1 docs/design/web/screens/login.html 이식). 메뉴 · 계약 패널 없음.
    POST /login (login_id · password · next · device). 성공 303 → next 또는 메인. 실패는 이 화면을 401 로 다시 그린다(message).
    채널(device) 4 는 로그인 뒤 세션에 남는다 — 화면 크기 · 배치만 바뀌고 권한은 역할로 정해진다. `?device=` 로 열면 미리 골라져 있다.
-   비밀번호 값은 이 화면 어디에도 없다 (G-C19). D-605: MES_ENV=dev 에서만 역할 버튼으로 바로 로그인(POST /login/as · routers/home.py). #}
+   비밀번호 값은 이 화면 어디에도 없다 (G-C19). ctx 에 role_summary(· n_menus — 개발1 GET /login) 가 오면 안내 칸에 역할 × 채널 × 입력 메뉴 표 · 제목 역할 수 · 개발용 역할 버튼을 그 목록으로 — 없으면(POST 실패 재렌더) 표를 숨기고 버튼은 코어 역할 4. D-605: MES_ENV=dev 에서만 역할 버튼으로 바로 로그인(POST /login/as · routers/home.py). #}
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -42,8 +42,9 @@
     <fieldset class="login-dev">
       <legend>{{ t('개발용 — 역할로 바로 로그인') }} <span class="tag">MES_ENV=dev</span></legend>
       <div class="btn-row">
-        {% for code, label in [('ADMIN', t('관리자')), ('PROD', t('생산')), ('QA', t('품질')), ('FIELD', t('현장'))] %}
-        <button class="btn btn-sm" type="submit" form="login-form" formaction="/login/as" name="role" value="{{ code }}">{{ label }}</button>
+        {% set dev_roles = role_summary if role_summary else [{'code': 'ADMIN', 'name': t('관리자')}, {'code': 'PROD', 'name': t('생산')}, {'code': 'QA', 'name': t('품질')}, {'code': 'FIELD', 'name': t('현장')}] %}
+        {% for r in dev_roles %}
+        <button class="btn btn-sm" type="submit" form="login-form" formaction="/login/as" formnovalidate name="role" value="{{ r.code }}">{{ r.name }}</button>
         {% endfor %}
       </div>
     </fieldset>
@@ -56,7 +57,7 @@
   </main>
 
   <aside class="login-side" aria-label="{{ t('안내') }}">
-    <h2>{{ t('역할') }} 4 · {{ t('채널') }} 4</h2>
+    <h2>{% if role_summary %}{{ t('역할') }} {{ role_summary|length }} · {% endif %}{{ t('채널') }} {{ nav.DEVICE_CHANNEL|length }}</h2>
     <table>
       <thead><tr><th>{{ t('채널') }}</th><th>{{ t('무엇을 하는가') }}</th></tr></thead>
       <tbody>
@@ -66,6 +67,23 @@
         <tr><td>{{ nav.DEVICE_CHANNEL['board'] }}</td><td>{{ t('현황판 — 자동 새로고침 · 조작 없음') }}</td></tr>
       </tbody>
     </table>
+    {% if role_summary %}
+    {# 개발1 role_summary(GET /login · routers/home.py) — 역할 × 채널 × 입력 메뉴. DB 권한 표 요약 · POST 실패 재렌더에는 없을 수 있다 → 표를 숨긴다 #}
+    <h2 class="sub-h">{{ t('역할') }} × {{ t('채널') }} × {{ t('입력 메뉴') }}</h2>
+    <table class="matrix roles">
+      <thead><tr><th scope="col">{{ t('역할') }}</th><th scope="col">{{ t('채널') }}</th><th scope="col">{{ t('입력 메뉴') }}</th><th scope="col" class="num">{{ t('조회') }}</th></tr></thead>
+      <tbody>
+        {% for r in role_summary %}
+        <tr>
+          <th scope="row">{{ r.name }} <small><code>{{ r.code }}</code></small></th>
+          <td>{% for c in r.channels %}{{ c.label }}{% if not loop.last %} · {% endif %}{% else %}—{% endfor %}</td>
+          <td class="wrap">{% for m in r.write_menus %}{{ t(m.name) }}{% if m.label and m.label != '입력' %} <small>{{ m.label|replace('입력', '')|trim }}</small>{% endif %}{% if not loop.last %} · {% endif %}{% else %}<span class="lv-n">{{ t('없음') }}</span>{% endfor %}</td>
+          <td class="num">{{ r.read_count }}{% if n_menus %}/{{ n_menus }}{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
     <p>{{ t('권한 표는 DB 데이터') }} ({{ t('시스템') }} &rsaquo; {{ t('권한 표') }}). {{ t('채널에 허용되지 않은 화면을 열면 403') }}.</p>
     <p>{{ t('비밀번호는') }} <code>.env</code> (<code>MES_SEED_PASSWORD</code>) {{ t('에만 있다') }}.</p>
   </aside>

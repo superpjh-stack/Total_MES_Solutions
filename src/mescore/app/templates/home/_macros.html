@@ -1,6 +1,7 @@
 {# 공용 매크로 (아키텍트 소유 · 마크업은 디자이너1 docs/design/web/components.html 이식) — 개발 1·2·3 의 모든 템플릿이 import 해서 쓴다.
    {% import "home/_macros.html" as ui %}
    서명은 웨이브 A 그대로(라우터 · 템플릿이 호출 중). 여분의 꾸밈은 kwargs 로 받는다(placeholder · hint · unit · reason · cls · why …).
+   422 재렌더: flash.fields[] → 틀린 칸 .err + 사유 · flash.values{} → field/select 가 입력값을 되채운다(둘 다 `with context` 로 가져온 템플릿에서만).
    목록: grid field select scan_box write_button print_button undecided notes attrs_fields confirm_button badge bar measure_fields(→ home/_measure.html · 개발2)
    스크립트는 넣지 않는다 — 동작은 static/app.js 하나. 브라우저 confirm() · 모달 금지 → confirm_button(details.confirm). #}
 
@@ -10,6 +11,12 @@
 {%- for f in flash.fields if f.name == name -%}{{ f.reason }}{%- endfor -%}
 {%- endif -%}
 {%- endmacro %}
+
+{# 422 flash 의 values{name: 값} — 303 뒤 다시 그린 폼에 사용자가 넣었던 값을 되채운다(아키텍트 util/http.py · main._back_with_flash 가 싣는다).
+   flash 는 dict 라 `flash.values` 는 dict.values 메서드다 — 반드시 flash.get('values'). 비밀번호 칸 · 값이 없는 키는 건드리지 않는다.
+   값이 있으면 라우터가 준 value 보다 앞선다(그 칸에 방금 사용자가 넣은 값이 가장 새 값). values 가 없으면(지금 · 아키텍트 커밋 전) 아무 일도 없다.
+   매크로가 아니라 식으로 꺼낸다(매크로 출력은 이스케이프된 글자라 select 비교가 틀어진다) — field · select 첫 줄의 fv. #}
+
 
 {# 목록 표. rows 가 비면 빈 표를 덩그러니 두지 않고 `미수집` 을 보여 준다 (G-C11). columns = [...] · rows = [[칸, …], …]
    폭 480 아래에서는 행 하나 = 카드 하나(cardify · td[data-l]). 숫자 칸은 cells 의 값이 숫자 모양이면 오른쪽 정렬. #}
@@ -49,6 +56,8 @@
    kwargs: placeholder · hint · unit · reason · cls(w-sm · w-md · w-lg · wide · full) · min · max · maxlength · id · disabled · autofocus #}
 {% macro field(label, name, value='', type='text', required=false, readonly=false, step='') %}
 {% set reason = kwargs.get('reason') or flash_reason(name) %}
+{% set fv = (flash.get('values') or {}) if (flash is defined and flash and flash.kind != 'ok' and flash.get is defined) else {} %}
+{% set value = fv[name] if (name in fv and fv[name] is not none and type != 'password' and not readonly and not kwargs.get('disabled')) else value %}
 <label class="f{% if kwargs.get('cls') %} {{ kwargs.get('cls') }}{% endif %}{% if kwargs.get('unit') %} inline-unit{% endif %}{% if reason %} err{% endif %}">
   <span>{{ t(label) }}{% if required %} <em class="req" aria-label="{{ t('필수') }}">*</em>{% endif %}{% if kwargs.get('hint') %}<small class="hint">{{ kwargs.get('hint') }}</small>{% endif %}</span>
   {% if type == 'textarea' %}
@@ -65,6 +74,8 @@
    kwargs: hint · reason · cls · id · disabled #}
 {% macro select(label, name, options, value='', required=false, blank='선택') %}
 {% set reason = kwargs.get('reason') or flash_reason(name) %}
+{% set fv = (flash.get('values') or {}) if (flash is defined and flash and flash.kind != 'ok' and flash.get is defined) else {} %}
+{% set value = fv[name] if (name in fv and fv[name] is not none and not kwargs.get('disabled')) else value %}
 <label class="f{% if kwargs.get('cls') %} {{ kwargs.get('cls') }}{% endif %}{% if reason %} err{% endif %}">
   <span>{{ t(label) }}{% if required %} <em class="req" aria-label="{{ t('필수') }}">*</em>{% endif %}{% if kwargs.get('hint') %}<small class="hint">{{ kwargs.get('hint') }}</small>{% endif %}</span>
   <select name="{{ name }}"{% if kwargs.get('id') %} id="{{ kwargs.get('id') }}"{% endif %}{% if required %} required{% endif %}{% if kwargs.get('disabled') %} disabled{% endif %}{% if reason %} aria-invalid="true"{% endif %}>
