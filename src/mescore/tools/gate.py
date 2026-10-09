@@ -132,6 +132,18 @@ def per_gate(output: str) -> dict[str, tuple[str, str]]:
     return out
 
 
+_RANK = {FAIL: 4, BLOCKED: 3, WARN: 2, PASS: 1, UNVERIFIED: 0}
+
+
+def worst(prev: tuple[str, str] | None, new: tuple[str, str], who: str) -> tuple[str, str]:
+    """두 검사기의 같은 게이트 판정을 합친다 — 나쁜 쪽(FAIL > 차단 > WARN > PASS)이 이긴다. 앞 판정이 없거나 `미검증` 이면 새 것.
+    실측은 둘 다 남긴다(`who` = 새 판정을 낸 검사기) — DEF-QA1-010."""
+    if prev is None or prev[0] == UNVERIFIED:
+        return (new[0], f"{who}: {new[1]}"[:400]) if prev is not None else new
+    st = prev[0] if _RANK.get(prev[0], 0) >= _RANK.get(new[0], 0) else new[0]
+    return st, f"{prev[1][:190]} ‖ {who}: {new[1][:190]}"
+
+
 def blocked_gates() -> dict[str, str]:
     path = ROOT / "decisions.md"
     if not path.exists():
@@ -608,7 +620,7 @@ def core_gates(run_seeds: bool) -> dict[str, tuple[str, str]]:
     # ── QA 검사기가 있으면 그 출력이 우선한다 ──
     for name, gids in (("check_data", [f"G-C{i:02d}" for i in range(5, 13)] + ["G-C24"]),
                        ("check_security", [f"G-C{i:02d}" for i in range(13, 21)]),
-                       ("check_screens", ["G-C02", "G-C03", "G-C17"])):
+                       ("check_screens", ["G-C02", "G-C03", "G-C13", "G-C17", "G-C23"])):
         t = tool(name)
         if not t:
             continue
@@ -616,9 +628,10 @@ def core_gates(run_seeds: bool) -> dict[str, tuple[str, str]]:
         got = per_gate(out)
         for gid in gids:
             if gid in got:
-                if name == "check_screens" and result.get(gid, ("", ""))[0] == FAIL:
-                    continue
-                put(gid, *got[gid])
+                if name == "check_screens":           # QA1 행은 앞 판정(gate 자신 · check_security · check_terms)과 합친다 — 나쁜 쪽이 이긴다 (DEF-QA1-010)
+                    put(gid, *worst(result.get(gid), got[gid], "check_screens"))
+                else:
+                    put(gid, *got[gid])
             elif name != "check_screens":
                 put(gid, UNVERIFIED, f"{name} 출력에 {gid} 판정 행 없음 (rc={code})")
 
@@ -684,6 +697,11 @@ def pack_gates(pack: str) -> dict[str, tuple[str, str]]:
         result["G-P04"] = (PASS if not bad else FAIL, f"[{pack}] 시나리오 {len(scenarios)} · 실행 {n} · 실패 {len(bad)}" + (f" {bad[:2]}" if bad else ""))
     code, out = run(["uv", "run", "python", str(TOOLS / "check_terms.py"), "--pack"], env=env)
     result["G-P05"] = per_gate(out).get("G-P05", (FAIL, f"[{pack}] check_terms --pack 출력에 G-P05 행 없음 (rc={code}) — {last_line(out, 120)}"))
+    if tool("check_screens"):                 # QA1 — 팩 DB 에 읽기 · 호출만. 화면 글 · JSON 오류 문구의 G-P05 행을 합친다 (DEF-QA1-010)
+        code, out = run(["uv", "run", "python", str(TOOLS / "check_screens.py")], timeout=1800, env=env)
+        row = per_gate(out).get("G-P05")
+        result["G-P05"] = worst(result["G-P05"], row, "check_screens") if row else worst(
+            result["G-P05"], (UNVERIFIED, f"check_screens 출력에 G-P05 행 없음 (rc={code})"), "check_screens")
     timing = ROOT / "outputs" / "pack-timing.md"
     row = per_gate(timing.read_text(encoding="utf-8")).get("G-P06") if timing.exists() else None
     result["G-P06"] = row if row else (UNVERIFIED, f"[{pack}] outputs/pack-timing.md " + ("에 G-P06 판정 행 없음" if timing.exists() else "없음 (사람 · QA3 실측)"))

@@ -92,8 +92,39 @@ def scan_raw_terms_in_templates() -> list[str]:
     return bad
 
 
+DATA_RE = [re.compile(p, re.S | re.I) for p in (r"<script.*?</script>", r"<style.*?</style>", r"<tbody.*?</tbody>", r"<option.*?</option>",
+                                                   r"<textarea.*?</textarea>", r"<code.*?</code>", r"<pre.*?</pre>", r"<!--.*?-->")]
+
+
+def text_nodes(html: str) -> list[str]:
+    """화면 글 조각 — 태그 사이 글 · title/placeholder/aria-label 속성. 표 본문 · 선택지 · 스크립트 · 코드는 DB 값 · 원문이라 뺀다
+    (QA1 `check_screens.text_nodes` 와 같은 규칙 — 두 검사기가 같은 화면을 같은 글로 본다)."""
+    for rx in DATA_RE:
+        html = rx.sub(" ", html)
+    nodes = [re.sub(r"\s+", " ", x).strip() for x in re.findall(r">([^<>]+)<", html)]
+    nodes += [x.strip() for x in re.findall(r'\b(?:title|placeholder|aria-label)="([^"]+)"', html)]
+    return [x for x in nodes if x and not x.startswith("{")]
+
+
+def exposed_keys(node: str, terms: dict[str, str], verbatim: set[str]) -> list[str]:
+    """글 조각 하나에서 치환되지 않은 terms 키. 팩이 쓴 최종 이름(`menus.rename` 값 · D-38)과 치환 결과(값)를 먼저 지우고,
+    남은 글에 키가 있으면 노출 — **키마다 그 자리로** 판정한다(같은 화면 다른 곳에 치환어가 있다고 통과시키지 않는다 · DEF-QA1-002)."""
+    vis = node
+    for v in sorted(verbatim, key=len, reverse=True):
+        vis = vis.replace(v, " ")
+    for v in sorted({v for v in terms.values()}, key=len, reverse=True):
+        vis = vis.replace(v, " ")
+    out = []
+    for k in sorted((k for k, v in terms.items() if k != v), key=len, reverse=True):
+        if k in vis:
+            out.append(k)
+            vis = vis.replace(k, " ")
+    return out
+
+
 def scan_pack(pack_name: str) -> tuple[list[str], int, int]:
-    """G-P05 — 관리자로 로그인해 화면 전부를 HTML 로 열고 terms 키가 치환 없이 보이는 곳."""
+    """G-P05 — 관리자로 로그인해 화면 전부(코어 · 팩 · 공통)를 HTML 로 열고, 화면 글 조각마다 terms 키가 치환 없이 보이는 곳.
+    숫자 · `(예시)` 가 든 조각은 DB 값(시드)이라 세지 않는다. 응답 JSON 의 오류 문구는 QA1 `check_screens` 가 본다."""
     import warnings
     warnings.filterwarnings("ignore", message="Using `httpx` with `starlette.testclient`")
     os.environ["MES_PACK"] = pack_name
@@ -103,30 +134,29 @@ def scan_pack(pack_name: str) -> tuple[list[str], int, int]:
     from mescore.app.main import app
     from mescore.app.settings import get_settings
 
-    terms = packs.current().terms
-    if not terms:
+    pk = packs.current()
+    terms = dict(pk.terms)
+    keys = [k for k, v in terms.items() if k != v]
+    if not keys:
         return [], 0, 0
-    keys = sorted(terms, key=len, reverse=True)
     c = TestClient(app, raise_server_exceptions=False)
     r = c.post("/login", data={"login_id": "admin", "password": get_settings().seed_password or ""}, follow_redirects=False)
     if r.status_code not in (200, 303):
         return [f"admin 로그인 실패 {r.status_code}"], 0, len(keys)
+    anon = TestClient(app, raise_server_exceptions=False)
+    urls = [(s.screen_id, s.probe or s.path, c) for s in nav.COMMON + nav.SCREENS if s.auth] + [("CMN-01", "/login", anon), ("CMN-03", "/error", anon)]
     bad, n = [], 0
-    for s in nav.COMMON + nav.SCREENS:
-        if not s.auth:
-            continue
-        resp = c.get(s.probe or s.path, headers={"accept": "text/html"})
-        if resp.status_code != 200:
+    for sid, url, cl in urls:
+        resp = cl.get(url, headers={"accept": "text/html"})
+        if resp.status_code not in (200, 422):
             continue
         n += 1
-        plain = re.sub(r"<[^>]*>", " ", resp.text)
-        plain = re.sub(r"<code>.*?</code>", " ", resp.text)
-        for v in sorted(packs.current().verbatim, key=len, reverse=True):   # 팩이 쓴 최종 이름(menus.rename 값)은 t() 를 걸지 않는다 — 노출로 세지 않는다
-            plain = plain.replace(v, " ")
-        for k in keys:
-            if k in plain and terms[k] not in plain:
-                bad.append(f"{s.screen_id} `{k}`")
-    return bad, n, len(keys)
+        for node in text_nodes(resp.text):
+            if re.search(r"\d|\(예시\)", node):
+                continue
+            for k in exposed_keys(node, terms, set(pk.verbatim)):
+                bad.append(f"{sid} `{k}`→`{terms[k]}` «{node[:40]}»")
+    return sorted(set(bad)), n, len(keys)
 
 
 def main() -> int:
@@ -139,7 +169,7 @@ def main() -> int:
             try:
                 bad, n, nk = scan_pack(pack)
                 rows.append(("G-P05", "팩 용어", "PASS" if not bad else "FAIL",
-                             f"[{pack}] 화면 {n} · terms 키 {nk} · 치환 안 된 노출 {len(bad)}" + (f" {bad[:3]}" if bad else "")))
+                             f"[{pack}] 화면 {n} · 바뀌는 terms 키 {nk} · 치환 안 된 노출 {len(bad)}" + (f" {bad[:4]}" if bad else "")))
             except Exception as exc:  # noqa: BLE001
                 rows.append(("G-P05", "팩 용어", "FAIL", f"[{pack}] {type(exc).__name__}: {str(exc)[:160]}"))
     else:
