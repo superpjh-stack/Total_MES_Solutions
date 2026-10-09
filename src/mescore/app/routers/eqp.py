@@ -68,7 +68,7 @@ def _start_segment(cur, *, equipment_id: int, state: str, at: datetime, source: 
 
 # ── EQP-01 가동 현황 ─────────────────────────────────────────────────────
 @router.get(EQP01)                                                                     # F-EQP-01 가동 현황 조회 — 수집 설비는 collect.latest · 없으면 미수집
-def status(request: Request, user: rbac.User = rbac.require_fn("F-EQP-01")):
+def status(request: Request, equip_code: str | None = None, user: rbac.User = rbac.require_fn("F-EQP-01")):
     rows = _equipment()
     segs = {r["equipment_id"]: r for r in conn.q("""select distinct on (equipment_id) * from eqp_run_log where ended_at is null order by equipment_id, started_at desc, id desc""")}
     for e in rows:
@@ -78,8 +78,14 @@ def status(request: Request, user: rbac.User = rbac.require_fn("F-EQP-01")):
         e["state_source"] = seg["source"] if seg else None
         e["latest"] = collect.latest(e["id"]) if e["collect_yn"] == "Y" else None
         e["last_received_at"] = e["latest"]["ts"] if e["latest"] else None
-    return templating.render(request, "eqp/status.html", {"rows": rows, "states": STATES, "state_options": [(s, t(s)) for s in STATES],
-                                                          "equipment_options": f.options(rows, "id", "equip_code", "equip_name"), "now": datetime.now()}, screen_id="EQP-01")
+    ctx = {"rows": rows, "states": STATES, "state_options": [(s, t(s)) for s in STATES], "equipment_options": f.options(rows, "id", "equip_code", "equip_name"),
+           "now": datetime.now().strftime("%Y-%m-%d %H:%M"), "scan_no": equip_code or "", "selected_id": None}     # now — 화면 표시용 문자열(pop/_layout 은 now[11:16])
+    if equip_code is not None and equip_code.strip() != "":                            # 스캔 진입 — 설비 바코드 → 그 설비 카드
+        hit = next((e for e in rows if e["equip_code"] == equip_code.strip()), None)
+        if hit is None:
+            return f.scan_miss(request, "eqp/status.html", ctx, screen_id="EQP-01", no=equip_code, what="설비")
+        ctx.update({"selected_id": hit["id"], "rows": [hit] + [e for e in rows if e["id"] != hit["id"]]})
+    return templating.render(request, "eqp/status.html", ctx, screen_id="EQP-01")
 
 
 @router.post(EQP01)                                                                    # F-EQP-02 가동 상태 기록 (제어가 아니다)

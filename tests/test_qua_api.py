@@ -171,3 +171,27 @@ def test_issues_screen_filters():
     j = c.get(QUA04, params={"status": "발생"}).json()
     assert j["screen_id"] == "QUA-04" and all(r["status"] == "발생" for r in j["rows"])
     assert c.get(QUA04, params={"status": "삭제"}).status_code == 422
+
+
+@pytest.mark.fn("F-QUA-04")
+def test_inspection_process_choice_defaults_to_lot_process():
+    """QUA-02 검사 공정 — 기본은 LOT 의 공정 · 고르면 그 공정의 계획 항목 (혼합 LOT 에 다른 공정 검사 · 개발3 §3-18)."""
+    c = client("qa")
+    own, other = uniq("K").lower(), uniq("K").lower()
+    assert c.post(QUA01, data={"insp_type": "공정", "process_id": process_id("PRC-EX-02"), "item_key": own, "label": "LOT 공정 항목 (예시)"}).status_code == 200
+    assert c.post(QUA01, data={"insp_type": "공정", "process_id": process_id("PRC-EX-01"), "item_key": other, "label": "다른 공정 항목 (예시)",
+                               "min_value": "0", "max_value": "1"}).status_code == 200
+    lot = product_lot()                                                                        # PRC-EX-02 LOT
+    j = c.get(QUA02, params={"no": lot["lot_no"]}).json()
+    keys = {x["param_key"] for x in j["fields"]}
+    assert j["insp_process_id"] == process_id("PRC-EX-02") and own in keys and other not in keys
+    j2 = c.get(QUA02, params={"no": lot["lot_no"], "process_id": process_id("PRC-EX-01")}).json()
+    keys2 = {x["param_key"] for x in j2["fields"]}
+    assert j2["insp_process_id"] == process_id("PRC-EX-01") and other in keys2 and own not in keys2
+    assert any(int(v) == process_id("PRC-EX-01") for v, _ in j2["process_options"])
+    r = c.post(QUA02, data={"insp_type": "공정", "lot_no": lot["lot_no"], "process_id": process_id("PRC-EX-01"), f"i_{other}": "3"})
+    assert r.status_code == 200 and r.json()["process_id"] == process_id("PRC-EX-01") and r.json()["deviated"] == [other]
+    assert c.post(QUA02, data={"insp_type": "공정", "lot_no": lot["lot_no"], "process_id": "999999"}).status_code == 422
+    assert c.get(QUA02, params={"no": lot["lot_no"], "process_id": "999999"}).status_code == 422
+    html = c.get(QUA02, params={"no": lot["lot_no"]}, headers=HTML).text
+    assert html.count("data-scan") == 1 and 'name="process_id"' in html

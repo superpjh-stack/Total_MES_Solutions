@@ -194,3 +194,18 @@ def test_requirements_screen_by_period():
     j = c.get(MAT05, params={"frm": "2031-01-01", "to": "2031-01-07"}).json()
     assert j["screen_id"] == "MAT-05" and isinstance(j["rows"], list)
     assert c.get(MAT05, params={"frm": "2031-01-09", "to": "2031-01-01"}).status_code == 422
+
+
+@pytest.mark.fn("F-MAT-03")
+def test_receipts_scan_entry_by_item_code():
+    """MAT-01 ?item_code= 스캔 진입 — 품목 바코드 → 등록 폼의 품목 칸 · 없는 품목은 이 화면 422 재렌더 (디자이너2 이식 요청 4)."""
+    c = client("field", device="pop")
+    j = c.get(MAT01, params={"item_code": "RAW-EX-01"}).json()
+    assert j["item_id_default"] == item_id("RAW-EX-01") and j["scan_item"]["item_code"] == "RAW-EX-01"
+    html = c.get(MAT01, params={"item_code": "RAW-EX-01"}, headers=HTML).text
+    assert html.count("data-scan") == 1 and f'value="{item_id("RAW-EX-01")}" selected' in html
+    miss = c.get(MAT01, params={"item_code": "NO-SUCH-ITEM"})
+    assert miss.status_code == 422 and miss.json()["code"] == "validation_error" and miss.json()["screen_id"] == "MAT-01"
+    page = c.get(MAT01, params={"item_code": "NO-SUCH-ITEM"}, headers=HTML)
+    assert page.status_code == 422 and page.text.count("data-scan") == 1 and 'id="scan-result"' in page.text
+    assert c.get(MAT01, params={"item_code": "PRD-EX-01"}).status_code == 422          # 제품은 입고 품목이 아니다

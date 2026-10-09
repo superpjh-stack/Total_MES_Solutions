@@ -1,7 +1,7 @@
 {# POP-02 작업 시작 · 종료 — F-POP-02 시작(설비 · 작업자 터치 선택) · F-POP-03 종료(수량 + 측정값 자동 폼 mf.measure_fields → 생산 LOT) · F-POP-04 정지 · F-POP-05 폐기 ·
    분할/합병(D-12 · POST /pop/result/{id}/split|merge · 개발2 라우터 그대로). 스캔칸은 「다른 지시로 바꾸기」(POP-01 ?no=) 하나.
    디자인: docs/design/pop/pop_result_start.html · pop_result_end.html · pop_stop_scrap.html (디자이너2).
-   ctx: work_order · result · results · params · values · latest · stops · scraps · product_lot · stock_lots · stock_lot_options · equipment_options · worker_options · stop_reasons · defect_options · attr_specs #}
+   ctx: worker_id_default · work_order · result · results · params · values · latest · stops · scraps · product_lot · stock_lots · stock_lot_options · equipment_options · worker_options · stop_reasons · defect_options · attr_specs #}
 {% extends "pop/_layout.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "home/_measure.html" as mf %}
@@ -37,7 +37,7 @@
     <h2>{{ t('작업자') }} <small>{{ t('하나 고른다 · 비우면 로그인 작업자') }}</small></h2>
     {% set wk_opts = [] %}
     {% for v, label in worker_options %}{% set _ = wk_opts.append((v, label, '')) %}{% endfor %}
-    {{ pui.choice('worker_id', wk_opts) }}
+    {{ pui.choice('worker_id', wk_opts, worker_id_default if worker_id_default is not none else '') }}
   </section>
   <section class="panel">
     <h2>{{ t('비고') }} <small>{{ t('선택') }}</small></h2>
@@ -97,6 +97,7 @@
       <button type="button" class="btn" disabled title="{{ t('종료 뒤 생산 LOT 이 생기면 할 수 있다') }}">{{ t('합병') }}</button>
       {{ ui.undecided('D-12', '분할 · 합병 화면') }}
     </div>
+    <div class="field" style="margin-top:12px">{{ ui.field('합병할 재고 LOT 번호 (쉼표 · 선택)', 'merge_lot_ids') }}</div>
   </section>
   {{ ui.write_button('작업 종료 → 생산 LOT 만들기', user.can('F-POP-03'), form='end-form') }}
 </form>

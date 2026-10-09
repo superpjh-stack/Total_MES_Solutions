@@ -180,8 +180,15 @@ def aggregate(equip_id: int, tag: str, frm, to, agg: str = "last") -> float | No
 
 def counts(frm=None, to=None) -> dict:
     """IFC-01 수신 현황용 — 원문 수 · 거부 수 · 마지막 수신."""
-    r = conn.q1("""select count(*) as total, count(*) filter (where rejected_reason is not null) as rejected,
-                          count(*) filter (where resend) as resent, max(received_at) as last_at
-                     from ifc_collect_raw where (%(f)s::timestamptz is null or received_at >= %(f)s::timestamptz) and (%(t)s::timestamptz is null or received_at <= %(t)s::timestamptz)""",
-                {"f": frm, "t": to})
+    # None 인 경계는 조건에서 뺀다 — `%s is null` 로 None 을 넘기면 드라이버 · 서버 설정에 따라 형 추론이 갈려 AmbiguousParameter (개발3 §3-6)
+    where, params = [], {}
+    if frm not in (None, ""):
+        where.append("received_at >= %(f)s::timestamptz")
+        params["f"] = frm
+    if to not in (None, ""):
+        where.append("received_at <= %(t)s::timestamptz")
+        params["t"] = to
+    r = conn.q1("""select count(*)::int as total, count(*) filter (where rejected_reason is not null)::int as rejected,
+                          count(*) filter (where resend)::int as resent, max(received_at) as last_at
+                     from ifc_collect_raw""" + (" where " + " and ".join(where) if where else ""), params or None)
     return dict(r) if r else {"total": 0, "rejected": 0, "resent": 0, "last_at": None}

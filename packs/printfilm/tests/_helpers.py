@@ -1,6 +1,6 @@
 """printfilm 팩 테스트 공용 — 로그인 클라이언트 · 시드 조회 · 수주 → Job → 입고 · 입고검사 → POP(인쇄 롤) 을 **API 로** 만드는 픽스처 (개발2).
 
-실행: `MES_PACK=printfilm uv run pytest -q packs/printfilm/tests` (DB mes_printfilm_db · seed_pack.sql → make db-seed 뒤).
+실행: `MES_PACK=printfilm uv run pytest -q packs/printfilm/tests` (DB mes_printfilm_db · `MES_PACK=printfilm make db-reset` 뒤).
 계정은 코어 시드(admin · prod · field)와, 팩 역할 QC 의 `qc`(코어 seed_core USERS 가 역할 코드 QA 만 알아 만들지 않는다 — F-SYS-01 로 만든다).
 테스트가 만든 LOT · Job · 출하는 DB 에 남는다(채번 소비 · 코드 `T-…`).
 """
@@ -59,7 +59,7 @@ def client(login_id: str | None = None, device: str | None = None, fresh: bool =
         if device:
             data["device"] = device
         r = c.post("/login", data=data)
-        assert r.status_code == 200 and r.json()["ok"], f"{login_id} 로그인 실패 {r.status_code} — seed_pack.sql → make db-seed · .env"
+        assert r.status_code == 200 and r.json()["ok"], f"{login_id} 로그인 실패 {r.status_code} — MES_PACK=printfilm make db-seed · .env"
     if not fresh:
         _clients[key] = c
     return c

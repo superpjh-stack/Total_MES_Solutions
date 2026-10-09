@@ -201,3 +201,62 @@ def test_split_and_merge_api_d12():
     assert client("admin").post(f"{POP02}/{s['id']}/split", data={"count": 2}).status_code == 403
     page = c.get(POP02, params={"id": s["id"]}).json()
     assert {n["id"] for n in page["stock_lots"]} == {ids[2], mg.json()["id"]}
+
+
+@pytest.mark.fn("F-POP-02")
+def test_start_screen_defaults_worker_and_filters_equipment_by_process():
+    """POP-02 — 작업자 기본 = 로그인 사용자의 sys_user.worker_id · 설비 선택지 = 지시 공정의 설비(+ 지시 지정 설비)만 (디자이너2 이식 요청 5)."""
+    field_worker = conn.q1("select worker_id from sys_user where login_id = 'field'")["worker_id"]
+    wo = new_work_order(process_code="PRC-EX-01", equip_code="EQ-EX-01")
+    j = client("field", device="pop").get(POP02, params={"wo": wo["id"]}).json()
+    assert j["worker_id_default"] == field_worker
+    allowed = {r["id"] for r in conn.q("""select e.id from bas_equipment e join bas_process p on p.id = e.process_id
+                                           where e.use_yn = 'Y' and p.process_code = 'PRC-EX-01'""")} | {wo["equipment_id"]}
+    got = {int(v) for v, _ in j["equipment_options"]}
+    assert got == allowed and got
+    other = new_work_order(process_code="PRC-EX-02", equip_code="EQ-EX-03")
+    got2 = {int(v) for v, _ in client("prod").get(POP02, params={"wo": other["id"]}).json()["equipment_options"]}
+    assert other["equipment_id"] in got2 and not (got2 & (allowed - {other["equipment_id"]}))
+    html = client("field", device="pop").get(POP02, params={"wo": wo["id"]}, headers=HTML).text
+    if field_worker is not None:
+        assert f'name="worker_id" value="{field_worker}" checked' in html
+
+
+@pytest.mark.fn("F-POP-03")
+def test_result_end_with_merge_parents_makes_one_lot():
+    """F-POP-03 종료 폼의 합병 옵션 — 재고 생산 LOT(번호 · id 쉼표)을 이 실적의 LOT 에 `합병` 으로 잇는다. 별도 합병 LOT 없음 (개발3 §3-19)."""
+    c = client("prod")
+    s1 = start(c)
+    b1 = c.post(f"{POP02}/{s1['id']}/end", data={"good_qty": 20}).json()
+    s2 = start(c)
+    b2 = c.post(f"{POP02}/{s2['id']}/end", data={"good_qty": 30}).json()
+    s3 = start(c)
+    m = approved_material(10)
+    assert c.post(POP03, data={"work_result_id": s3["id"], "barcode": m["lot_no"], "qty": 5}).status_code == 200
+    assert c.post(f"{POP02}/{s3['id']}/end", data={"good_qty": 55, "merge_lot_ids": "NO-SUCH"}).status_code == 422
+    assert conn.q1("select ended_at from pop_work_result where id = %s", (s3["id"],))["ended_at"] is None       # 422 면 종료도 되돌린다
+    r = c.post(f"{POP02}/{s3['id']}/end", data={"good_qty": 55, "merge_lot_ids": f"{b1['lot_no']}, {b2['lot_id']}"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert sorted(body["merged"]) == sorted([b1["lot_id"], b2["lot_id"]])
+    g = {(x["parent_lot_id"], x["relation"]) for x in conn.q("select * from lot_genealogy where child_lot_id = %s", (body["lot_id"],))}
+    assert g == {(m["lot_id"], "투입"), (b1["lot_id"], "합병"), (b2["lot_id"], "합병")}
+    assert conn.q1("select count(*) as n from lot where work_result_id = %s", (s3["id"],))["n"] == 1
+    # 이미 합병된 LOT 을 다시 합병 → 422
+    s4 = start(c)
+    assert c.post(f"{POP02}/{s4['id']}/end", data={"good_qty": 1, "merge_lot_ids": b1["lot_no"]}).status_code == 422
+
+
+@pytest.mark.fn("F-POP-06")
+def test_input_screen_last_qty_skips_canceled():
+    """POP-03 「투입량 직전 값 유지」 — 취소되지 않은 마지막 투입의 수량 (디자이너2 이식 요청 6)."""
+    c = client("prod")
+    s = start(c)
+    m = approved_material(20)
+    assert c.get(POP03, params={"result": s["id"]}).json()["last_qty"] is None
+    c.post(POP03, data={"work_result_id": s["id"], "barcode": m["lot_no"], "qty": 3})
+    i2 = c.post(POP03, data={"work_result_id": s["id"], "barcode": m["lot_no"], "qty": 7}).json()
+    assert float(c.get(POP03, params={"result": s["id"]}).json()["last_qty"]) == 7.0
+    c.post(f"{POP03}/{i2['id']}/cancel")
+    assert float(c.get(POP03, params={"result": s["id"]}).json()["last_qty"]) == 3.0
+    assert 'value="3' in c.get(POP03, params={"result": s["id"]}, headers=HTML).text

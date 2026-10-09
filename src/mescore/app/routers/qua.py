@@ -57,6 +57,16 @@ def plan_for_lot(insp_type: str, n: lineage.Node, process_id: int | None = None)
                   (insp_type, n.item_id, process_id))
 
 
+def _insp_process(n: lineage.Node, process_id) -> int | None:
+    """검사 공정 — 고른 공정(`process_id`) → 없으면 LOT 의 공정. 여러 공정을 거친 LOT 에 다른 공정의 검사를 할 때 고른다 (개발3 §3-18)."""
+    pid = f.int_id(process_id, "process_id", "검사 공정")
+    if pid is None:
+        return conn.q1("select process_id from lot where id = %s", (n.id,))["process_id"]
+    if conn.q1("select 1 as x from bas_process where id = %s and use_yn = 'Y'", (pid,)) is None:
+        raise http.validation_error(t("없는 공정입니다"), fields=[f.field_error("process_id", "검사 공정", str(pid))])
+    return pid
+
+
 # ── QUA-01 검사 계획 ─────────────────────────────────────────────────────
 @router.get(QUA01)                                                                     # F-QUA-03 검사 계획 조회
 def plans(request: Request, insp_type: str | None = None, item_id: str | None = None, process_id: str | None = None,
@@ -172,20 +182,21 @@ def _inspection_rows(frm: date, to: date, insp_type: str | None, judgement: str 
 
 @router.get(QUA02)                                                                     # F-QUA-06 검사 결과 조회 (스캔 ?no=)
 def inspections(request: Request, no: str | None = None, insp_type: str | None = None, frm: str | None = None, to: str | None = None,
-                judgement: str | None = None, lot: str | None = None, user: rbac.User = rbac.require_fn("F-QUA-06")):
+                judgement: str | None = None, lot: str | None = None, process_id: str | None = None, user: rbac.User = rbac.require_fn("F-QUA-06")):
     it = f.choice(insp_type, "insp_type", "검사 유형", INSP_TYPES, required=False)
     jd = f.choice(judgement, "judgement", "판정", JUDGEMENTS, required=False)
     d1, d2 = f.period(frm, to)
     ctx: dict = {"rows": _inspection_rows(d1, d2, it, jd, f.opt_text(lot)), "frm": d1, "to": d2, "insp_type": it or "공정", "judgement": jd or "", "lot_filter": lot or "",
                  "lot": None, "fields": [], "pending": [], "scan_no": no or "", "type_options": [(x, t(x)) for x in INSP_TYPES],
+                 "insp_process_id": None, "process_options": f.options(_processes(), "id", "process_code", "process_name"),
                  "judgement_options": [(x, t(x)) for x in JUDGEMENTS], "defect_options": f.options(conn.q("select id, defect_code, defect_name from bas_defect_code where use_yn = 'Y' order by defect_code"), "id", "defect_code", "defect_name")}
     if no is not None and no.strip() != "":
         n = lineage.resolve(no)
         if n is None:
             return f.scan_miss(request, "qua/inspections.html", ctx, screen_id="QUA-02", no=no, what="LOT")
         kind_type = it or ("입고" if n.kind_base == lineage.MATERIAL else "공정")
-        proc = conn.q1("select process_id from lot where id = %s", (n.id,))["process_id"]
-        ctx.update({"lot": n, "insp_type": kind_type, "fields": measure.plan_fields(plan_for_lot(kind_type, n, proc)),
+        proc = _insp_process(n, process_id)
+        ctx.update({"lot": n, "insp_type": kind_type, "insp_process_id": proc, "fields": measure.plan_fields(plan_for_lot(kind_type, n, proc)),
                     "pending": conn.q("select * from qua_inspection where lot_id = %s and judgement is null order by id desc", (n.id,)),
                     "history": conn.q("select * from qua_inspection where lot_id = %s order by inspected_at desc, id desc limit 20", (n.id,))})
     return templating.render(request, "qua/inspections.html", ctx, screen_id="QUA-02")
@@ -193,14 +204,14 @@ def inspections(request: Request, no: str | None = None, insp_type: str | None =
 
 @router.post(QUA02)                                                                    # F-QUA-04 검사 결과 등록 (판정 전 judgement NULL)
 def inspection_create(request: Request, insp_type: str = Form(...), lot_no: str | None = Form(None), lot_id: str | None = Form(None),
-                      note: str | None = Form(None), user: rbac.User = rbac.require_fn("F-QUA-04")):
+                      note: str | None = Form(None), process_id: str | None = Form(None), user: rbac.User = rbac.require_fn("F-QUA-04")):
     it = f.choice(insp_type, "insp_type", "검사 유형", INSP_TYPES)
     n = lineage.resolve(lot_no) if f.opt_text(lot_no) else lineage.node(f.int_id(lot_id, "lot_id", "LOT", required=True))
     if n is None:
         raise http.validation_error(t("없는 LOT 번호입니다"), fields=[f.field_error("lot_no", "LOT", lot_no or lot_id or "")])
     if n.kind_base == lineage.SHIPMENT or n.state == lineage.SHIPPED:
         raise http.validation_error(t("출하된 LOT 은 검사할 수 없습니다"), fields=[f.field_error("lot_no", "LOT", n.no)])
-    proc = conn.q1("select process_id from lot where id = %s", (n.id,))["process_id"]
+    proc = _insp_process(n, process_id)
     fields = measure.plan_fields(plan_for_lot(it, n, proc))
     values, errs = measure.parse_form(fields, _form(request))
     if errs:
@@ -225,9 +236,9 @@ def inspection_create(request: Request, insp_type: str = Form(...), lot_no: str 
                         (insp["id"], x["plan_id"], x["item_key"], x["value_num"], x["value_text"], x["unit"], x["item_judgement"], x["deviated"], user.login_id))
         insp["items"] = items
         packs.hook("after_save_qua_inspection")(cur, insp, user)
-    audit.log_change(request, user, "F-QUA-04", f"qua_inspection:{insp['id']}", {"lot_no": n.no, "insp_type": it, "items": len(items)})
-    return http.saved(request, f"{n.no} {t('검사')} {t('등록')} — {t('판정')} {t('대기')}", back=f"{QUA02}?no={n.no}",
-                      data={"id": insp["id"], "lot_id": n.id, "lot_no": n.no, "items": len(items), "deviated": [x["item_key"] for x in items if x["deviated"]]})
+    audit.log_change(request, user, "F-QUA-04", f"qua_inspection:{insp['id']}", {"lot_no": n.no, "insp_type": it, "process_id": proc, "items": len(items)})
+    return http.saved(request, f"{n.no} {t('검사')} {t('등록')} — {t('판정')} {t('대기')}", back=f"{QUA02}?no={n.no}" + (f"&process_id={proc}" if proc else ""),
+                      data={"id": insp["id"], "lot_id": n.id, "lot_no": n.no, "process_id": proc, "items": len(items), "deviated": [x["item_key"] for x in items if x["deviated"]]})
 
 
 @router.post(QUA02 + "/{id}/judge")                                                    # F-QUA-05 검사 판정 (불합격이면 불량코드 · 수량 N줄)

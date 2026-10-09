@@ -1,18 +1,19 @@
 {# EQP-01 가동 현황 — F-EQP-01 조회 · F-EQP-02 가동 상태 기록 (기록이지 제어가 아니다). 수집 설비는 collect.latest · 없으면 미수집.
-   POP: docs/design/pop/eqp_status_pop.html — 설비 카드 + 상태 4버튼(기록) · 점검 · 고장 화면으로 링크. 스캔 진입(?equip_code=)은 라우터에 없어 스캔칸을 두지 않는다(README 이식 요청).
-   ctx: rows[{id equip_code equip_name process_name state state_since state_source collect_yn latest last_received_at}] · states · state_options · equipment_options · now #}
+   POP: docs/design/pop/eqp_status_pop.html — 설비 카드 + 상태 4버튼(기록) · 점검 · 고장 화면으로 링크. 스캔 진입 ?equip_code= → 그 설비 카드가 맨 앞 · .sel(없는 설비는 이 화면 422 재렌더) — 스캔칸 하나.
+   ctx: rows[{id equip_code equip_name process_name state state_since state_source collect_yn latest last_received_at}] · states · state_options · equipment_options · now(문자열 YYYY-MM-DD HH:MM) · scan_no · selected_id #}
 {% extends "pop/_layout.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "pop/_ui.html" as pui %}
 
 {% block pop_body %}
-{{ pui.banner() }}
+{% call ui.scan_box(nav.path_of('EQP-01'), name='equip_code', label='설비 바코드 스캔', method='get', placeholder=scan_no or 'EQ-', button='확인') %}{% endcall %}
+{{ pui.banner(error=scan_error, fields=fields if scan_error else []) }}
 <div class="notice">{{ t('여기 버튼은 상태 기록이다 — 설비를 켜거나 끄지 않는다. 사람이 본 상태를 적는 것이고, 수집 설비의 값은 따로 보인다.') }}</div>
 <section class="panel">
-  <h2>{{ t('설비') }} <small>{{ rows|length }}{{ t('대') }} · {{ now|dt('%H:%M') }}</small></h2>
+  <h2>{{ t('설비') }} <small>{{ rows|length }}{{ t('대') }} · {{ now[11:16] if now is string else now|dt('%H:%M') }}</small></h2>
   <div class="cards">
     {% for e in rows %}
-    <article class="card">
+    <article class="card{% if e.id == selected_id %} sel{% endif %}">
       <h3>{{ e.equip_code }} {{ e.equip_name }} {{ pui.badge(e.state) }}</h3>
       <dl class="kv">
         <dt>{{ t('공정') }}</dt><dd>{{ e.process_name|txt }}</dd>

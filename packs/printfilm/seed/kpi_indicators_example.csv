@@ -1,0 +1,5 @@
+indicator_key,name,unit,target_value,calc_kind,visible_yn,seq
+avg_delta_e,평균 ΔE (검사) (예시),,,pack:avg_delta_e,Y,101
+fail_roll_count,불합격 롤 수 (예시),개,,pack:fail_roll_count,Y,102
+stock_roll_count,재고 롤 수 (예시),개,,pack:stock_roll_count,Y,103
+splice_count,splice 건수 (예시),건,,pack:splice_count,Y,104

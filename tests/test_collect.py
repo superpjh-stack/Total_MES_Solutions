@@ -81,3 +81,15 @@ def test_latest_series_aggregate(equip):
 def test_known_tags_include_core_and_declared():
     k = collect.known_tags()
     assert {"run_state", "count"} <= k
+
+
+def test_counts_with_none_and_bounds():
+    """IFC-01 수신 현황 — 경계 None 은 조건에서 빠진다(AmbiguousParameter 없음 · 개발3 §3-6). 미래 구간은 0 · 정수."""
+    whole = collect.counts(None, None)
+    assert collect.counts()["total"] >= whole["total"] and isinstance(whole["total"], int) and whole["total"] >= whole["rejected"] >= 0
+    now = datetime.now(timezone.utc)
+    assert collect.counts(now - timedelta(days=36500), None)["total"] >= whole["total"]
+    assert collect.counts(None, now + timedelta(days=1))["total"] >= whole["total"]
+    assert collect.counts("", "")["total"] >= whole["total"]
+    future = collect.counts(now + timedelta(days=365), now + timedelta(days=366))
+    assert future["total"] == 0 and future["last_at"] is None

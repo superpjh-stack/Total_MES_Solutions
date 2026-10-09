@@ -215,8 +215,9 @@ def _require_node(cur, lot_id, label: str = "LOT") -> Node:
 
 
 # ── 쓰기 ────────────────────────────────────────────────────────────────
-def link(cur, parent_id: int, child_id: int, relation_name: str, *, by: str, qty=None) -> int:
-    """화살표 한 줄. 자기 참조 · 순환 · 모르는 relation · 없는 LOT 은 422. `relation_base` 를 채운다. genealogy_id 를 돌려준다."""
+def link(cur, parent_id: int, child_id: int, relation_name: str, *, by: str, qty=None, at=None) -> int:
+    """화살표 한 줄. 자기 참조 · 순환 · 모르는 relation · 없는 LOT 은 422. `relation_base` 를 채운다. genealogy_id 를 돌려준다.
+    `at` 은 연결 시각(`linked_at` — 이관 22 의 원본 시각). 없으면 now()."""
     rel = relation(relation_name)
     p, c = _require_node(cur, parent_id, "부모 LOT"), _require_node(cur, child_id, "자식 LOT")
     if p.id == c.id:
@@ -231,8 +232,9 @@ def link(cur, parent_id: int, child_id: int, relation_name: str, *, by: str, qty
                                     fields=[{"name": "lot_id", "label": t("LOT"), "reason": f"{p.no} 은 {c.no} 의 자손"}])
     if _one(cur, "select 1 as x from lot_genealogy where parent_lot_id = %s and child_lot_id = %s and relation = %s", (p.id, c.id, rel.name)):
         raise http.validation_error(t("이미 있는 계보입니다"), fields=[{"name": "relation", "label": t("관계"), "reason": f"{p.no} → {c.no} ({rel.name})"}])
-    row = _one(cur, """insert into lot_genealogy (parent_lot_id, child_lot_id, relation, relation_base, qty, linked_by, created_by)
-                       values (%s, %s, %s, %s, %s, %s, %s) returning id""", (p.id, c.id, rel.name, rel.base, qty, by, by))
+    row = _one(cur, """insert into lot_genealogy (parent_lot_id, child_lot_id, relation, relation_base, qty, linked_at, linked_by, created_by)
+                       values (%s, %s, %s, %s, %s, coalesce(%s::timestamptz, now()), %s, %s) returning id""",
+               (p.id, c.id, rel.name, rel.base, qty, at, by, by))
     return int(row["id"])
 
 
@@ -306,9 +308,10 @@ def _lock_work_order(cur, work_order_id: int | None) -> dict | None:
 
 
 def make_product_lot(cur, *, work_result_id: int, by: str, kind: str = PRODUCT, qty=None, unit: str | None = None, attrs: dict | None = None,
-                     parent_id: int | None = None, user=None) -> dict:
+                     parent_id: int | None = None, merge_parent_ids=None, merge_relation: str = MERGE, user=None) -> dict:
     """F-POP-03 종료 — 생산 LOT 1 + 그 실적의 `pop_input`(취소 제외) 마다 `투입` 계보 한 줄. `parent_id` 를 주면 앞 공정 LOT 과 `생산` 1:1.
-    실적에 이미 생산 LOT 이 있으면 422. 수량은 `qty` → 실적 양품 수량 순."""
+    `merge_parent_ids` 를 주면 그 LOT 들(재고인 생산 LOT · 1 개 이상)을 새 LOT 에 `merge_relation`(base 합병) 으로 잇는다 — 별도 합병 LOT 없이
+    "투입 + 합병 → 이 실적의 한 LOT". 실적에 이미 생산 LOT 이 있으면 422. 수량은 `qty` → 실적 양품 수량 순."""
     if lot_kind(kind).base != PRODUCT:
         raise http.validation_error(t("생산 LOT 종류가 아닙니다"), fields=[{"name": "kind", "label": t("LOT 종류"), "reason": kind}])
     r = _one(cur, "select * from pop_work_result where id = %s for update", (int(work_result_id),))
@@ -329,6 +332,7 @@ def make_product_lot(cur, *, work_result_id: int, by: str, kind: str = PRODUCT, 
     parent = _require_node(cur, parent_id, "앞 공정 LOT") if parent_id is not None else None
     if parent is not None:
         assert_usable(cur, [parent.id])
+    merge_parents = _merge_parents(cur, merge_parent_ids, merge_relation) if merge_parent_ids else []
     lot = _insert_lot(cur, {"kind": kind, "item_id": wo["item_id"] if wo else None, "work_order_id": r["work_order_id"], "process_id": r["process_id"],
                             "equipment_id": r["equipment_id"], "work_result_id": r["id"], "qty": qty if qty is not None else r["good_qty"],
                             "unit": unit or r["unit"] or (wo["unit"] if wo else None), "insp_status": "미검사", "attrs": attrs}, by=by, user=user)
@@ -336,8 +340,47 @@ def make_product_lot(cur, *, work_result_id: int, by: str, kind: str = PRODUCT, 
         link(cur, i["material_lot_id"], lot["id"], INPUT, by=by, qty=i["qty"])
     if parent is not None:
         link(cur, parent.id, lot["id"], PRODUCE, by=by, qty=parent.remain_qty)
+    for m in merge_parents:
+        link(cur, m.id, lot["id"], merge_relation, by=by, qty=m.remain_qty)
     cur.execute("update pop_work_result set product_lot_id = %s, updated_at = now(), updated_by = %s where id = %s", (lot["id"], by, r["id"]))
     return lot
+
+
+def inherit_insp(statuses) -> str:
+    """분할 · 합병 자식의 `insp_status` — 부모가 **전부 합격** → 합격 · **불합격이 하나라도** → 불합격 · 미검사가 하나라도 → 미검사 ·
+    그 밖(합격 + 조건부) → 조건부. 부모가 하나면 그 값 그대로."""
+    vals = [s or "미검사" for s in statuses]
+    if not vals:
+        return "미검사"
+    if "불합격" in vals:
+        return "불합격"
+    if all(v == "합격" for v in vals):
+        return "합격"
+    if "미검사" in vals:
+        return "미검사"
+    return "조건부"
+
+
+def _merge_parents(cur, parent_ids, relation_name: str) -> list[Node]:
+    """make_product_lot 의 합병 부모 — base 합병 관계 · 중복 없음 · 전부 재고인 생산 LOT."""
+    relation_of_base(relation_name, MERGE)
+    ids: list[int] = []
+    for x in parent_ids:
+        try:
+            ids.append(int(x))
+        except (TypeError, ValueError):
+            raise http.validation_error(t("LOT 을 가리키는 값이 아닙니다"), fields=[{"name": "merge_lot_ids", "label": t("합병 LOT"), "reason": repr(x)}]) from None
+    if len(set(ids)) != len(ids):
+        raise http.validation_error(t("같은 LOT 이 두 번 들어 있습니다"), fields=[{"name": "merge_lot_ids", "label": t("합병 LOT"), "reason": str(ids)}])
+    found = nodes(ids, cur)
+    missing = [i for i in ids if i not in found]
+    if missing:
+        raise http.validation_error(t("없는 LOT 입니다"), fields=[{"name": "merge_lot_ids", "label": t("합병 LOT"), "reason": str(missing)}])
+    bad = [found[i].no for i in ids if found[i].kind_base != PRODUCT]
+    if bad:
+        raise http.validation_error(t("생산 LOT 만 합병할 수 있습니다"), fields=[{"name": "merge_lot_ids", "label": t("합병 LOT"), "reason": str(bad)}])
+    assert_usable(cur, ids)
+    return [found[i] for i in ids]
 
 
 def _qty_list(qtys, count: int) -> list:
@@ -353,14 +396,17 @@ def _qty_list(qtys, count: int) -> list:
 
 def split(cur, *, parent_id: int, count: int, by: str, qtys=None, relation: str = SPLIT, kind: str | None = None,
           process_id: int | None = None, equipment_id: int | None = None, attrs: dict | None = None, user=None) -> list[dict]:
-    """1 → N (N ≥ 2). 부모는 재고인 생산 LOT. `relation` 은 base 가 `분할` 인 관계(코어 `분할` 또는 팩이 등록한 분할 계열). `process_id · equipment_id · attrs` 는 D-503."""
+    """1 → N. 코어 `분할` 은 N ≥ 2, 팩이 등록한 분할 계열 관계는 N ≥ 1(부분 분할 — merge 와 대칭). 부모는 재고인 생산 LOT.
+    `relation` 은 base 가 `분할` 인 관계. `process_id · equipment_id · attrs` 는 D-503. 자식 `insp_status` 는 부모 값을 잇는다(`inherit_insp`)."""
     rel = relation_of_base(relation, SPLIT)
     try:
         n = int(count)
     except (TypeError, ValueError):
         raise http.validation_error(t("분할 수는 정수여야 합니다"), fields=[{"name": "count", "label": t("분할 수"), "reason": repr(count)}]) from None
-    if n < 2:
-        raise http.validation_error(t("분할은 2 이상으로 나눕니다"), fields=[{"name": "count", "label": t("분할 수"), "reason": str(n)}])
+    least = 2 if rel.name == SPLIT else 1
+    if n < least:
+        raise http.validation_error(t("분할은 2 이상으로 나눕니다") if least == 2 else t("분할 수는 1 이상입니다"),
+                                    fields=[{"name": "count", "label": t("분할 수"), "reason": f"{n} < {least}"}])
     parent = _require_node(cur, parent_id, "부모 LOT")
     if parent.kind_base != PRODUCT:
         raise http.validation_error(t("생산 LOT 만 분할할 수 있습니다"), fields=[{"name": "parent_id", "label": t("LOT"), "reason": f"{parent.no} {parent.kind}"}])
@@ -377,7 +423,7 @@ def split(cur, *, parent_id: int, count: int, by: str, qtys=None, relation: str 
         child = _insert_lot(cur, {"kind": kind or base["kind"], "item_id": base["item_id"], "work_order_id": base["work_order_id"],
                                   "process_id": process_id if process_id is not None else base["process_id"],
                                   "equipment_id": equipment_id if equipment_id is not None else base["equipment_id"],
-                                  "work_result_id": base["work_result_id"], "qty": vals[i], "unit": base["unit"], "insp_status": "미검사",
+                                  "work_result_id": base["work_result_id"], "qty": vals[i], "unit": base["unit"], "insp_status": inherit_insp([parent.insp_status]),
                                   "attrs": attrs if attrs is not None else {}}, by=by, user=user)
         link(cur, parent.id, child["id"], rel.name, by=by, qty=vals[i])
         children.append(child)
@@ -393,7 +439,8 @@ def relation_of_base(name: str, base: str) -> Relation:
 
 def merge(cur, *, parent_ids, by: str, qty=None, relation: str = MERGE, kind: str | None = None,
           process_id: int | None = None, equipment_id: int | None = None, attrs: dict | None = None, user=None) -> dict:
-    """N → 1. 코어 `합병` 은 N ≥ 2, 팩이 등록한 합병 계열 관계(1:1 이어붙임 포함)는 N ≥ 1. 부모는 전부 재고인 생산 LOT. 수량은 `qty` → 부모 잔량 합."""
+    """N → 1. 코어 `합병` 은 N ≥ 2, 팩이 등록한 합병 계열 관계(1:1 이어붙임 포함)는 N ≥ 1. 부모는 전부 재고인 생산 LOT. 수량은 `qty` → 부모 잔량 합.
+    자식 `insp_status` 는 부모들에서 잇는다(`inherit_insp`)."""
     rel = relation_of_base(relation, MERGE)
     ids: list[int] = []
     for x in (parent_ids or []):
@@ -424,7 +471,8 @@ def merge(cur, *, parent_ids, by: str, qty=None, relation: str = MERGE, kind: st
     child = _insert_lot(cur, {"kind": kind or first["kind"], "item_id": first["item_id"], "work_order_id": work_order_id,
                               "process_id": process_id if process_id is not None else first["process_id"],
                               "equipment_id": equipment_id if equipment_id is not None else first["equipment_id"],
-                              "qty": total, "unit": first["unit"], "insp_status": "미검사", "attrs": attrs if attrs is not None else {}}, by=by, user=user)
+                              "qty": total, "unit": first["unit"], "insp_status": inherit_insp([p.insp_status for p in parents]),
+                              "attrs": attrs if attrs is not None else {}}, by=by, user=user)
     for p in parents:
         link(cur, p.id, child["id"], rel.name, by=by, qty=p.remain_qty)
     return child

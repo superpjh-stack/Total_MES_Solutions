@@ -289,17 +289,17 @@
 | `routers/{prt,clr,rll}.py` · `routers/_shared.py` | 기능 24 = 엔드포인트 24(`function-list.md` API 열 그대로). `rll` 의 계보는 `lineage.merge(relation="후가공"\|"splice", kind="ROLL", process_id=, equipment_id=, attrs=)` · `lineage.split(relation="슬리팅", …)` 만(D-503) — `lot_genealogy` 직접 SQL 0. `update lot` 은 둘(슬리팅 자식별 폭 attrs · splice 의 Job 지정 — D-514 · write_scope `lot`) |
 | `templates/{prt,clr,rll}/*.html` 7 · `templates/print/{label_lot,document,work_order}.html` 3(R10 덮어쓰기 — 위 §0 표와 같다) | 최소 템플릿 · `base.html` + `ui` 매크로 · 문구 `t()`. 롤 라벨은 kind=ROLL 분기(공정 구분 · 분할 순번 · Job · 길이 · 폭), COA 는 롤별 ΔE · 판정 · 불량 · 길이 · 폭 + 바코드 = 출하 LOT 번호, 작업지시서에 판사양 · 아니록스 · 잉크조성 |
 | `adapters/label_html.py` | `PrintAdapter`(코어 상속) — 브라우저 인쇄 `sent=False` + 양식 이름 검증(모르는 양식 ValueError) |
-| `seed/seed_pack.sql` | **코어 시드 로더가 받지 않는 시드**를 같은 CSV 에서 `\copy` 로 읽어 멱등 적재 — 판사양 · 아니록스 · 잉크조성(+조성 행) · 불량코드(`attrs.defect_group`) · 공정(`attrs.process_type`) · 품목 · 지표 4(`kpi_indicator calc_kind=pack:*`). 실행 순서 **`seed_pack.sql` → `make db-seed`**(코어가 `process_params`(EX-PR-10 참조)를 `seeds[]` 보다 먼저 넣어 공정이 없으면 실패한다). 2회 실행 행 수 diff 0 실측 |
+| `seed/*.csv` · `pack.yaml: seeds[]` | 기획 10 파일 + 지표 4(`kpi_indicators_example.csv`) — 코어 `seed_core`(CR-9 · 6c77eb9)가 공정 → 품목 → 설비 → `process_params` → `inspection_items` → 나머지 순서로 멱등 적재. 팩 테이블 4 는 `{file, table, key}`(`ink_code` → `ink_formula_id` FK 풀기) · `attrs.process_type` · `attrs.defect_group` · 역할별 계정(`qc` 포함). 웨이브 B 의 `seed/seed_pack.sql` 우회는 **지웠다**(회전 4). `MES_PACK=printfilm make db-reset` 한 번이면 끝 · 2회 행 수 diff 0 실측 |
 | `tests/` 9 파일 · 39 테스트 | `gates.yaml` S1~S3 + 훅 + 기능 24 마다 `@pytest.mark.fn` + 용어(G-P05) |
 
 ### pack.yaml 에서 고친 것 (기획 값 → 동작하는 값)
 
 | 키 | 기획 | 고침 | 이유 |
 |---|---|---|---|
-| `screens[].channels` | `[web]` · `[pop]` | `[관리자 Web]` · `[현장 POP]` | 코어 `nav` 는 채널 **이름**(`core.yaml: devices`)만 받는다 — `[pop]` 이면 기동 거부 |
-| `menus.add[].owner` | 없음 | `개발2` | 팩 `function-list.md` 의 담당(개발2)과 모듈 owner 가 같아야 `contracts` 가 읽는다 |
-| `terms` | `실적: 작업 실적` · `추적: LOT 추적` | **뺐다** | `t()` 는 긴 키부터 부분 치환(D-07) — 코어 메뉴명 "생산실적" → "생산작업 실적", "LOT 추적" → "LOT LOT 추적"(값이 키를 품는 용어는 겹말). 나머지 7(`투입` 포함)은 그대로 |
-| `seeds[]` | 10 파일 | 5 파일 | 코어 `seed_core` 는 `codes* · items* · processes* · equipment* · partners*` 만 받는다(그 밖은 SystemExit). 나머지 5 는 `seed/seed_pack.sql` 이 같은 CSV 를 읽는다 |
+| `screens[].channels` | `[web]` · `[pop]` | **기획값으로 되돌림**(회전 4) | 웨이브 B 에는 `[관리자 Web]` · `[현장 POP]` 로 우회했다 — 아키텍트 `733074f` 가 `packs.load` 에서 코드 → 라벨로 정규화 |
+| `menus.add[].owner` | 없음 | `개발2` | 팩 `function-list.md` 의 담당(개발2)과 모듈 owner 가 같아야 `contracts` 가 읽는다 — `pack-contract.md` §2 서식에 들어갔다(733074f) |
+| `terms` | `실적: 작업 실적` · `추적: LOT 추적` | **기획값으로 되돌림**(회전 4) | 웨이브 B 에는 겹말("LOT 추적" → "LOT LOT 추적") 때문에 뺐다 — `packs.t` 겹말 방지(733074f)로 `LOT 추적` · `작업 실적` 은 그대로. 남는 어색함: 메뉴 rename `생산 실적 (POP)` → 「생산 작업 실적 (POP)」 · `실적 현황` → 「작업 실적 현황」 · 「역추적」 → 「역LOT 추적」(기획 판단 — rename 을 최종 이름으로 쓰면 해소) |
+| `seeds[]` | 10 파일 | **기획값으로 되돌림**(회전 4) + `kpi_indicators_example.csv` | 웨이브 B 에는 5 파일 + `seed_pack.sql` 로 우회했다 — 코어 CR-9(6c77eb9)가 `{file, table, key}` · `attrs.*` · 적재 순서를 받는다. 지표 4 는 SQL 안 값에서 CSV 로 옮겼다 |
 
 ### 코어와 다른 점 · 임시 처리 (progress-dev2.md §3 의 코어 변경 요청)
 

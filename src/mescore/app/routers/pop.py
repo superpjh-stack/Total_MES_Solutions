@@ -86,19 +86,33 @@ def work(request: Request, no: str | None = None, user: rbac.User = rbac.require
 
 
 # ── POP-02 작업 시작 · 종료 ──────────────────────────────────────────────
+def _login_worker_id(user: rbac.User) -> int | None:
+    """작업 시작의 작업자 기본값 — 로그인 사용자의 `sys_user.worker_id` (비우고 시작해도 서버가 같은 값을 쓴다)."""
+    row = conn.q1("select worker_id from sys_user where id = %s", (user.id,))
+    return row["worker_id"] if row else None
+
+
+def _equipment_options(process_id: int | None, equipment_id: int | None = None) -> list:
+    """작업 시작의 설비 선택지 — 지시 공정의 설비(`bas_equipment.process_id`)만 + 지시에 지정된 설비."""
+    return f.options(conn.q("""select id, equip_code, equip_name from bas_equipment
+                                where use_yn = 'Y' and (process_id = %s or id = %s) order by equip_code""", (process_id, equipment_id)),
+                     "id", "equip_code", "equip_name")
+
+
 @router.get(POP02)                                                                     # 화면 — ?wo= 지시 · ?id= 실적
 def result(request: Request, wo: str | None = None, id: str | None = None, user: rbac.User = rbac.require_screen("POP-02")):
     ctx: dict = {"work_order": None, "result": None, "results": [], "params": [], "values": {}, "latest": {}, "inputs": [], "stops": [], "scraps": [],
-                 "equipment_options": f.options(conn.q("select id, equip_code, equip_name from bas_equipment where use_yn = 'Y' order by equip_code"), "id", "equip_code", "equip_name"),
+                 "equipment_options": [],
                  "worker_options": f.options(conn.q("select id, worker_code, worker_name from bas_worker where use_yn = 'Y' order by worker_code"), "id", "worker_code", "worker_name"),
                  "stop_reasons": [(c["code"], c["code_name"]) for c in conn.q("select code, code_name from bas_code where group_code = 'STOP_REASON' and use_yn = 'Y' order by seq")],
                  "defect_options": f.options(conn.q("select id, defect_code, defect_name from bas_defect_code where use_yn = 'Y' order by defect_code"), "id", "defect_code", "defect_name"),
-                 "scan_no": ""}
+                 "scan_no": "", "worker_id_default": _login_worker_id(user)}
     rid = f.int_id(id, "id", "실적")
     if rid is not None:
         r = _require_result(rid)
         ctx["result"] = r
         ctx["work_order"] = conn.q1("select * from job_work_order where id = %s", (r["work_order_id"],))
+        ctx["equipment_options"] = _equipment_options(r["process_id"], r["equipment_id"])
         ctx["params"] = measure.params_for(r["process_id"])
         ctx["values"] = measure.values_of(r["id"])
         if r["equipment_id"] is not None:
@@ -121,6 +135,7 @@ def result(request: Request, wo: str | None = None, id: str | None = None, user:
             if w is None:
                 raise http.not_found(t("없는 작업지시입니다"))
             ctx["work_order"] = w
+            ctx["equipment_options"] = _equipment_options(w["process_id"], w["equipment_id"])
             ctx["params"] = measure.params_for(w["process_id"])
             ctx["results"] = conn.q("""select r.*, l.lot_no as product_lot_no from pop_work_result r left join lot l on l.id = r.product_lot_id
                                         where r.work_order_id = %s order by r.started_at desc, r.id desc""", (woid,))
@@ -169,7 +184,8 @@ def result_start(request: Request, work_order_id: str | None = Form(None), work_
 
 @router.post(POP02 + "/{id}/end")                                                      # F-POP-03 작업 종료
 def result_end(request: Request, id: int, good_qty: str | None = Form(None), defect_qty: str | None = Form(None), unit: str | None = Form(None),
-               note: str | None = Form(None), user: rbac.User = rbac.require_fn("F-POP-03")):
+               note: str | None = Form(None), merge_lot_ids: str | None = Form(None), merge_relation: str | None = Form(None),
+               user: rbac.User = rbac.require_fn("F-POP-03")):
     r = _require_result(id)
     if r["ended_at"] is not None:
         raise http.validation_error(t("이미 종료된 실적입니다"), fields=[f.field_error("id", "실적", str(id))])
@@ -183,6 +199,7 @@ def result_end(request: Request, id: int, good_qty: str | None = Form(None), def
         attrs = packs.read_attrs(_form(request), "lot")
     except ValueError as exc:
         raise http.validation_error(str(exc), fields=[f.field_error("attrs", "속성", str(exc))]) from None
+    merge_ids = _csv_ids(merge_lot_ids, "merge_lot_ids", "합병 LOT") or None    # 선택 — 재고 생산 LOT 을 이 실적의 LOT 에 합병 (별도 합병 LOT 없이)
     with conn.tx() as cur:
         cur.execute("select * from pop_work_result where id = %s for update", (id,))
         row = dict(cur.fetchone())
@@ -194,16 +211,18 @@ def result_end(request: Request, id: int, good_qty: str | None = Form(None), def
         saved = dict(cur.fetchone())
         cur.execute("update pop_stop set ended_at = now(), updated_at = now(), updated_by = %s where work_result_id = %s and ended_at is null", (user.login_id, id))
         recorded = measure.record(cur, id, params, values, by=user.login_id)
-        lot = lineage.make_product_lot(cur, work_result_id=id, by=user.login_id, qty=good, unit=saved["unit"], attrs=attrs, user=user)
+        lot = lineage.make_product_lot(cur, work_result_id=id, by=user.login_id, qty=good, unit=saved["unit"], attrs=attrs,
+                                       merge_parent_ids=merge_ids, merge_relation=f.opt_text(merge_relation) or lineage.MERGE, user=user)
         collected = measure.fill_collect(cur, saved, params, by=user.login_id)
         saved.update({"product_lot": lot, "product_lot_id": lot["id"], "measures": recorded + collected})
         packs.hook("after_save_pop_work_result")(cur, saved, user)
         packs.hook("on_result_closed")(cur, saved, user)
-    audit.log_change(request, user, "F-POP-03", f"pop_work_result:{id}", {"lot_no": lot["lot_no"], "good_qty": str(good), "measures": len(recorded) + len(collected)})
+    audit.log_change(request, user, "F-POP-03", f"pop_work_result:{id}", {"lot_no": lot["lot_no"], "good_qty": str(good), "measures": len(recorded) + len(collected),
+                                                                        **({"merge": merge_ids} if merge_ids else {})})
     deviated = [m["param_key"] for m in recorded + collected if m["deviated"]]
     return http.saved(request, f"{t('작업을 종료했습니다')} — {t('생산 LOT')} {lot['lot_no']}" + (f" · {t('이탈')} {len(deviated)}" if deviated else ""),
                       back=f"{POP02}?id={id}",
-                      data={"id": id, "lot_id": lot["id"], "lot_no": lot["lot_no"], "label_url": f"{POP04}?lot={lot['id']}",
+                      data={"id": id, "lot_id": lot["id"], "lot_no": lot["lot_no"], "label_url": f"{POP04}?lot={lot['id']}", "merged": merge_ids or [],
                             "measures": {m["param_key"]: {"value_num": templating.jsonable(m["value_num"]), "value_text": m["value_text"], "source": m["source"],
                                                           "deviated": m["deviated"]} for m in recorded + collected}, "deviated": deviated})
 
@@ -308,10 +327,13 @@ def result_merge(request: Request, id: int, lot_ids: str = Form(...), qty: str |
 @router.get(POP03)                                                                     # 화면 — ?result= 실적 · ?no= LOT 스캔(미리 보기)
 def inputs(request: Request, result: str | None = None, no: str | None = None, user: rbac.User = rbac.require_screen("POP-03")):
     rid = f.int_id(result, "result", "실적")
-    ctx: dict = {"result": _require_result(rid) if rid else None, "rows": [], "lot": None, "scan_no": no or "", "open_results": []}
+    ctx: dict = {"result": _require_result(rid) if rid else None, "rows": [], "lot": None, "scan_no": no or "", "open_results": [], "last_qty": None, "last_unit": None}
     if rid:
         ctx["rows"] = conn.q("""select x.*, l.lot_no, l.insp_status, i.item_code, i.item_name from pop_input x join lot l on l.id = x.material_lot_id
                                  left join bas_item i on i.id = l.item_id where x.work_result_id = %s order by x.id desc""", (rid,))
+        last = next((x for x in ctx["rows"] if x["canceled_yn"] == "N"), None)      # 「투입량 직전 값 유지」 — 취소되지 않은 마지막 투입
+        if last is not None:
+            ctx["last_qty"], ctx["last_unit"] = last["qty"], last["unit"]
     else:
         ctx["open_results"] = conn.q("""select r.id, r.started_at, w.work_order_no, i.item_name from pop_work_result r join job_work_order w on w.id = r.work_order_id
                                          join bas_item i on i.id = w.item_id where r.ended_at is null order by r.started_at desc limit 50""")

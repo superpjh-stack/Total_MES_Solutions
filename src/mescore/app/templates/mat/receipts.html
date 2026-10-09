@@ -1,17 +1,18 @@
 {# MAT-01 입고 — F-MAT-01 등록 · F-MAT-02 수정 · F-MAT-03 조회 (개발2 라우터 · ctx 키 · 폼 name 그대로).
-   POP(body.ch-pop): docs/design/pop/mat_receipts_pop.html — 입고 1건 폼(큰 칸 · 주 버튼 80px) + 오늘 입고. 스캔 진입(?item_code=)은 라우터에 없어 스캔칸을 두지 않는다(README 이식 요청).
+   POP(body.ch-pop): docs/design/pop/mat_receipts_pop.html — 입고 1건 폼(큰 칸 · 주 버튼 80px) + 오늘 입고. 스캔 진입 ?item_code= → 등록 폼의 품목 칸(없는 품목은 이 화면 422 재렌더) — 스캔칸 하나.
    Web: 조회 조건 · 표 · 등록 폼 3블록. #}
 {% extends "pop/_layout.html" %}
 {% import "home/_macros.html" as ui %}
 {% import "pop/_ui.html" as pui %}
 
 {% block pop_body %}
-{{ pui.banner() }}
+{% call ui.scan_box(nav.path_of('MAT-01'), name='item_code', label='품목 바코드 스캔', method='get', placeholder=scan_no or 'RAW-', button='확인') %}{% endcall %}
+{% if scan_item %}{{ pui.banner(ok=scan_item.item_code ~ ' ' ~ scan_item.item_name) }}{% else %}{{ pui.banner(error=scan_error, fields=fields if scan_error else []) }}{% endif %}
 <form method="post" action="{{ nav.path_of('MAT-01') }}" id="receipt-form">
   <section class="panel">
     <h2>{{ t('입고') }} 1{{ t('건') }} <small>{{ t('등록하면 원재료 LOT 이 미검사로 생긴다') }}</small></h2>
     <div class="form-grid">
-      {{ ui.select('품목', 'item_id', item_options, '', required=true) }}
+      {{ ui.select('품목', 'item_id', item_options, item_id_default or '', required=true) }}
       {{ ui.select('거래처', 'partner_id', partner_options) }}
       {{ ui.field('수량', 'qty', '', type='number', required=true, step='any') }}
       {{ ui.field('단위', 'unit') }}
@@ -53,7 +54,7 @@
 <section class="panel">
   <h2>{{ t('입고 등록') }} <small>F-MAT-01</small></h2>
   <form method="post" action="{{ nav.path_of('MAT-01') }}" id="receipt-form" class="form-grid">
-    {{ ui.select('품목', 'item_id', item_options, '', required=true) }}
+    {{ ui.select('품목', 'item_id', item_options, item_id_default or '', required=true) }}
     {{ ui.select('거래처', 'partner_id', partner_options) }}
     {{ ui.field('수량', 'qty', '', type='number', required=true, step='any') }}
     {{ ui.field('단위', 'unit') }}

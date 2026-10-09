@@ -242,3 +242,103 @@ def test_depth_20_branch_100_under_2_seconds(cur):
     assert len(bw.edges) == 20 and bw.edges[-1].parent.id == root
     assert t_fw < 2.0 and t_bw < 2.0, f"정방향 {t_fw:.2f}s · 역방향 {t_bw:.2f}s"
     print(f"\n[G-C07] 깊이 20 · 분기 100 — 정방향 {t_fw:.3f}s (edges 2000) · 역방향 {t_bw:.3f}s")
+
+
+# ── 회전 4 — link(at=) · 팩 관계 N ≥ 1 · insp_status 상속 · make_product_lot 합병 옵션 ──
+def _pack_relations(monkeypatch):
+    """코어 단독에서도 팩 관계(base 합병 `이어붙임` · base 분할 `나눠담기`)를 시험한다 — 관계 표만 바꾼다."""
+    extra = {"이어붙임": lineage.Relation("이어붙임", lineage.MERGE), "나눠담기": lineage.Relation("나눠담기", lineage.SPLIT)}
+    real = lineage.relations
+    monkeypatch.setattr(lineage, "relations", lambda: {**real(), **extra})
+
+
+def _product(cur, wo: dict, good: float, insp: str = "미검사") -> dict:
+    r = _result(cur, wo)
+    _end(cur, r["id"], good)
+    p = lineage.make_product_lot(cur, work_result_id=r["id"], by=BY)
+    if insp != "미검사":
+        cur.execute("update lot set insp_status = %s where id = %s", (insp, p["id"]))      # 테스트 준비 — 검사 결과(F-QUA-05)를 대신한다
+    return p
+
+
+def test_link_at_keeps_given_time(cur):
+    prd = item_id("PRD-EX-01")
+    a, b = _raw_lot(cur, prd, uniq("LA")), _raw_lot(cur, prd, uniq("LB"))
+    gid = lineage.link(cur, a, b, lineage.PRODUCE, by=BY, qty=1, at="2025-01-02T03:04:05+09:00")
+    cur.execute("select linked_at at time zone 'Asia/Seoul' as at from lot_genealogy where id = %s", (gid,))
+    assert str(cur.fetchone()["at"]) == "2025-01-02 03:04:05"
+    c = _raw_lot(cur, prd, uniq("LC"))
+    gid2 = lineage.link(cur, b, c, lineage.PRODUCE, by=BY)                                   # at 없으면 now()
+    cur.execute("select linked_at > now() - interval '1 minute' as fresh from lot_genealogy where id = %s", (gid2,))
+    assert cur.fetchone()["fresh"]
+
+
+def test_pack_relation_merge_and_split_allow_one(cur, monkeypatch):
+    _pack_relations(monkeypatch)
+    wo = new_work_order(cur)
+    p1 = _product(cur, wo, 40)
+    with pytest.raises(HTTPException):
+        lineage.merge(cur, parent_ids=[p1["id"]], by=BY)                                      # 코어 합병은 N ≥ 2
+    one = lineage.merge(cur, parent_ids=[p1["id"]], by=BY, relation="이어붙임")               # 팩 base 합병 N = 1
+    rows = lineage.genealogy_rows([one["id"]], cur)
+    assert [(r["relation"], r["relation_base"]) for r in rows if r["child_lot_id"] == one["id"]] == [("이어붙임", "합병")]
+    with pytest.raises(HTTPException):
+        lineage.split(cur, parent_id=one["id"], count=1, by=BY)                                # 코어 분할은 N ≥ 2
+    with pytest.raises(HTTPException):
+        lineage.split(cur, parent_id=one["id"], count=0, by=BY, relation="나눠담기")
+    part = lineage.split(cur, parent_id=one["id"], count=1, by=BY, qtys=[10], relation="나눠담기")   # 팩 base 분할 N = 1 (부분)
+    assert len(part) == 1 and float(part[0]["qty"]) == 10.0
+
+
+@pytest.mark.parametrize("parents, expect", [
+    (["합격", "합격"], "합격"), (["합격", "불합격"], "불합격"), (["조건부", "불합격"], "불합격"),
+    (["합격", "미검사"], "미검사"), (["합격", "조건부"], "조건부"), (["미검사"], "미검사"), ([], "미검사"),
+])
+def test_inherit_insp_rule(parents, expect):
+    assert lineage.inherit_insp(parents) == expect
+
+
+def test_split_merge_children_inherit_insp_status(cur):
+    wo = new_work_order(cur)
+    ok1, ok2, ng, cond = _product(cur, wo, 10, "합격"), _product(cur, wo, 10, "합격"), _product(cur, wo, 10, "불합격"), _product(cur, wo, 10, "조건부")
+    assert {c["insp_status"] for c in lineage.split(cur, parent_id=ok1["id"], count=2, by=BY, qtys=[5, 5])} == {"합격"}
+    assert {c["insp_status"] for c in lineage.split(cur, parent_id=ng["id"], count=2, by=BY, qtys=[5, 5])} == {"불합격"}
+    a, b = _product(cur, wo, 10, "합격"), _product(cur, wo, 10, "합격")
+    assert lineage.merge(cur, parent_ids=[a["id"], b["id"]], by=BY)["insp_status"] == "합격"
+    assert lineage.merge(cur, parent_ids=[ok2["id"], cond["id"]], by=BY)["insp_status"] == "조건부"
+    u1, x1 = _product(cur, wo, 10), _product(cur, wo, 10, "합격")
+    assert lineage.merge(cur, parent_ids=[u1["id"], x1["id"]], by=BY)["insp_status"] == "미검사"
+    n1, n2 = _product(cur, wo, 10, "불합격"), _product(cur, wo, 10, "합격")
+    bad = lineage.merge(cur, parent_ids=[n1["id"], n2["id"]], by=BY)
+    assert bad["insp_status"] == "불합격"
+    ship = new_shipment(cur)
+    with pytest.raises(HTTPException):
+        lineage.ship(cur, shipment_id=ship["id"], lot_id=bad["id"], by=BY)                     # 불합격을 이은 LOT 은 출하 422
+
+
+@pytest.mark.fn("F-POP-03")
+def test_make_product_lot_with_merge_parents(cur, monkeypatch):
+    """종료 때 재고 생산 LOT 을 이 실적의 LOT 에 합병 — 별도 합병 LOT 없이 투입 + 합병 → 한 LOT (개발3 §3-19 · 기획 9행 모양)."""
+    _pack_relations(monkeypatch)
+    m1 = lineage.make_material_lot(cur, item_id=item_id("RAW-EX-01"), qty=100, unit="kg", by=BY, insp_status="합격")
+    wo = new_work_order(cur)
+    b1, b2 = _product(cur, wo, 20), _product(cur, wo, 30)
+    r = _result(cur, wo)
+    lineage.consume_material(cur, work_result_id=r["id"], material_lot_id=m1["id"], qty=10, by=BY)
+    _end(cur, r["id"], 60)
+    lot = lineage.make_product_lot(cur, work_result_id=r["id"], by=BY, merge_parent_ids=[b1["id"], b2["id"]])
+    rows = [x for x in lineage.genealogy_rows([lot["id"]], cur) if x["child_lot_id"] == lot["id"]]
+    assert sorted((x["parent_lot_id"], x["relation"]) for x in rows) == sorted([(m1["id"], "투입"), (b1["id"], "합병"), (b2["id"], "합병")])
+    assert {e.parent.id for e in lineage.trace_backward(lot["id"], cur).edges} >= {m1["id"], b1["id"], b2["id"]}
+    # 합병 부모 하나 · 팩 base 합병 관계
+    b3 = _product(cur, wo, 5)
+    r2 = _result(cur, wo)
+    _end(cur, r2["id"], 5)
+    lot2 = lineage.make_product_lot(cur, work_result_id=r2["id"], by=BY, merge_parent_ids=[b3["id"]], merge_relation="이어붙임")
+    assert [(x["parent_lot_id"], x["relation_base"]) for x in lineage.genealogy_rows([lot2["id"]], cur) if x["child_lot_id"] == lot2["id"]] == [(b3["id"], "합병")]
+    # 지킴이: 이미 합병된 LOT(자식 있음 → 소진) · 원재료 LOT · 분할 관계 · 중복 → 422
+    for bad_ids, rel in (([b1["id"]], "합병"), ([m1["id"]], "합병"), ([b3["id"]], "분할"), ([lot2["id"], lot2["id"]], "합병")):
+        r3 = _result(cur, wo)
+        _end(cur, r3["id"], 1)
+        with pytest.raises(HTTPException):
+            lineage.make_product_lot(cur, work_result_id=r3["id"], by=BY, merge_parent_ids=bad_ids, merge_relation=rel)

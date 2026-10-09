@@ -133,3 +133,19 @@ def test_collect_screen_series_or_not_collected(equip):
     assert j["summary"] == {"n": 2, "min": 5.0, "max": 7.0, "avg": 6.0, "last": 5.0}
     assert c.get(EQP04).status_code == 200
     assert client("field").get(EQP04).status_code == 200 and client("field").get(EQP04 + "?device=pop").status_code == 403    # EQP-04 는 Web 만
+
+
+@pytest.mark.fn("F-EQP-01")
+def test_status_scan_entry_by_equip_code(equip):
+    """EQP-01 ?equip_code= 스캔 진입 — 그 설비 카드가 맨 앞 · 없는 설비는 이 화면 422 재렌더 (디자이너2 이식 요청 4). now 는 표시용 문자열."""
+    c = client("field", device="pop")
+    j = c.get(EQP01, params={"equip_code": equip["equip_code"]}).json()
+    assert j["selected_id"] == equip["id"] and j["rows"][0]["id"] == equip["id"]
+    assert isinstance(j["now"], str) and len(j["now"]) == 16 and j["now"][13] == ":"
+    html = c.get(EQP01, params={"equip_code": equip["equip_code"]}, headers=HTML).text
+    assert html.count("data-scan") == 1 and 'class="card sel"' in html
+    miss = c.get(EQP01, params={"equip_code": "EQ-NO-SUCH"})
+    assert miss.status_code == 422 and miss.json()["code"] == "validation_error" and miss.json()["screen_id"] == "EQP-01"
+    page = c.get(EQP01, params={"equip_code": "EQ-NO-SUCH"}, headers=HTML)
+    assert page.status_code == 422 and page.text.count("data-scan") == 1 and 'id="scan-result"' in page.text
+    assert c.get(EQP01, headers=HTML).text.count("data-scan") == 1

@@ -10,17 +10,19 @@
 from mescore.app import lineage
 # 상수: INPUT PRODUCE SPLIT MERGE SHIP = 투입 생산 분할 합병 출하 · MATERIAL PRODUCT SHIPMENT · IN_STOCK CONSUMED SHIPPED = 재고 소진 출하 · FORWARD BACKWARD
 # 쓰기 — 전부 conn.tx() 의 cur. by = login_id · user = rbac.User(훅 validate_lot/after_save_lot/on_lot_created 에 넘김 · 없으면 None). 검증 실패 422
-lineage.link(cur, parent_id, child_id, relation, *, by, qty=None) -> int            # 자기참조 · 순환 · 모르는 relation · 중복 (부모,자식,관계) 422. relation_base 저장
+lineage.link(cur, parent_id, child_id, relation, *, by, qty=None, at=None) -> int   # at = linked_at(없으면 now() · 회전 4). 자기참조 · 순환 · 모르는 relation · 중복 (부모,자식,관계) 422. relation_base 저장
 lineage.assert_usable(cur, lot_ids) -> None                                         # PRODUCT 재고 · MATERIAL 합격/조건부 + 소진 전. 아니면 422
 lineage.make_material_lot(cur, *, item_id, qty, unit, by, partner_id=None, lot_no=None, made_at=None, attrs=None, insp_status="미검사", note=None, kind="MATERIAL", user=None) -> dict
-lineage.make_product_lot(cur, *, work_result_id, by, kind="PRODUCT", qty=None, unit=None, attrs=None, parent_id=None, user=None) -> dict   # pop_input(취소 제외) → 투입 N줄 · parent_id → 생산 1:1
-lineage.split(cur, *, parent_id, count, by, qtys=None, relation="분할", kind=None, process_id=None, equipment_id=None, attrs=None, user=None) -> list[dict]   # D-503 · N ≥ 2 · 수량 합 ≤ 잔량
+lineage.make_product_lot(cur, *, work_result_id, by, kind="PRODUCT", qty=None, unit=None, attrs=None, parent_id=None, merge_parent_ids=None, merge_relation="합병", user=None) -> dict
+#   pop_input(취소 제외) → 투입 N줄 · parent_id → 생산 1:1 · merge_parent_ids(재고 생산 LOT ≥ 1) → 새 LOT 에 base 합병 화살표(별도 합병 LOT 없음 · 회전 4 · F-POP-03 폼 merge_lot_ids)
+lineage.split(cur, *, parent_id, count, by, qtys=None, relation="분할", kind=None, process_id=None, equipment_id=None, attrs=None, user=None) -> list[dict]   # D-503 · 코어 분할 N ≥ 2 · 팩 분할 계열 N ≥ 1 · 수량 합 ≤ 잔량 · 자식 insp_status 상속
 lineage.merge(cur, *, parent_ids, by, qty=None, relation="합병", kind=None, process_id=None, equipment_id=None, attrs=None, user=None) -> dict            # D-503 · 코어 합병 N ≥ 2 · 팩 합병 계열 N ≥ 1
 lineage.ship(cur, *, shipment_id, lot_id, by, user=None) -> int        # 개발3 F-SHP-05. 출하 LOT 없으면 LOT_SHIPMENT 채번. 등록 상태 출하만 · 이미 출하/소진/불합격 422
 lineage.unship(cur, *, shipment_id, lot_id, by, user=None) -> int      # 개발3 F-SHP-06. 출하 화살표 삭제. 담기지 않은 LOT 422
 lineage.consume_material(cur, *, work_result_id, material_lot_id, qty, by, unit=None) -> int   # pop_input + 원재료면 mat_stock_trx(투입 −qty) · mat_stock. 미검사/불합격/소진/잔량 부족/종료 실적 422
 lineage.cancel_consume(cur, *, input_id, by) -> int                     # 종료 전만 · 재고 되돌림
 lineage.retag(cur, lot_id, kind, *, by=None) -> dict                    # 팩 kind (base 는 등록값)
+lineage.inherit_insp(statuses) -> str   # split/merge 자식 — 전부 합격 → 합격 · 불합격 포함 → 불합격 · 미검사 포함 → 미검사 · 그 밖 → 조건부 (회전 4)
 lineage.shipment_lot(cur, shipment_id) -> dict | None
 # 읽기 — 어떤 테이블에도 쓰지 않는다. 선택 인자 cur 로 같은 트랜잭션 안에서도 읽는다
 lineage.resolve(no, cur=None) -> Node | None · search(text, limit=50) · state(lot_id) -> str(404) · node(lot_id) · nodes(ids) · genealogy_rows(ids)
@@ -141,3 +143,32 @@ G-P05  용어 — terms 키 치환 안 된 노출 0                             
 ```
 
 미확정으로 둔 값(NULL · 화면 `미확정`): 도수 · 선수 · 셀 용적 · 기준 Lab · ΔE 상한(`inspection_items.csv` standard `(미확정)`) · 인쇄 속도 단위 · 슬리팅 분할 수 상한 · 프린터 규격(브라우저 인쇄) · LOT_SHIPMENT 형식(코어 X · D-501). 결정 후보 D-501~D-514 는 README §6 그대로 아키텍트에게.
+
+## §5 회전 4 (2026-10-09) — 요청 처리 (개발3 §3-5 · 6 · 15 · 16 · 18 · 19 · 디자이너2 이식 요청 4 · 5 · 6) · printfilm 우회 제거
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| `lineage.link(..., at=None)` | `at` → `lot_genealogy.linked_at`(`coalesce(at, now())`) — 이관 22 의 원본 시각 | `tests/test_lineage_scenario.py::test_link_at_keeps_given_time` |
+| 팩 관계 N ≥ 1 | `merge` — 코어 `합병` N ≥ 2 · 팩 base 합병 N ≥ 1(기존 확인) · **`split` 도 대칭** — 코어 `분할` N ≥ 2 · 팩 base 분할 N ≥ 1(부분 분할) | `test_pack_relation_merge_and_split_allow_one`(관계 표 monkeypatch) |
+| `insp_status` 상속 | `lineage.inherit_insp(statuses)` — 전부 합격 → 합격 · 불합격 하나라도 → 불합격 · 미검사 하나라도 → 미검사 · 그 밖(합격+조건부) → 조건부 · 부모 하나면 그 값. `split` · `merge` 자식에 적용. 불합격을 이은 LOT 출하 422 | `test_inherit_insp_rule`(7) · `test_split_merge_children_inherit_insp_status` |
+| `make_product_lot(merge_parent_ids=, merge_relation="합병")` | 재고 생산 LOT 1개 이상 → 새 실적 LOT 에 base 합병 화살표(별도 합병 LOT 없음 · "투입 + 합병 → 한 LOT"). 소진 · 원재료 · 분할 관계 · 중복 422. **F-POP-03 폼 `merge_lot_ids`**(id · LOT 번호 쉼표) · `merge_relation` · 응답 `merged` | `test_make_product_lot_with_merge_parents` · `tests/test_pop_api.py::test_result_end_with_merge_parents_makes_one_lot` |
+| 코어 계보 10행 | 그대로 {투입 3 · 합병 2 · 분할 3 · 출하 2} | `test_core_scenario_is_exactly_10_rows` |
+| `collect.counts(None, None)` | None · '' 경계는 조건에서 뺀다(파라미터 `is null` 비교 없음) · 정수. 이 환경에서는 재현되지 않았으나(캐스트 있음) 경로 자체를 없앴다 | `tests/test_collect.py::test_counts_with_none_and_bounds` |
+| POP-02 | `worker_id_default` = 로그인 사용자 `sys_user.worker_id`(템플릿 `checked`) · `equipment_options` = 지시 공정 설비(`bas_equipment.process_id`) + 지시 지정 설비 | `test_start_screen_defaults_worker_and_filters_equipment_by_process` |
+| POP-03 | `last_qty` · `last_unit` = 취소되지 않은 마지막 투입 | `test_input_screen_last_qty_skips_canceled` |
+| MAT-01 `?item_code=` | 원재료 · 부자재 품목 → 등록 폼 품목 칸(`item_id_default` · `scan_item`) · 없는 품목(제품 포함) **MAT-01 422 재렌더** · 스캔칸 1 | `tests/test_mat_api.py::test_receipts_scan_entry_by_item_code` |
+| EQP-01 `?equip_code=` | 그 설비 카드 맨 앞 + `.card.sel`(`selected_id`) · 없는 설비 **EQP-01 422 재렌더** · 스캔칸 1 · `now` = `"YYYY-MM-DD HH:MM"` 문자열 | `tests/test_eqp_api.py::test_status_scan_entry_by_equip_code` |
+| QUA-02 검사 공정 | GET `?process_id=` · POST `process_id` — 기본 LOT 공정 · 고르면 그 공정의 계획 항목(`insp_process_id` · `process_options`) · 없는 공정 422 | `tests/test_qua_api.py::test_inspection_process_choice_defaults_to_lot_process` |
+| `interfaces.md` §4 · §6 | `link(at=)` · `split` N 규칙 · `make_product_lot(merge_parent_ids, merge_relation)` · `inherit_insp` · 상속 규칙 문단 · `collect.counts` | `contracts/interfaces.md` |
+| printfilm 우회 제거 | ① `screens[].channels` → 기획 코드 `[web]` · `[pop]`(733074f 정규화) ② `terms` `실적: 작업 실적` · `추적: LOT 추적` 복원(겹말 방지) ③ `seeds[]` 기획 10 파일 + `{file, table, key}` 4 + `kpi_indicators_example.csv`(지표 4 를 SQL 에서 CSV 로) · **`seed/seed_pack.sql` 삭제**(6c77eb9 CR-9). `menus.add[].owner` 는 유지(pack-contract §2 서식) | `MES_PACK=printfilm uv run pytest -q packs/printfilm/tests` **39 passed** · `MES_PACK=printfilm make pack-check` OK 용어 9 |
+| printfilm 시드 | 빈 스키마 → `MES_PACK=printfilm make db-seed` 한 번에 판사양 2(품목 FK 2) · 조성 행 3 · 지표 pack:* 4 · 공정 구분 3 · 불량 분류 4 · 권한 60 · 계정 4(qc 포함) · **2회 행 수 diff 0** | `conn.table_counts()` 비교 |
+| pytest (코어) | **277 passed** (내 새 테스트 18) · 단독 흔들림 1 — `test_trc_api::test_backward_…` 행 수 diff(같은 DB 에 다른 담당이 동시에 씀 · 단독 3 passed) | `uv run pytest -q` |
+| 라우트 · 용어 | placeholder 0 · RBAC 위반 0 · G-C03 PASS · G-C23 PASS(위반 0 · t() 누락 0) | `make check-routes` · `make check-terms` |
+| G-P01 R1 | FAIL — 코어 해시 바뀜 61(이번 회전 전 담당 미커밋 · 내 `lineage` · `collect` · 라우터 4 포함) → 아키텍트 `make core-hash` | `MES_PACK=printfilm make check-pack` |
+
+### §5-3 요청 (회전 4)
+
+- **아키텍트**: ① `make core-hash` 재기록(내 코어 파일 `app/lineage.py` · `collect.py` · `routers/{pop,mat,qua,eqp}.py` · 템플릿 `pop/{result,inputs}` · `mat/receipts` · `eqp/status` · `qua/inspections`). ② 개발3 §3-17(PRODUCT LOT 부분 투입 — `v_lot_state` 가 자식 계보 하나로 `소진`)은 `views.sql` 몫이다 — 팩 base 분할 N = 1(부분 분할)도 같은 뷰 규칙에 걸린다(부모가 곧바로 `소진`). `remain_qty > 0` 이면 재고로 보는 규칙이면 lineage 는 그대로 맞는다.
+- **기획(printfilm)**: `terms` 복원으로 메뉴 rename 이 `t()` 를 한 번 더 거쳐 「생산 작업 실적 (POP)」 · 「작업 실적 현황」 이 된다(겹말은 아님). pack-contract §2 대로 rename 을 최종 이름(`작업 실적 (POP)` 등)으로 쓸지 판단.
+- **디자이너2**: MAT-01 · EQP-01 POP 화면에 `ui.scan_box` 한 줄씩 넣었다(요청 4 — S-01 하나 유지) · EQP-01 카드 `.card.sel` · POP-02 종료 폼에 `merge_lot_ids` 칸 한 줄 · QUA-02 검사 공정 GET 폼(`#insp-process-form`) — 모양은 그대로 두었으니 다듬어 달라.
+- **개발3**: §3-5 `link(at=)` · §3-6 `counts` · §3-15 팩 분할 N ≥ 1 · §3-16 상속(이제 kimchi `age` 의 `update lot set insp_status` 를 뺄 수 있다) · §3-18 QUA-02 `?process_id=` / 폼 `process_id` · §3-19 F-POP-03 `merge_lot_ids`(+ `merge_relation`) — 전부 반영. §3-9 링크 쿼리 이름(`QUA-02 ?no=` · `MAT-03 ?no=`)은 그대로 맞다.

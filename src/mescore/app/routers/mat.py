@@ -53,15 +53,21 @@ def _receipt_rows(frm: date, to: date, item_id: int | None, partner_id: int | No
 # ── MAT-01 입고 ─────────────────────────────────────────────────────────
 @router.get(nav.path_of("MAT-01"))                                                    # F-MAT-03 입고 조회 = 화면 GET
 def receipts(request: Request, frm: str | None = None, to: str | None = None, item_id: str | None = None, partner_id: str | None = None,
-             user: rbac.User = rbac.require_fn("F-MAT-03")):
+             item_code: str | None = None, user: rbac.User = rbac.require_fn("F-MAT-03")):
     d1, d2 = f.period(frm, to)
     iid, pid = f.int_id(item_id, "item_id", "품목"), f.int_id(partner_id, "partner_id", "공급처")
     rows = _receipt_rows(d1, d2, iid, pid)
-    return templating.render(request, "mat/receipts.html",
-                             {"rows": rows, "frm": d1, "to": d2, "item_id": iid, "partner_id": pid,
-                              "item_options": f.options(_items("원재료") + _items("부자재"), "id", "item_code", "item_name"),
-                              "partner_options": f.options([p for p in _partners() if p["partner_type"] != "고객"], "id", "partner_code", "partner_name"),
-                              "today": date.today(), "attr_specs": packs.attrs_of("lot")}, screen_id="MAT-01")
+    items = _items("원재료") + _items("부자재")
+    ctx = {"rows": rows, "frm": d1, "to": d2, "item_id": iid, "partner_id": pid,
+           "item_options": f.options(items, "id", "item_code", "item_name"),
+           "partner_options": f.options([p for p in _partners() if p["partner_type"] != "고객"], "id", "partner_code", "partner_name"),
+           "today": date.today(), "attr_specs": packs.attrs_of("lot"), "scan_no": item_code or "", "scan_item": None, "item_id_default": None}
+    if item_code is not None and item_code.strip() != "":                              # 스캔 진입 — 품목 바코드 → 등록 폼의 품목 칸
+        hit = next((i for i in items if i["item_code"] == item_code.strip()), None)
+        if hit is None:
+            return f.scan_miss(request, "mat/receipts.html", ctx, screen_id="MAT-01", no=item_code, what="품목")
+        ctx.update({"scan_item": hit, "item_id_default": hit["id"]})
+    return templating.render(request, "mat/receipts.html", ctx, screen_id="MAT-01")
 
 
 @router.post(nav.path_of("MAT-01"))                                                   # F-MAT-01 입고 등록

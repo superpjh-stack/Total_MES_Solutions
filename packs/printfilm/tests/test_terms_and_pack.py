@@ -31,7 +31,9 @@ def test_pack_manifest_merged():
     assert [r["code"] for r in p.roles] == ["ADMIN", "PROD", "QC", "FIELD"] and p.permission("rll", "FIELD")["level"] == "입력" and p.permission("eqp", "ADMIN")["level"] == "없음"
     assert set(GATES["terms_sample"]) <= set(p.terms)
     assert packs.t("작업지시") == "Job" and packs.t("생산 LOT") == "Roll" and packs.t("성적서") == "COA" and packs.t("분할") == "슬리팅" and packs.t("합병") == "splice"
-    assert packs.t("LOT 추적") == "LOT 추적" and packs.t("생산실적") == "생산실적"                                       # 겹말이 나는 용어는 뺐다
+    assert packs.t("추적") == "LOT 추적" and packs.t("실적") == "작업 실적"                                            # 기획값 그대로 (회전 4 — 우회 제거)
+    assert packs.t("LOT 추적") == "LOT 추적" and packs.t("작업 실적") == "작업 실적"                                 # 겹말 방지 (packs.t · 아키텍트 733074f)
+    assert {x["id"]: x["channels"] for x in p.pack_screens}["X-CLR-01"] == ["현장 POP"]                                   # 채널 코드 [pop] → 라벨 정규화
 
 
 @pytest.mark.fn("F-X-PRT-04")

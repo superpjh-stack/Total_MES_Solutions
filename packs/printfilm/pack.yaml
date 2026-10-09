@@ -15,9 +15,10 @@ terms:
   성적서: COA
   분할: 슬리팅
   합병: splice
+  실적: 작업 실적          # 엘컴화인 중메뉴 "작업 실적" (겹말 방지는 packs.t — 회전 4 아키텍트)
   투입: 자재 투입          # 엘컴화인 중메뉴 "자재 투입"
   거래처: 고객             # 엘컴화인 "고객 관리" (공급처는 같은 화면의 partner_type=공급)
-  # 실적: 작업 실적 · 추적: LOT 추적 — 뺐다(개발2 · README 구현 메모): t() 는 긴 키부터 부분 치환이라 코어 메뉴명 "생산실적" → "생산작업 실적", "LOT 추적" → "LOT LOT 추적" 이 된다(값이 키를 품는 용어).
+  추적: LOT 추적
 
 # ── E1 메뉴 — 엘컴화인 대메뉴 12 + 영업관리(D-418). 순서는 nav.SIDEBAR 일하는 순서(D-417) ──
 menus:
@@ -39,15 +40,15 @@ menus:
     - { code: clr, name: 조색 기록, after: mat, owner: 개발2 }
     - { code: rll, name: 후가공 · 슬리팅 롤 이력, after: pop, owner: 개발2 }
 
-# ── E4 팩 화면 7 — 엘컴화인 screen-map.md 의 경로 · 채널 · 기능 수 그대로. 담당은 팩 담당 개발2. channels 는 코어 채널 이름(관리자 Web · 현장 POP — _template 과 같다 · 개발2 수정) ──
+# ── E4 팩 화면 7 — 엘컴화인 screen-map.md 의 경로 · 채널 · 기능 수 그대로. 담당은 팩 담당 개발2. channels 는 코드(packs.load 가 라벨로 정규화) ──
 screens:
-  - { id: X-PRT-01, name: 판사양 관리,   module: prt, path: /prt/plates,    channels: [관리자 Web], owner: 개발2 }   # F-X-PRT-01~04
-  - { id: X-PRT-02, name: 아니록스 관리, module: prt, path: /prt/anilox,    channels: [관리자 Web], owner: 개발2 }   # F-X-PRT-05~08
-  - { id: X-PRT-03, name: 잉크조성 관리, module: prt, path: /prt/inks,      channels: [관리자 Web], owner: 개발2 }   # F-X-PRT-09~12
-  - { id: X-CLR-01, name: 조색 기록,     module: clr, path: /clr/records,   channels: [현장 POP],   owner: 개발2 }   # F-X-CLR-01~05
-  - { id: X-RLL-01, name: 후가공,        module: rll, path: /rll/finishing, channels: [현장 POP],   owner: 개발2 }   # F-X-RLL-01~03
-  - { id: X-RLL-02, name: 슬리팅,        module: rll, path: /rll/slitting,  channels: [현장 POP],   owner: 개발2 }   # F-X-RLL-04~05
-  - { id: X-RLL-03, name: 롤 이력,       module: rll, path: /rll/history,   channels: [현장 POP],   owner: 개발2 }   # F-X-RLL-06~07
+  - { id: X-PRT-01, name: 판사양 관리,   module: prt, path: /prt/plates,    channels: [web],      owner: 개발2 }   # F-X-PRT-01~04
+  - { id: X-PRT-02, name: 아니록스 관리, module: prt, path: /prt/anilox,    channels: [web],      owner: 개발2 }   # F-X-PRT-05~08
+  - { id: X-PRT-03, name: 잉크조성 관리, module: prt, path: /prt/inks,      channels: [web],      owner: 개발2 }   # F-X-PRT-09~12
+  - { id: X-CLR-01, name: 조색 기록,     module: clr, path: /clr/records,   channels: [pop],      owner: 개발2 }   # F-X-CLR-01~05
+  - { id: X-RLL-01, name: 후가공,        module: rll, path: /rll/finishing, channels: [pop],      owner: 개발2 }   # F-X-RLL-01~03
+  - { id: X-RLL-02, name: 슬리팅,        module: rll, path: /rll/slitting,  channels: [pop],      owner: 개발2 }   # F-X-RLL-04~05
+  - { id: X-RLL-03, name: 롤 이력,       module: rll, path: /rll/history,   channels: [pop],      owner: 개발2 }   # F-X-RLL-06~07
 
 # ── E1 역할 4 — 엘컴화인 seed.py ROLES 코드 그대로(D-20). 코어 기본 4 를 대체 ──
 roles:
@@ -116,12 +117,17 @@ adapters:
   printing: adapters/label_html.py # 브라우저 인쇄(엘컴화인 D-04) — 라벨 3종 · COA · 작업지시서 양식은 templates/print/
   erp: null                        # 코어 기본 501 (엘컴화인 D-02)
   collect: null                    # 수집 없음 (엘컴화인 G-12)
-seeds:                             # seed_core 가 받는 파일(codes* · items* · processes* · equipment* · partners*)만 — 나머지 5 는 seed/seed_pack.sql 이 같은 CSV 를 읽는다(개발2 · 코어 변경 요청)
+seeds:                             # 기획 10 파일 그대로 (회전 4 — seed_pack.sql 우회 제거 · seed_core CR-9 6c77eb9). 팩 테이블은 {file, table, key}
   - seed/codes.csv
   - seed/items_example.csv
   - seed/partners_example.csv
-  - seed/processes_example.csv    # attrs.process_type 열은 seed_core 가 버린다 → seed_pack.sql 이 채운다
+  - seed/processes_example.csv     # attrs.process_type → bas_process.attrs
   - seed/equipment_example.csv
-  # - seed/defect_codes_example.csv · plates_example.csv · anilox_example.csv · inks_example.csv · ink_components_example.csv → seed/seed_pack.sql
+  - seed/defect_codes_example.csv  # attrs.defect_group · process_code → process_id
+  - { file: seed/plates_example.csv,         table: x_printfilm_plate,                 key: plate_code }        # item_code → item_id
+  - { file: seed/anilox_example.csv,         table: x_printfilm_anilox,                key: anilox_code }
+  - { file: seed/inks_example.csv,           table: x_printfilm_ink_formula,           key: ink_code }
+  - { file: seed/ink_components_example.csv, table: x_printfilm_ink_formula_component, key: [ink_code, seq_no] }        # 키는 CSV 헤더 — ink_code → ink_formula_id
+  - seed/kpi_indicators_example.csv # 인쇄 지표 4 (calc_kind pack:* · hooks.md §6 · 목표값 미확정 → 빈 칸)
 tests: tests/
 gates: gates.yaml
