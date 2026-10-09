@@ -41,7 +41,7 @@
     {{ ui.select('시험 실행 (DB 에 쓰지 않음)', 'dry_run', [('Y', t('예 — 읽기만')), ('N', t('아니오 — 적재'))], 'Y', blank=none, cls='w-md') }}
   </form>
   <div class="form-actions">
-    {{ ui.write_button('이관 실행', can.migrate, form='migrate-form', why=(t('이관 모듈이 없다') if not migrate_available else (t('MES_MIGRATE_DIR 이 비어 있다 — 미확정') if not migrate_dir else ''))) }}
+    {{ ui.write_button('이관 실행', can.migrate, form='migrate-form', why=(t('이관 모듈이 없다') if not migrate_available else (t('MES_MIGRATE_DIR 이 비어 있다') ~ ' — ' ~ migrate_dir_label if not migrate_dir else ''))) }}
   </div>
   <ul class="notes"><li>{{ t('표준 Import 파일 4종은 migration-files.md — 시험 실행으로 먼저 읽기 · 오류 수를 본다') }}.</li></ul>
 </section>

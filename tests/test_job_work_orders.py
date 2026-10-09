@@ -188,6 +188,11 @@ def test_status_board_today_week_and_drilldown(admin, base):
     assert j["range"] == "week" and j["frm"] <= date.today().isoformat() <= j["to"]
     assert admin.get("/job/status?range=bad").status_code == 422
     assert admin.get("/job/status?wo=999999999").status_code == 404
+    j = admin.get(f"/job/status?wo={wo['work_order_no']}").json()                                            # D-604 — 추적 링크는 지시 번호를 넘긴다
+    assert j["detail"]["id"] == wo["id"] and len(j["results"]) == 1
+    assert admin.get(f"/job/print?id={wo['work_order_no']}").json()["work_order"]["id"] == wo["id"]
+    assert admin.get("/job/status?wo=W-NO-SUCH-" + SFX).status_code == 404
+    assert admin.post(f"/job/work-orders/{wo['work_order_no']}/close").status_code == 404                    # 경로 {id} 는 숫자만 (api-contract §1)
     assert admin.get("/job/status?device=mobile", headers=HTML).status_code == 200                             # 모바일 채널 허용
     conn.x("delete from pop_work_result where id = %s", (res["id"],))
     _cleanup(wo["id"])
@@ -205,3 +210,30 @@ def test_print_work_order(admin, qa, base):
     assert admin.get("/job/print").json()["template"] == "job/print_pick.html"
     assert qa.get(f"/job/print?id={wo['id']}").status_code == 200
     _cleanup(wo["id"])
+
+
+@pytest.mark.fn("F-JOB-01")
+def test_create_from_confirmed_plan_inherits_order_and_date(admin, base):
+    """DEF-QA3-002 — 확정 계획만 고르면 계획의 수주 상세 · 계획일이 지시로 이어진다 → 작업지시서 수주 · 납기 · 수주 상세 `지시`."""
+    partner = conn.q1("select id from bas_partner limit 1")
+    o = conn.q1("insert into ord_order (order_no, partner_id, order_date, due_date, created_by) values (%s, %s, current_date, current_date + 7, 'test') returning id, due_date", (f"T-P-{SFX}", partner["id"]))
+    d = conn.q1("insert into ord_order_dtl (order_id, line_no, item_id, qty, created_by) values (%s, 1, %s, 10, 'test') returning id", (o["id"], base["item_id"]))
+    d2 = conn.q1("insert into ord_order_dtl (order_id, line_no, item_id, qty, created_by) values (%s, 2, %s, 5, 'test') returning id", (o["id"], base["item_id"]))
+    p = conn.q1("insert into ord_plan (plan_no, order_dtl_id, item_id, plan_date, plan_qty, status, created_by) values (%s, %s, %s, current_date + 3, 10, '확정', 'test') returning id, plan_date",
+                (f"T-Q-{SFX}", d["id"], base["item_id"]))
+    r = admin.post("/job/work-orders", data={"item_id": base["item_id"], "process_id": base["process_id"], "plan_qty": "10", "plan_id": p["id"], "order_dtl_id": d2["id"]})
+    assert r.status_code == 422 and r.json()["fields"][0]["name"] == "order_dtl_id"                           # 계획과 다른 수주 상세는 막는다
+    r = admin.post("/job/work-orders", data={"item_id": base["item_id"], "process_id": base["process_id"], "plan_qty": "10", "plan_id": p["id"]})
+    assert r.status_code == 200
+    w = conn.q1("select order_dtl_id, plan_date from job_work_order where id = %s", (r.json()["id"],))
+    assert w["order_dtl_id"] == d["id"] and w["plan_date"] == p["plan_date"]
+    assert conn.q1("select status from ord_order_dtl where id = %s", (d["id"],))["status"] == "지시"
+    j = admin.get(f"/job/print?id={r.json()['id']}").json()["work_order"]
+    assert j["order_no"] == f"T-P-{SFX}" and j["due_date"] == o["due_date"].isoformat()
+    r2 = admin.post("/job/work-orders", data={"item_id": base["item_id"], "process_id": base["process_id"], "plan_qty": "10", "plan_id": p["id"], "plan_date": "2030-01-02"})
+    assert r2.status_code == 200 and str(conn.q1("select plan_date from job_work_order where id = %s", (r2.json()["id"],))["plan_date"]) == "2030-01-02"   # 폼 값이 있으면 그것
+    for wid in (r.json()["id"], r2.json()["id"]):
+        _cleanup(wid)
+    conn.x("delete from ord_plan where id = %s", (p["id"],))
+    conn.x("delete from ord_order_dtl where order_id = %s", (o["id"],))
+    conn.x("delete from ord_order where id = %s", (o["id"],))

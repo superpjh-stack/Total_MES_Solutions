@@ -491,6 +491,14 @@ def backup_of_path(raw_id: str) -> dict:
     return row
 
 
+MIGRATE_DIR_UNDECIDED = "미확정 (D-109)"                                                      # 이관 실행 폴더 — 현장 반입 경로 미정 (G-C11 형식)
+
+
+def migrate_dir_label(migrate_dir: str | None) -> str:
+    """SYS-06 이관 폴더 표시 — 값이 있으면 그 경로, 없으면 `미확정 (D-109)` (DEF-QA2-003)."""
+    return migrate_dir or MIGRATE_DIR_UNDECIDED
+
+
 @router.get(BACKUP, response_class=HTMLResponse)                                                # F-SYS-16 백업 · 이관 이력 조회
 def backup_history(request: Request, user: rbac.User = rbac.require_fn("F-SYS-16")) -> HTMLResponse:
     s = get_settings()
@@ -498,7 +506,7 @@ def backup_history(request: Request, user: rbac.User = rbac.require_fn("F-SYS-16
     migrations = conn.q("select * from sys_migration_log order by started_at desc, id desc limit 200")
     return templating.render(request, "sys/backup.html", {
         "backups": backups, "migrations": migrations, "path": BACKUP, "migrate_path": MIGRATE, "commands": list(MIGRATE_COMMANDS),
-        "migrate_dir": s.migrate_dir, "migrate_dir_label": s.migrate_dir_label,
+        "migrate_dir": s.migrate_dir, "migrate_dir_label": migrate_dir_label(s.migrate_dir),
         "migrate_available": migrate_available(), "migrate_note": None if migrate_available() else "개발3 모듈 대기 — mescore.migrate 가 아직 없다 (F-SYS-15)",
         "can": {"backup": user.can("F-SYS-13"), "verify": user.can("F-SYS-14"), "migrate": user.can("F-SYS-15")},
     }, screen_id="SYS-06")
@@ -558,7 +566,7 @@ def run_migrate(request: Request, user: rbac.User = rbac.require_fn("F-SYS-15"),
     dry_run = yn_of(form, "dry_run", "시험 실행", default="N") == "Y"
     s = get_settings()
     if not s.migrate_dir:
-        raise bad("이관 폴더(MES_MIGRATE_DIR)가 정해지지 않았다", "dir", s.migrate_dir_label, "폴더")
+        raise bad("이관 폴더(MES_MIGRATE_DIR)가 정해지지 않았다", "dir", migrate_dir_label(s.migrate_dir), "폴더")
     migrate = importlib.import_module(MIGRATE_MODULE)                                            # 개발3 모듈 — 없으면 ImportError 를 잡지 않는다 (500 · 화면은 "개발3 모듈 대기")
     report = migrate.run(command, s.migrate_dir, dry_run=dry_run)
     body = templating.jsonable(report)

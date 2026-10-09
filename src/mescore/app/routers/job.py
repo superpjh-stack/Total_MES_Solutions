@@ -71,6 +71,18 @@ select jl.id, jl.work_order_id, jl.item_id, jl.required_qty, jl.unit, jl.lot_id,
 
 
 # ── 읽기 도우미 ─────────────────────────────────────────────────────────
+def wo_of_key(raw: str) -> dict:
+    """쿼리의 지시 키(`?wo=` · `?id=`) → 지시 행. 숫자면 id, 아니면 지시 번호(`W…` · 팩 접두) — D-604 추적 링크는 번호를 넘긴다. 없으면 404.
+    경로의 `{id}` 는 계속 숫자만(`wo_of_path`)."""
+    key = (raw or "").strip()
+    if key.isascii() and key.isdigit():
+        return wo_of_path(key)
+    row = conn.q1(WO_SELECT + " where w.work_order_no = %s", (key[:60],)) if key else None
+    if row is None:
+        raise http.not_found()
+    return row
+
+
 def wo_of_path(raw_id: str) -> dict:
     row = conn.q1(WO_SELECT + " where w.id = %s", (id_of_path(raw_id),))
     if row is None:
@@ -185,11 +197,17 @@ def create_work_order(request: Request, user: rbac.User = rbac.require_fn("F-JOB
     process_id = ref_of(form, "process_id", "공정", "bas_process", required=True)
     equipment_id = ref_of(form, "equipment_id", "설비", "bas_equipment")
     plan_id = ref_of(form, "plan_id", "생산계획", "ord_plan")
+    plan = None
     if plan_id is not None:                                                                          # D-101 — 확정된 계획만 지시로 이어진다
-        plan = conn.q1("select plan_no, status from ord_plan where id = %s", (plan_id,))
+        plan = conn.q1("select plan_no, status, order_dtl_id, plan_date from ord_plan where id = %s", (plan_id,))
         if plan["status"] != PLAN_CONFIRMED:
             raise bad("확정된 계획만 지시로 이어진다", "plan_id", f"{plan['plan_no']} 상태 {plan['status']}", "생산계획")
     order_dtl_id = ref_of(form, "order_dtl_id", "수주 상세", "ord_order_dtl")
+    if plan is not None and plan["order_dtl_id"] is not None:                                         # DEF-QA3-002 — 계획의 수주 상세를 잇는다
+        if order_dtl_id is None:
+            order_dtl_id = plan["order_dtl_id"]
+        elif order_dtl_id != plan["order_dtl_id"]:
+            raise bad("입력값을 확인해 주세요", "order_dtl_id", f"생산계획 {plan['plan_no']} 의 수주 상세와 다릅니다", "수주 상세")
     bom_id = ref_of(form, "bom_id", "BOM", "bas_bom") if text_of(form, "bom_id", "BOM", max_len=20) else active_bom_id(item_id)
     if bom_id is not None and conn.q1("select 1 as hit from bas_bom where id = %s and item_id = %s", (bom_id, item_id)) is None:
         raise bad("입력값을 확인해 주세요", "bom_id", "그 품목의 BOM 이 아닙니다", "BOM")
@@ -197,7 +215,7 @@ def create_work_order(request: Request, user: rbac.User = rbac.require_fn("F-JOB
     row: dict[str, Any] = {
         "item_id": item_id, "process_id": process_id, "equipment_id": equipment_id, "plan_id": plan_id, "order_dtl_id": order_dtl_id,
         "bom_id": bom_id, "plan_qty": plan_qty, "unit": text_of(form, "unit", "단위", max_len=20),
-        "plan_date": _date_of(form, "plan_date", "계획일"), "note": text_of(form, "note", "비고", max_len=1000), "status": ST_WAIT,
+        "plan_date": _date_of(form, "plan_date", "계획일") or (plan["plan_date"] if plan else None), "note": text_of(form, "note", "비고", max_len=1000), "status": ST_WAIT,
     }
     if row["unit"] is None:
         row["unit"] = (conn.q1("select unit from bas_item where id = %s", (item_id,)) or {}).get("unit")
@@ -337,7 +355,7 @@ def status_board(request: Request, range: str = "today", wo: str = "", user: rba
     summary["전체"] = len(rows)
     detail, results = None, []
     if wo.strip():
-        detail = wo_of_path(wo.strip())
+        detail = wo_of_key(wo)                                                                          # id 또는 지시 번호 (D-604)
         results = conn.q("""select r.id, r.started_at, r.ended_at, r.good_qty, r.defect_qty, r.unit, e.equip_code, e.equip_name, k.worker_name, l.lot_no
                               from pop_work_result r left join bas_equipment e on e.id = r.equipment_id left join bas_worker k on k.id = r.worker_id
                               left join lot l on l.id = r.product_lot_id where r.work_order_id = %s order by r.started_at desc""", (detail["id"],))
@@ -352,7 +370,7 @@ def print_work_order(request: Request, id: str = "", user: rbac.User = rbac.requ
     if not id.strip():
         return templating.render(request, "job/print_pick.html", {
             "rows": conn.q(WO_SELECT + f" where w.status <> '취소' order by w.id desc limit {LIST_LIMIT}"), "path": PRINT}, screen_id="JOB-03")
-    wo = wo_of_path(id.strip())                                                                       # 없는 ID 404
+    wo = wo_of_key(id)                                                                                # id 또는 지시 번호 · 없으면 404
     wo["lots"] = conn.q(JOB_LOT_SELECT, ([wo["id"]],))
     wo.update({"equipment_code": wo["equip_code"], "equipment_name": wo["equip_name"], "spec": wo["item_spec"]})   # 개발2 양식의 열 이름
     params = conn.q("select param_key, label, unit, value_type, min_value, max_value, required_yn, source, collect_tag, seq from bas_process_param "

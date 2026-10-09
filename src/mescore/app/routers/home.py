@@ -8,7 +8,7 @@
 로그인(CMN-01 `GET /login`): 화면은 `main._login_page` 와 같은 ctx + `role_summary`(역할 × 채널 × 입력 메뉴 — DB 권한 표 요약 · 비밀 없음).
 `main.py` 는 라우터가 등록한 공통 경로를 자기 것으로 두지 않는다(D-21) — `POST /login` 실패 재렌더는 여전히 `main._login_page`.
 
-개발용 로그인(D-605): `MES_ENV=dev` 일 때만 `POST /login/as`(role) 가 시드 계정(`seed_core.USERS`)으로 로그인한다. 운영(`MES_ENV` ≠ dev)은 404.
+개발용 로그인(D-605): `dev_login_allowed` — `MES_ENV=dev` 명시 + 루프백 요청일 때만 `POST /login/as`(role) 가 시드 계정(`seed_core.USERS`)으로 로그인한다. 운영(`MES_ENV` ≠ dev)은 404.
 비밀번호는 환경변수 `MES_SEED_PASSWORD` 만 — 코드 · 화면에 값이 없다(G-C19). `main.py` 는 라우터에 없는 공통 경로만 자기 것으로 둔다(D-21).
 """
 
@@ -104,14 +104,39 @@ def login_form(request: Request, next: str | None = None, device: str | None = N
         "message": "로그인이 필요합니다" if next else "", "login_id": "", "next": _safe_next(next) or "",
         "login_device": device if device in nav.DEVICE_CHANNEL else "web",
         "role_summary": role_summary(), "n_menus": len(nav.MENUS),
+        "dev_login": dev_login_allowed(request),   # 개발용 역할 버튼을 그려도 되는가(D-605) — 디자이너1 login.html
     }, screen_id="CMN-01")
+
+
+def dev_login_allowed(request: Request) -> bool:
+    """D-605 · DEF-QA1-001 · DEF-QA3-001 — 개발용 무비밀번호 로그인을 열어도 되는가.
+
+    아키텍트 `settings.dev_login_allowed(request)`(`MES_ENV=dev` + 루프백 주소) 가 있으면 그것을 쓰고, 없으면 같은 조건을 여기서 본다.
+    여기서 한 가지를 더 막는다 — 프록시 전달 헤더(`X-Forwarded-For` · `Forwarded`)가 있으면 바깥 요청이므로 거짓.
+    """
+    if request.headers.get("x-forwarded-for") or request.headers.get("forwarded"):
+        return False
+    from .. import settings as _settings
+
+    judge = getattr(_settings, "dev_login_allowed", None)
+    if callable(judge):
+        return bool(judge(request))
+    import ipaddress
+    import os
+
+    if (os.environ.get("MES_ENV") or "").strip().lower() != "dev" or get_settings().env != "dev":
+        return False
+    try:
+        return ipaddress.ip_address(request.client.host if request.client else "").is_loopback
+    except ValueError:
+        return False
 
 
 @router.post("/login/as", include_in_schema=False)
 def login_as(request: Request, role: str = Form(...), device: str | None = Form(None), nxt: str | None = Form(None, alias="next")):
-    """D-605 — 개발 환경(`MES_ENV=dev`)에서만 역할 버튼으로 시드 계정 로그인. 운영에서는 이 경로가 없다(404)."""
+    """D-605 — 개발 환경(`MES_ENV=dev` 명시 + 루프백)에서만 역할 버튼으로 시드 계정 로그인. 그 밖에서는 이 경로가 없다(404)."""
     s = get_settings()
-    if s.env != "dev":
+    if not dev_login_allowed(request):
         raise http.not_found()
     from ...db.seed_core import USERS  # noqa — 시드 계정 ID 는 한 곳(seed_core)에서
 

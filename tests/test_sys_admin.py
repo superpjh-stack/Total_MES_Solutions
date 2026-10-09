@@ -311,3 +311,20 @@ def test_backup_history_screen(admin, prod):
     assert j["commands"] == ["basics", "orders", "lots", "history"] and "migrate_available" in j
     assert admin.get("/sys/backup", headers=HTML).status_code == 200
     assert prod.get("/sys/backup").status_code == 403
+
+
+@pytest.mark.fn("F-SYS-16")
+def test_backup_screen_migrate_dir_undecided_has_decision_no(admin, monkeypatch):
+    """DEF-QA2-003 · G-C11 — 이관 폴더가 없으면 `미확정 (D-109)` (D-번호 동반)."""
+    from mescore.app import settings as st
+
+    monkeypatch.delenv("MES_MIGRATE_DIR", raising=False)
+    st.reset_cache()
+    try:
+        j = admin.get("/sys/backup", headers={"accept": "application/json"}).json()
+        assert j["migrate_dir"] is None and j["migrate_dir_label"] == "미확정 (D-109)"
+        h = admin.get("/sys/backup", headers={"accept": "text/html"}).text
+        assert "미확정 (D-109)" in h and "MES_MIGRATE_DIR 없음" not in h
+    finally:
+        monkeypatch.undo()
+        st.reset_cache()

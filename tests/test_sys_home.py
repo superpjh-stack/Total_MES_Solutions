@@ -92,3 +92,57 @@ def test_seed_links_field_account_to_example_worker():
     if row is None:
         pytest.skip("seed_dev1 미실행 또는 화면에서 연결을 바꿨다")
     assert row["worker_code"]
+
+
+# ── D-605 · DEF-QA1-001 · DEF-QA3-001 — 개발용 무비밀번호 로그인은 MES_ENV=dev 명시 + 루프백에서만 ──
+
+def _env(monkeypatch, value: str | None):
+    from mescore.app import settings as st
+
+    if value is None:
+        monkeypatch.delenv("MES_ENV", raising=False)
+    else:
+        monkeypatch.setenv("MES_ENV", value)
+    st.reset_cache()
+
+
+@pytest.fixture
+def env_restore():
+    from mescore.app import settings as st
+
+    yield
+    st.reset_cache()
+
+
+LOOP = ("127.0.0.1", 50000)
+
+
+@pytest.mark.parametrize("env", ["prod", "", "staging"])
+def test_login_as_is_404_outside_dev(monkeypatch, env_restore, env):
+    _env(monkeypatch, env)
+    c = TestClient(app, raise_server_exceptions=False, client=LOOP)
+    r = c.post("/login/as", data={"role": "ADMIN"}, headers=JSON)
+    assert r.status_code == 404
+    assert c.get("/sys/users", headers=JSON).status_code in (401, 303)
+    assert c.get("/login", headers=JSON).json()["dev_login"] is False
+
+
+def test_login_as_is_404_in_dev_from_non_loopback(monkeypatch, env_restore):
+    _env(monkeypatch, "dev")
+    for client in [("testclient", 50000), ("10.0.0.7", 50000), ("192.168.1.20", 50000)]:
+        c = TestClient(app, raise_server_exceptions=False, client=client)
+        assert c.post("/login/as", data={"role": "ADMIN"}, headers=JSON).status_code == 404, client
+    # 루프백이어도 프록시 전달 헤더가 있으면 바깥 요청이다
+    c = TestClient(app, raise_server_exceptions=False, client=LOOP)
+    r = c.post("/login/as", data={"role": "ADMIN"}, headers={**JSON, "x-forwarded-for": "203.0.113.5"})
+    assert r.status_code == 404
+
+
+def test_login_as_works_in_dev_from_loopback(monkeypatch, env_restore):
+    _env(monkeypatch, "dev")
+    if not get_settings().seed_password:
+        pytest.skip("MES_SEED_PASSWORD 없음")
+    c = TestClient(app, raise_server_exceptions=False, client=LOOP)
+    assert c.get("/login", headers=JSON).json()["dev_login"] is True
+    r = c.post("/login/as", data={"role": "ADMIN"}, headers=JSON)
+    assert r.status_code == 200 and r.json()["role_code"] == "ADMIN"
