@@ -1167,7 +1167,8 @@ def pack_terms_runtime(c: TestClient) -> tuple[list[str], int, int]:
             if re.search(r"\d|\(예시\)", node):
                 continue
             vis = node
-            for v in sorted(set(terms.values()), key=len, reverse=True):
+            # menus.rename 값은 팩이 쓴 최종 이름 — 노출로 세지 않는다 (D-38 · check_terms --pack 과 같은 규칙 · 아키텍트 회전 5 수정 — QA1 검토)
+            for v in sorted(set(getattr(P, "verbatim", set()) or set()) | set(terms.values()), key=len, reverse=True):
                 vis = vis.replace(v, " ")
             for k in sorted(keys, key=len, reverse=True):
                 if k in vis:
