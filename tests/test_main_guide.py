@@ -57,3 +57,15 @@ def test_domain_pages_render_core_pack_and_proposed_steps():
     assert ("X-DSN-01", "proposed") in [(x["screen_id"], x["kind"]) for x in w["steps"]] and len(w["steps"]) == 10   # 타월: 시안 승인은 제안 화면
     m = c.get("/main/domains", params={"d": "metal", "p": "M02"}).json()["domain"]["current"]
     assert m["n_proposed"] == 1 and m["steps"][0]["kind"] == "proposed" and not m["steps"][0]["open"]
+
+
+def test_promo_tab_plays_the_video_for_logged_in_users_only():
+    from mescore.app.routers import home
+    c = client("admin")
+    html = c.get("/main/promo", headers=HTML).text
+    assert 'href="/main/promo"' in html and "<video" in html          # 메인 탭 · 사이드바에 「홍보」 · 재생기 (D-54)
+    v = c.get("/main/promo/video", headers={"range": "bytes=0-1023"})
+    assert v.status_code == 206 and v.headers["content-type"] == "video/mp4" and len(v.content) == 1024
+    assert v.headers["content-range"].endswith(f"/{home.PROMO_VIDEO.stat().st_size}")
+    assert c.get("/main/promo/poster").headers["content-type"] == "image/jpeg"
+    assert client().get("/main/promo/video").status_code in (401, 303)

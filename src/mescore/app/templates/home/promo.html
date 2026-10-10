@@ -1,0 +1,43 @@
+{# 메인 › 홍보 — routers/home.py main_promo (D-54). ctx: video{src poster size_mb file} | None · expected_file.
+   영상 원본은 코어 밖 docs/promo/ (만드는 법 docs/promo/promo.scenario.mjs). 스크립트 없음 — 브라우저 기본 재생기. 읽기 전용. #}
+{% extends "base.html" %}
+{% block head %}
+<style>
+.pr-intro h2{margin:0;font-size:var(--fs-xl)}.pr-intro p{margin:4px 0 14px;color:var(--c-ink-2);font-size:var(--fs-sm)}
+.pr-player{max-width:1100px}
+.pr-player video{display:block;width:100%;aspect-ratio:16/9;background:#0f172a;border-radius:var(--r-lg);border:var(--bw) solid var(--c-line)}
+.pr-meta{display:flex;flex-wrap:wrap;gap:6px 16px;margin:10px 0 0;font-size:var(--fs-sm);color:var(--c-ink-2)}
+.pr-flow{display:flex;flex-wrap:wrap;gap:6px 4px;align-items:center;margin:16px 0 0;padding:0;list-style:none}
+.pr-flow li{font-size:var(--fs-sm);padding:4px 10px;border-radius:999px;background:var(--c-surface-2);border:var(--bw) solid var(--c-line)}
+.pr-flow li:not(:last-child)::after{content:"→";margin-left:8px;color:var(--c-ink-3)}
+</style>
+{% endblock %}
+{% block body %}
+{% include "home/_main_tabs.html" %}
+<section class="panel">
+  <div class="pr-intro">
+    <h2>{{ t('홍보 영상') }}</h2>
+    <p>{{ t('코어 한 벌 + 업종 팩 하나로 새 공장의 MES 를 만드는 표준플랫폼 소개') }}</p>
+  </div>
+  {% if video %}
+  <div class="pr-player">
+    <video controls preload="metadata" playsinline{% if video.poster %} poster="{{ video.poster }}"{% endif %}>
+      <source src="{{ video.src }}" type="video/mp4">
+      {{ t('이 브라우저는 영상 재생을 지원하지 않습니다') }} — <a href="{{ video.src }}">{{ t('영상 내려받기') }}</a>
+    </video>
+    <div class="pr-meta">
+      <span>{{ t('파일') }} <code>{{ video.file }}</code></span>
+      <span>{{ video.size_mb }} MB</span>
+      <span>1920×1080 · {{ t('한국어 음성 · 자막') }}</span>
+      <a href="{{ video.src }}" download>{{ t('영상 내려받기') }}</a>
+    </div>
+    <ul class="pr-flow" aria-label="{{ t('영상 구성') }}">
+      <li>{{ t('반복된 비용') }}</li><li>{{ t('코어 + 업종 팩 구조') }}</li><li>{{ t('코어 단독 화면 · 현황판') }}</li>
+      <li>{{ t('업종 팩 3개 — 같은 추적 화면 · 다른 용어') }}</li><li>{{ t('측정값 선언') }}</li><li>{{ t('수용 게이트 검증') }}</li>
+    </ul>
+  </div>
+  {% else %}
+  <p class="empty-inline">{{ t('영상 파일이 없습니다') }} — <code>{{ expected_file }}</code></p>
+  {% endif %}
+</section>
+{% endblock %}

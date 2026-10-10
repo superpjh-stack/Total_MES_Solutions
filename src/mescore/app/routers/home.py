@@ -15,10 +15,10 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 
 from .. import auth, contracts, domains, guide, nav, packs, rbac, stats, templating
-from ..settings import get_settings
+from ..settings import ROOT, get_settings
 from ..util import http
 
 router = APIRouter()
@@ -71,7 +71,7 @@ def main_page(request: Request, user: rbac.User = Depends(rbac.require_login)) -
 
 
 # ── 메인(IA) 하위 메뉴 — 기능표 · 업무 프로세스 (읽기 전용 안내 · 어떤 테이블에도 쓰지 않는다) ──
-MAIN_TABS = (("/", "모듈 지도"), ("/main/functions", "기능표"), ("/main/processes", "업무 프로세스"), ("/main/domains", "도메인별 프로세스"))
+MAIN_TABS = (("/", "모듈 지도"), ("/main/functions", "기능표"), ("/main/processes", "업무 프로세스"), ("/main/domains", "도메인별 프로세스"), ("/main/promo", "홍보"))
 
 
 def _screen_link(screen_id: str, user: rbac.User) -> dict:
@@ -156,6 +156,38 @@ def main_domains(request: Request, d: str = "", p: str = "", user: rbac.User = D
         "tabs": MAIN_TABS, "tab": "/main/domains", "domains": cards, "domain": domains.view(cur, user, p) if cur else None,
         "current_pack": packs.current().name,
     }, screen_id="CMN-02")
+
+
+# 메인 › 홍보 — 홍보 영상(D-54). 영상 · 포스터 원본은 코어 밖 `docs/promo/`(만드는 법 `docs/promo/promo.scenario.mjs`). 로그인 사용자만 · 읽기 전용.
+PROMO_VIDEO = ROOT / "docs" / "promo" / "MES표준플랫폼_홍보영상.mp4"
+PROMO_POSTER = ROOT / "docs" / "promo" / "poster.jpg"
+
+
+@router.get("/main/promo", include_in_schema=False)
+def main_promo(request: Request, user: rbac.User = Depends(rbac.require_login)) -> HTMLResponse:
+    """메인 › 홍보 — 플랫폼 소개 영상 한 편을 재생한다. 파일이 없으면 화면에 그렇게 적는다(지어내지 않는다)."""
+    video = None
+    if PROMO_VIDEO.is_file():
+        st = PROMO_VIDEO.stat()
+        video = {"src": "/main/promo/video", "poster": "/main/promo/poster" if PROMO_POSTER.is_file() else None,
+                 "size_mb": round(st.st_size / 1_048_576, 1), "file": str(PROMO_VIDEO.relative_to(ROOT))}
+    return templating.render(request, "home/promo.html", {
+        "tabs": MAIN_TABS, "tab": "/main/promo", "video": video, "expected_file": str(PROMO_VIDEO.relative_to(ROOT)),
+    }, screen_id="CMN-02")
+
+
+@router.get("/main/promo/video", include_in_schema=False)
+def main_promo_video(user: rbac.User = Depends(rbac.require_login)) -> FileResponse:
+    if not PROMO_VIDEO.is_file():
+        raise http.not_found()
+    return FileResponse(PROMO_VIDEO, media_type="video/mp4")     # Range 요청(구간 이동)은 Starlette 가 처리
+
+
+@router.get("/main/promo/poster", include_in_schema=False)
+def main_promo_poster(user: rbac.User = Depends(rbac.require_login)) -> FileResponse:
+    if not PROMO_POSTER.is_file():
+        raise http.not_found()
+    return FileResponse(PROMO_POSTER, media_type="image/jpeg")
 
 
 def role_summary() -> list[dict]:
