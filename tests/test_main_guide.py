@@ -69,3 +69,19 @@ def test_promo_tab_plays_the_video_for_logged_in_users_only():
     assert v.headers["content-range"].endswith(f"/{home.PROMO_VIDEO.stat().st_size}")
     assert c.get("/main/promo/poster").headers["content-type"] == "image/jpeg"
     assert client().get("/main/promo/video").status_code in (401, 303)
+
+
+def test_promo_lists_one_video_slot_per_process_type():
+    from mescore.app.routers import home
+    c = client("admin")
+    body = c.get("/main/promo").json()
+    assert [p["code"] for p in body["processes"]] == [p.code for p in guide.processes()]     # 업무 프로세스 유형마다 한 칸 (D-55)
+    for p in body["processes"]:
+        f = home.PROMO_PROCESS_DIR / f"{p['code']}.mp4"
+        assert (p["src"] is not None) == f.is_file(), p["code"]                              # 없는 영상은 「영상 없음」 — 지어내지 않는다
+        if p["src"]:
+            v = c.get(p["src"], headers={"range": "bytes=0-1023"})
+            assert v.status_code == 206 and v.headers["content-type"] == "video/mp4"
+    assert c.get("/main/promo/process/..%2Fpromo.scenario").status_code == 404                # 유형 코드만 받는다
+    assert c.get("/main/promo/process/P99").status_code == 404
+    assert client().get("/main/promo/process/P01").status_code in (401, 303)

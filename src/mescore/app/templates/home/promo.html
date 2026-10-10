@@ -1,4 +1,5 @@
-{# 메인 › 홍보 — routers/home.py main_promo (D-54). ctx: video{src poster size_mb file} | None · expected_file.
+{# 메인 › 홍보 — routers/home.py main_promo (D-54 · D-55). ctx: video{src poster size_mb file} | None · expected_file ·
+   processes[{code name kind when steps src poster size_mb}] · kinds · process_dir — 업무 프로세스 유형별 영상(없는 유형은 「영상 없음」).
    영상 원본은 코어 밖 docs/promo/ (만드는 법 docs/promo/promo.scenario.mjs). 스크립트 없음 — 브라우저 기본 재생기. 읽기 전용. #}
 {% extends "base.html" %}
 {% block head %}
@@ -10,6 +11,15 @@
 .pr-flow{display:flex;flex-wrap:wrap;gap:6px 4px;align-items:center;margin:16px 0 0;padding:0;list-style:none}
 .pr-flow li{font-size:var(--fs-sm);padding:4px 10px;border-radius:999px;background:var(--c-surface-2);border:var(--bw) solid var(--c-line)}
 .pr-flow li:not(:last-child)::after{content:"→";margin-left:8px;color:var(--c-ink-3)}
+.pv-kind{margin:18px 0 8px;font-size:var(--fs-md);color:var(--c-ink-2)}
+.pv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.pv-card{border:var(--bw) solid var(--c-line);border-radius:var(--r-lg);padding:10px;background:var(--c-surface)}
+.pv-card video{display:block;width:100%;aspect-ratio:16/9;background:#0f172a;border-radius:var(--r-md)}
+.pv-card .h{display:flex;gap:8px;align-items:baseline;margin:10px 2px 2px}
+.pv-card .h b{font-size:var(--fs-md)}
+.pv-card p{margin:2px 2px 0;font-size:var(--fs-sm);color:var(--c-ink-2)}
+.pv-card .m{display:flex;flex-wrap:wrap;gap:4px 12px;margin:6px 2px 0;font-size:var(--fs-xs);color:var(--c-ink-3)}
+.pv-none{display:flex;align-items:center;justify-content:center;aspect-ratio:16/9;border-radius:var(--r-md);background:var(--c-surface-2);color:var(--c-ink-3);font-size:var(--fs-sm)}
 </style>
 {% endblock %}
 {% block body %}
@@ -39,5 +49,34 @@
   {% else %}
   <p class="empty-inline">{{ t('영상 파일이 없습니다') }} — <code>{{ expected_file }}</code></p>
   {% endif %}
+</section>
+<section class="panel">
+  <div class="pr-intro">
+    <h2>{{ t('업무 프로세스 유형별 영상') }}</h2>
+    <p>{{ t('업무 프로세스 탭의 유형마다 한 편 — 단계 화면을 순서대로 보여 준다') }} · <code>{{ process_dir }}/</code></p>
+  </div>
+  {% for k in kinds %}
+  <h3 class="pv-kind">{{ t(k) }}</h3>
+  <div class="pv-grid">
+    {% for p in processes if p.kind == k %}
+    <article class="pv-card" id="{{ p.code }}">
+      {% if p.src %}
+      <video controls preload="none" playsinline{% if p.poster %} poster="{{ p.poster }}"{% endif %}>
+        <source src="{{ p.src }}" type="video/mp4">
+      </video>
+      {% else %}
+      <div class="pv-none">{{ t('영상 없음') }} — <code>{{ p.code }}.mp4</code></div>
+      {% endif %}
+      <div class="h"><code>{{ p.code }}</code><b>{{ t(p.name) }}</b></div>
+      <p>{{ t(p.when) }}</p>
+      <div class="m">
+        <span>{{ t('단계') }} {{ p.steps }}</span>
+        {% if p.size_mb is not none %}<span>{{ p.size_mb }} MB</span><a href="{{ p.src }}" download>{{ t('내려받기') }}</a>{% endif %}
+        <a href="/main/processes?code={{ p.code }}">{{ t('단계 보기') }}</a>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% endfor %}
 </section>
 {% endblock %}

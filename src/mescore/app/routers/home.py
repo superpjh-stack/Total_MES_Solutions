@@ -161,6 +161,8 @@ def main_domains(request: Request, d: str = "", p: str = "", user: rbac.User = D
 # 메인 › 홍보 — 홍보 영상(D-54). 영상 · 포스터 원본은 코어 밖 `docs/promo/`(만드는 법 `docs/promo/promo.scenario.mjs`). 로그인 사용자만 · 읽기 전용.
 PROMO_VIDEO = ROOT / "docs" / "promo" / "MES표준플랫폼_홍보영상.mp4"
 PROMO_POSTER = ROOT / "docs" / "promo" / "poster.jpg"
+# 업무 프로세스 유형별 영상 — `docs/promo/process/<코드>.mp4 · .jpg`(만드는 법 docs/promo/process.scenario.mjs · process_all.sh). 코드는 guide.py 의 유형만.
+PROMO_PROCESS_DIR = ROOT / "docs" / "promo" / "process"
 
 
 @router.get("/main/promo", include_in_schema=False)
@@ -171,8 +173,17 @@ def main_promo(request: Request, user: rbac.User = Depends(rbac.require_login)) 
         st = PROMO_VIDEO.stat()
         video = {"src": "/main/promo/video", "poster": "/main/promo/poster" if PROMO_POSTER.is_file() else None,
                  "size_mb": round(st.st_size / 1_048_576, 1), "file": str(PROMO_VIDEO.relative_to(ROOT))}
+    processes = []
+    for p in guide.processes():
+        f = PROMO_PROCESS_DIR / f"{p.code}.mp4"
+        processes.append({"code": p.code, "name": p.name, "kind": p.kind, "when": p.when, "steps": len(p.steps),
+                          "src": f"/main/promo/process/{p.code}" if f.is_file() else None,
+                          "poster": f"/main/promo/process/{p.code}/poster" if (PROMO_PROCESS_DIR / f"{p.code}.jpg").is_file() else None,
+                          "size_mb": round(f.stat().st_size / 1_048_576, 1) if f.is_file() else None})
+    kinds = list(dict.fromkeys(p["kind"] for p in processes))
     return templating.render(request, "home/promo.html", {
         "tabs": MAIN_TABS, "tab": "/main/promo", "video": video, "expected_file": str(PROMO_VIDEO.relative_to(ROOT)),
+        "processes": processes, "kinds": kinds, "process_dir": str(PROMO_PROCESS_DIR.relative_to(ROOT)),
     }, screen_id="CMN-02")
 
 
@@ -188,6 +199,25 @@ def main_promo_poster(user: rbac.User = Depends(rbac.require_login)) -> FileResp
     if not PROMO_POSTER.is_file():
         raise http.not_found()
     return FileResponse(PROMO_POSTER, media_type="image/jpeg")
+
+
+def _process_file(code: str, ext: str):
+    if code not in {p.code for p in guide.processes()}:      # 경로로 아무 파일 이름이나 받지 않는다
+        raise http.not_found()
+    f = PROMO_PROCESS_DIR / f"{code}.{ext}"
+    if not f.is_file():
+        raise http.not_found()
+    return f
+
+
+@router.get("/main/promo/process/{code}", include_in_schema=False)
+def main_promo_process_video(code: str, user: rbac.User = Depends(rbac.require_login)) -> FileResponse:
+    return FileResponse(_process_file(code, "mp4"), media_type="video/mp4")
+
+
+@router.get("/main/promo/process/{code}/poster", include_in_schema=False)
+def main_promo_process_poster(code: str, user: rbac.User = Depends(rbac.require_login)) -> FileResponse:
+    return FileResponse(_process_file(code, "jpg"), media_type="image/jpeg")
 
 
 def role_summary() -> list[dict]:

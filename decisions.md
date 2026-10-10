@@ -461,3 +461,8 @@
 - **영상 원본은 코어 밖** `docs/promo/`(`MES표준플랫폼_홍보영상.mp4` · `poster.jpg`). 영상 속 업종어(김치 · 급식 · 인쇄필름)는 코어 금지어 규칙(G-C23) 때문에 코어 템플릿에 적지 않는다 — 화면 문구는 중립어 + `t()`. 파일이 없으면 화면에 「영상 파일이 없습니다」.
 - 만드는 법: `docs/promo/promo.scenario.mjs`(test_video_maker 녹화기 · DB 사본 + 녹화 전용 포트 8091~8094 · 영상 속 수치는 화면에서 읽어 확인) · 내레이션 원고 `docs/promo/narration.md` · 음성 클로바더빙(`docs/promo/MES Voice/` → `import_voice.mjs`). 검증 카드의 게이트 수(42/42)는 녹화 때 `make gate` 출력에서 읽고, 원고 13번(「마흔두 개」)과 다르면 녹화가 멈춘다.
 - **배포(2026-10-10)**: Hostinger VPS srv1934103 · Docker Manager 앱 `rodem-mes` · https://srv1934103.hstgr.cloud — 서버 `/docker/rodem-mes` 에서 `docker compose up -d --build`(GitHub main `4ee62df` 에서 빌드 · app 컨테이너만 재생성, db · caddy 그대로). 확인: `/health` 200(기능 132 · DB ok · 라우터 오류 0) · 로그인 없이 `/main/promo` · `/main/promo/video` 303 → 로그인(없는 경로는 404 — 탭이 배포됐다는 뜻). 로그인 뒤 재생은 시드 비밀번호가 서버에만 있어 사람이 확인한다. 서버 재빌드 명령은 Claude Code 자동 모드 안전 검사가 막아 사람이 `!` 로 실행했다.
+
+## D-55 메인 › 홍보 — 업무 프로세스 유형별 영상 · 상태: 확정
+- 사용자 요청(2026-10-10). 「홍보」 탭의 플랫폼 소개 영상 아래에 **업무 프로세스 유형(P01~P10, `app/guide.py`)마다 영상 한 편**을 유형 구분(계획 · 실행 · 품질 · 추적 · 보전 · 관리)별로 배열한다. 영상 `GET /main/promo/process/{코드}`(구간 요청 206) · 포스터 `GET /main/promo/process/{코드}/poster` — 로그인 사용자만 · 읽기 전용. 코드는 guide.py 의 유형 코드만 받는다(그 밖은 404 — 경로로 아무 파일이나 열지 않는다). 파일이 없는 유형은 「영상 없음」.
+- 영상 원본은 코어 밖 `docs/promo/process/<코드>.mp4 · .jpg`. 만드는 법 `docs/promo/process.scenario.mjs`(유형 하나 = `PROC=P0n` · 단계 · 화면 · 역할 · 남는 데이터는 녹화 때 guide.py 에서 읽는다 · `mes_demo_db` 사본 `promo_proc` + 포트 8091 · 화면 조회만) · 원고 `docs/promo/process_narration.mjs`(단계 수가 guide.py 와 다르면 녹화가 멈춘다) · 일괄 `docs/promo/process_all.sh`.
+- 음성은 macOS 기본 음성(Yuna)이다 — 클로바더빙 음성 파일이 아직 없다. 바꿀 때는 원고 문장별 음성을 만들어 녹화기 음성 캐시에 넣고 다시 녹화한다(D-54 의 `import_voice.mjs` 방식).
